@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Upload Wireframe</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div class="title">MCS07 Dashboard</div>
+        <div class="sub">Sidebar / Navigation</div>
+      </div>
+      <div class="nav-group">
+        <a class="nav-link" href="00 - Login.html">00 Login</a>
+        <a class="nav-link" href="01 - Dashboard.html">01 Dashboard</a>
+        <a class="nav-link" href="02 - Mapping.html">02 Mapping</a>
+        <a class="nav-link" href="03 - Assessments.html">03 Assessments</a>
+        <a class="nav-link active" href="04 - CSV Upload.html">04 CSV Upload</a>
+        <a class="nav-link" href="05 - Admin.html">05 Admin</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs"><strong>CSV Upload</strong></div>
+        <div class="top-actions">
+          <button class="btn">Save Draft</button>
+          <button class="btn primary">Commit Valid Rows</button>
+        </div>
+      </div>
+
+      <section class="content">
+        <header class="page-head">
+          <div>
+            <span class="phase-tag">Screen 04</span>
+            <h1>CSV Upload</h1>
+          </div>
+        </header>
+
+        <section class="stepper">
+          <div class="step">1. Upload file</div>
+          <div class="step">2. Map columns</div>
+          <div class="step active">3. Review issues</div>
+          <div class="step">4. Commit</div>
+        </section>
+
+        <section class="grid-4">
+          <div class="wire-box"><strong>Matched Rows</strong></div>
+          <div class="wire-box"><strong>Missing Students</strong></div>
+          <div class="wire-box"><strong>Unmatched IDs</strong></div>
+          <div class="wire-box"><strong>Out-of-range Marks</strong></div>
+        </section>
+
+        <section class="grid-2">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Column Mapping</h2>
+            </div>
+            <div class="wire-box" style="min-height:110px; display:flex; align-items:center; justify-content:center;">
+              <strong>[CSV column → System field mapping table]</strong>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>LO Impact Preview</h2>
+            </div>
+            <div class="wire-box" style="min-height:110px; display:flex; align-items:center; justify-content:center;">
+              <strong>[LOs affected by this upload]</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Rows Needing Review</h2>
+          </div>
+          <div class="wire-box" style="min-height:80px; display:flex; align-items:center; justify-content:center;">
+            <strong>[Review table: row, issue, action]</strong>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

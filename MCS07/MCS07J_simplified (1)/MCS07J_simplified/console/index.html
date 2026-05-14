@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCS07 Phase 1 Wireframes</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .landing {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 42px 24px 72px;
+  }
+  .hero {
+    border-bottom: 2px solid var(--line-dark);
+    padding-bottom: 24px;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    margin: 10px 0 0;
+    font-size: 34px;
+  }
+  .screen-card {
+    display: block;
+    border: 2px solid var(--line-dark);
+    background: var(--white);
+    padding: 14px;
+  }
+  .screen-card:hover {
+    border-color: var(--accent);
+  }
+  .thumb {
+    border: 1px solid var(--line-dark);
+    background: var(--soft);
+    min-height: 150px;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+  }
+  .thumb-line {
+    height: 12px;
+    background: #cfd6df;
+  }
+  .thumb-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .thumb-box {
+    border: 1px dashed var(--line-dark);
+    min-height: 38px;
+    background: var(--white);
+  }
+  .screen-card h2 {
+    margin: 12px 0 0;
+    font-size: 18px;
+  }
+</style>
+</head>
+<body>
+  <main class="landing">
+    <section class="hero">
+      <span class="phase-tag">Phase 1 Wireframes</span>
+      <h1>Student Academic Performance Dashboard</h1>
+    </section>
+
+    <section class="grid-3">
+      <a class="screen-card" href="00 - Login.html">
+        <div class="thumb">
+          <div class="thumb-line" style="width:55%;"></div>
+          <div class="thumb-box"></div>
+          <div class="thumb-box"></div>
+        </div>
+        <h2>00. Login</h2>
+      </a>
+
+      <a class="screen-card" href="01 - Dashboard.html">
+        <div class="thumb">
+          <div class="thumb-row"><div class="thumb-box"></div><div class="thumb-box"></div><div class="thumb-box"></div></div>
+          <div class="thumb-box"></div>
+          <div class="thumb-row"><div class="thumb-box"></div><div class="thumb-box"></div><div class="thumb-box"></div></div>
+        </div>
+        <h2>01. Dashboard</h2>
+      </a>
+
+      <a class="screen-card" href="02 - Mapping.html">
+        <div class="thumb">
+          <div class="thumb-line"></div>
+          <div class="thumb-row"><div class="thumb-box"></div><div class="thumb-box"></div><div class="thumb-box"></div></div>
+          <div class="thumb-row"><div class="thumb-box"></div><div class="thumb-box"></div><div class="thumb-box"></div></div>
+        </div>
+        <h2>02. LO-PLO Mapping</h2>
+      </a>
+
+      <a class="screen-card" href="03 - Assessments.html">
+        <div class="thumb">
+          <div class="thumb-line"></div>
+          <div class="thumb-box"></div>
+          <div class="thumb-box"></div>
+          <div class="thumb-box"></div>
+        </div>
+        <h2>03. Assessment Setup</h2>
+      </a>
+
+      <a class="screen-card" href="04 - CSV Upload.html">
+        <div class="thumb">
+          <div class="thumb-row"><div class="thumb-box"></div><div class="thumb-box"></div><div class="thumb-box"></div></div>
+          <div class="thumb-line"></div>
+          <div class="thumb-box"></div>
+        </div>
+        <h2>04. CSV Upload</h2>
+      </a>
+
+      <a class="screen-card" href="05 - Admin.html">
+        <div class="thumb">
+          <div class="thumb-row"><div class="thumb-box"></div><div class="thumb-box"></div><div class="thumb-box"></div></div>
+          <div class="thumb-line"></div>
+          <div class="thumb-box"></div>
+        </div>
+        <h2>05. Users and Roles</h2>
+      </a>
+    </section>
+  </main>
+</body>
+</html>

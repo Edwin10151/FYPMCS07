@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assessment Setup Wireframe</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div class="title">MCS07 Dashboard</div>
+        <div class="sub">Sidebar / Navigation</div>
+      </div>
+      <div class="nav-group">
+        <a class="nav-link" href="00 - Login.html">00 Login</a>
+        <a class="nav-link" href="01 - Dashboard.html">01 Dashboard</a>
+        <a class="nav-link" href="02 - Mapping.html">02 Mapping</a>
+        <a class="nav-link active" href="03 - Assessments.html">03 Assessments</a>
+        <a class="nav-link" href="04 - CSV Upload.html">04 CSV Upload</a>
+        <a class="nav-link" href="05 - Admin.html">05 Admin</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs"><strong>Assessment Setup</strong></div>
+        <div class="top-actions">
+          <button class="btn">Copy Previous Semester</button>
+          <button class="btn primary">Save Assessments</button>
+        </div>
+      </div>
+
+      <section class="content">
+        <header class="page-head">
+          <div>
+            <span class="phase-tag">Screen 03</span>
+            <h1>Assessment Setup</h1>
+          </div>
+        </header>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Assessment List</h2>
+          </div>
+          <div class="wire-box" style="min-height:120px; display:flex; align-items:center; justify-content:center;">
+            <strong>[Assessment table: name, weight, LOs covered, status]</strong>
+          </div>
+        </section>
+
+        <section class="grid-2">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Weight Distribution Rule</h2>
+            </div>
+            <div class="wire-box" style="min-height:90px; display:flex; align-items:center; justify-content:center;">
+              <strong>Formula: assessment weight ÷ number of tagged LOs</strong>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>LO Weight Preview</h2>
+            </div>
+            <div class="wire-box" style="min-height:90px; display:flex; align-items:center; justify-content:center;">
+              <strong>[Computed LO weight table]</strong>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

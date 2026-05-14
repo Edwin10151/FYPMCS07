@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapping Wireframe</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div class="title">MCS07 Dashboard</div>
+        <div class="sub">Sidebar / Navigation</div>
+      </div>
+      <div class="nav-group">
+        <a class="nav-link" href="00 - Login.html">00 Login</a>
+        <a class="nav-link" href="01 - Dashboard.html">01 Dashboard</a>
+        <a class="nav-link active" href="02 - Mapping.html">02 Mapping</a>
+        <a class="nav-link" href="03 - Assessments.html">03 Assessments</a>
+        <a class="nav-link" href="04 - CSV Upload.html">04 CSV Upload</a>
+        <a class="nav-link" href="05 - Admin.html">05 Admin</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs"><strong>LO-PLO Mapping</strong></div>
+        <div class="top-actions">
+          <button class="btn">Load Handbook Data</button>
+          <button class="btn primary">Save Mapping</button>
+        </div>
+      </div>
+
+      <section class="content">
+        <header class="page-head">
+          <div>
+            <span class="phase-tag">Screen 02</span>
+            <h1>LO-PLO Mapping</h1>
+          </div>
+        </header>
+
+        <section class="grid-2">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Mapping Matrix</h2>
+            </div>
+            <div class="wire-box" style="min-height:160px; display:flex; align-items:center; justify-content:center;">
+              <strong>[LO × PLO matrix table]</strong>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Review Panel</h2>
+            </div>
+            <div class="wire-box" style="min-height:160px;">
+              <strong>Selected link detail</strong><br><br>
+              <div class="inline-actions" style="margin-top:8px;">
+                <button class="btn primary">Confirm</button>
+                <button class="btn">Remove</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Handbook Fallback</h2>
+          </div>
+          <div class="grid-3">
+            <div class="wire-box"><strong>Scraped unit info</strong></div>
+            <div class="wire-box"><strong>Manual edit fallback</strong></div>
+            <div class="wire-box"><strong>Coordinator approval</strong></div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
