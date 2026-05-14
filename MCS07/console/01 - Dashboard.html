@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FIT2004 — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .kpi .lbl {
+    font-size: 11px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .kpi .val {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.05;
+    margin-top: 8px;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+  .kpi .val .u { font-size: 18px; color: var(--ink-3); }
+  .kpi .val.warn { color: var(--warn); }
+  .kpi .delta {
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .kpi .delta .up { color: var(--ok); font-weight: 600; }
+  .kpi .delta .dn { color: var(--risk); font-weight: 600; }
+
+  .lo-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .lo-card {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px 16px;
+  }
+  .lo-card.risk { background: #FCF2EC; border-color: #F2D8CC; }
+  .lo-card .lo-h {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .lo-card .lo-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+  }
+  .lo-card .lo-text {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--ink-2);
+    height: 64px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .lo-card .lo-pct {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 30px;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .lo-card .lo-pct .u { font-size: 14px; color: var(--ink-3); }
+  .lo-card.risk .lo-pct { color: var(--risk); }
+  .lo-card .lo-bar {
+    margin-top: 12px;
+    height: 6px;
+    background: var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .lo-card .lo-bar .fill {
+    position: absolute; inset: 0;
+    background: var(--ok);
+    border-radius: 3px;
+  }
+  .lo-card.risk .lo-bar .fill { background: var(--risk); }
+  .lo-card .lo-meta {
+    display: flex; justify-content: space-between;
+    margin-top: 8px;
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+
+  /* Distribution */
+  .dist-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 60px 60px 60px 60px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line-2);
+    font-size: 12px;
+    gap: 8px;
+  }
+  .dist-row:last-child { border-bottom: none; }
+  .dist-row .lo-tag {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--ink);
+    font-weight: 500;
+    font-size: 12px;
+  }
+  .dist-row .lo-tag .sub {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    color: var(--ink-3);
+    font-size: 10.5px;
+    margin-top: 2px;
+    letter-spacing: 0;
+  }
+  .stacked {
+    display: flex;
+    height: 24px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--paper);
+    border: 1px solid var(--line);
+  }
+  .stacked .seg-bar {
+    height: 100%;
+    display: flex; align-items: center;
+    padding: 0 7px;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    min-width: 22px;
+  }
+  .stacked .hd { background: #16744D; }
+  .stacked .d  { background: #4FA37E; }
+  .stacked .c  { background: #E0A33E; color: rgba(0,0,0,0.78); }
+  .stacked .p  { background: #C97A5C; }
+  .stacked .f  { background: #A8321C; }
+  .dist-row .n {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--ink-2);
+    font-size: 12px;
+  }
+  .dist-row .n.pass { color: var(--ok); font-weight: 600; }
+  .dist-row .n.fail { color: var(--risk); font-weight: 600; }
+  .legend {
+    display: flex; gap: 18px;
+    font-size: 11px;
+    color: var(--ink-2);
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line-2);
+    align-items: center;
+  }
+  .legend .sw {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 16px;
+  }
+
+  /* AI drawer (collapsed) */
+  .ai-drawer {
+    border: 1px solid #ECDCB8;
+    background: linear-gradient(180deg, #FFFCF4, #FFFEFB);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 18px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .ai-drawer .hd { display: flex; align-items: center; gap: 12px; }
+  .ai-drawer .star {
+    width: 24px; height: 24px;
+    background: var(--amber);
+    border-radius: 50%;
+    box-shadow: 0 0 0 4px rgba(224,163,62,0.18);
+    flex-shrink: 0;
+  }
+  .ai-drawer h4 {
+    font-size: 14px; font-weight: 600; margin: 0;
+    color: var(--ink);
+  }
+  .ai-drawer .meta {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Trend mini */
+  .trend {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .trend-cell {
+    padding: 10px 12px;
+    background: var(--paper-2);
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    font-size: 11px;
+  }
+  .trend-cell .sem {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--ink-3);
+    margin-bottom: 4px;
+  }
+  .trend-cell .v {
+    font-family: 'Newsreader', serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .trend-cell.now {
+    background: var(--navy-tint);
+    border-color: #DBE3F0;
+  }
+  .trend-cell.now .v { color: var(--navy); }
+</style>
+</head>
+<body data-screen-label="01 Dashboard">
+  <div class="app">
+
+    <!-- Sidebar -->
+    <aside class="side">
+      <div class="brand">
+        <div class="mark">M</div>
+        <div class="name">Curriculum<br>Analytics<span class="sub">Faculty of IT</span></div>
+      </div>
+      <div class="sec">Workspace</div>
+      <nav>
+        <a href="01 - Dashboard.html" class="active"><span class="ic i-home"></span> Dashboard</a>
+        <a href="01 - Dashboard.html"><span class="ic i-units"></span> Units <span class="badge">14</span></a>
+        <a href="02 - Mapping.html"><span class="ic i-map"></span> LO ↔ PLO mapping</a>
+        <a href="03 - Assessments.html"><span class="ic i-ass"></span> Assessments</a>
+        <a href="04 - CSV Upload.html"><span class="ic i-up"></span> Grade upload</a>
+        <a href="01 - Dashboard.html"><span class="ic i-rep"></span> Reports</a>
+      </nav>
+      <div class="sec">Administration</div>
+      <nav>
+        <a href="05 - Admin.html"><span class="ic i-users"></span> Users &amp; roles</a>
+        <a href="01 - Dashboard.html"><span class="ic i-sync"></span> Handbook sync <span class="badge warn">!</span></a>
+        <a href="01 - Dashboard.html"><span class="ic i-set"></span> Settings</a>
+      </nav>
+      <div class="user">
+        <div class="av a2">EC</div>
+        <div>
+          <div>Dr. Elise Chen</div>
+          <div class="role">Unit Coordinator · FIT</div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs">
+          Units <span class="sep">›</span> FIT <span class="sep">›</span> <strong>FIT2004</strong> <span class="sep">›</span> Semester 1 2026
+        </div>
+        <div class="top-actions">
+          <div class="search">⌕ Search units, students, LOs… <span class="kbd">⌘K</span></div>
+          <div class="bell"><span style="font-size:14px;">⌕</span></div>
+          <button class="btn ghost">Export CSV</button>
+          <button class="btn">Print report</button>
+          <button class="btn primary"><span class="glyph"></span> Generate AI summary</button>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <!-- Banner -->
+        <div class="banner">
+          <div class="ico">i</div>
+          <div class="body">
+            <strong>Handbook synced to v2026.1 on 04 May 2026.</strong>
+            Unit details and learning outcomes match the current Monash Handbook entry for FIT2004. <a href="02 - Mapping.html">Review LO ↔ PLO mapping ›</a>
+          </div>
+          <div class="actions">
+            <button class="btn ghost" style="height:28px;font-size:11.5px;">Dismiss</button>
+          </div>
+        </div>
+
+        <!-- Unit banner -->
+        <div class="unit-banner">
+          <div>
+            <h1><span class="code">FIT2004</span>Algorithms and Data Structures</h1>
+            <div class="sub">Faculty of Information Technology &nbsp;·&nbsp; Coordinated by Dr. Elise Chen &nbsp;·&nbsp; Last grade upload: 11 May 2026, 09:42</div>
+          </div>
+          <div class="sem-switch">
+            <span class="arrow">‹</span>
+            <span class="v">Semester 1, 2026</span>
+            <span class="arrow">›</span>
+          </div>
+        </div>
+
+        <!-- KPI row -->
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="lbl">Enrolled</div>
+            <div class="val">287</div>
+            <div class="delta">vs S2'25 (264) <span class="up">+8.7%</span></div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Cohort attainment</div>
+            <div class="val">74<span class="u">%</span></div>
+            <div class="delta">weighted mean · 4 LOs</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">LOs at risk</div>
+            <div class="val warn">2<span class="u"> / 4</span></div>
+            <div class="delta">LO 2, LO 4 below threshold</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Students at risk</div>
+            <div class="val">41</div>
+            <div class="delta">failing ≥1 LO &nbsp;<span class="dn">14.3% of cohort</span></div>
+          </div>
+        </div>
+
+        <!-- AI drawer -->
+        <div class="ai-drawer">
+          <div class="hd">
+            <span class="star"></span>
+            <div>
+              <h4>AI cohort summary</h4>
+              <div class="meta">NEVER GENERATED · UPDATES NIGHTLY ONCE FIRST RUN</div>
+            </div>
+          </div>
+          <div>
+            <button class="btn primary"><span class="glyph"></span> Generate summary</button>
+          </div>
+        </div>
+
+        <!-- Learning outcomes -->
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h4>Learning outcomes</h4>
+              <div class="h-sub">% of cohort meeting the 50% attainment threshold for each outcome</div>
+            </div>
+            <div class="seg">
+              <span class="on">Pass rate</span>
+              <span>Mean score</span>
+              <span>Distribution</span>
+            </div>
+          </div>
+          <div class="lo-grid">
+            <div class="lo-card">
+              <div class="lo-h"><span class="lo-code">LO 1</span><span class="pill ok"><span class="dot"></span>On track</span></div>
+              <div class="lo-text">Analyse general problem-solving strategies and algorithmic paradigms, and apply them to solving new problems.</div>
+              <div class="lo-pct">83<span class="u">%</span></div>
+              <div class="lo-bar"><div class="fill" style="right:17%;"></div></div>
+              <div class="lo-meta"><span>238 / 287 passed</span><span>μ 68</span></div>
+            </div>
+            <div class="lo-card risk">
+              <div class="lo-h"><span class="lo-code">LO 2</span><span class="pill risk"><span class="dot"></span>At risk</span></div>
+              <div class="lo-text">Prove correctness of programs; analyse their space and time complexities.</div>
+              <div class="lo-pct">62<span class="u">%</span></div>
+              <div class="lo-bar"><div class="fill" style="right:38%;"></div></div>
+              <div class="lo-meta"><span>178 / 287 passed</span><span>μ 54</span></div>
+            </div>
+            <div class="lo-card">
+              <div class="lo-h"><span class="lo-code">LO 3</span><span class="pill ok"><span class="dot"></span>On track</span></div>
+              <div class="lo-text">Compare and contrast various abstract data types and use them appropriately.</div>
+              <div class="lo-pct">88<span class="u">%</span></div>
+              <div class="lo-bar"><div class="fill" style="right:12%;"></div></div>
+              <div class="lo-meta"><span>253 / 287 passed</span><span>μ 71</span></div>
+            </div>
+            <div class="lo-card risk">
+              <div class="lo-h"><span class="lo-code">LO 4</span><span class="pill risk"><span class="dot"></span>At risk</span></div>
+              <div class="lo-text">Develop and implement algorithms to solve computational problems.</div>
+              <div class="lo-pct">58<span class="u">%</span></div>
+              <div class="lo-bar"><div class="fill" style="right:42%;"></div></div>
+              <div class="lo-meta"><span>166 / 287 passed</span><span>μ 51</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <!-- Distribution -->
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h4>Cohort grade distribution per LO</h4>
+                <div class="h-sub">Stacked share of HD / D / C / P / N for each outcome — 287 students</div>
+              </div>
+              <div class="seg">
+                <span class="on">Counts</span>
+                <span>%</span>
+              </div>
+            </div>
+
+            <div class="dist-row">
+              <div class="lo-tag">LO 1<span class="sub">Algorithmic paradigms</span></div>
+              <div class="stacked">
+                <div class="seg-bar hd" style="width:18%;">18</div>
+                <div class="seg-bar d" style="width:31%;">31</div>
+                <div class="seg-bar c" style="width:24%;">24</div>
+                <div class="seg-bar p" style="width:10%;">10</div>
+                <div class="seg-bar f" style="width:17%;">17</div>
+              </div>
+              <div class="n pass">83%</div>
+              <div class="n">μ 68</div>
+              <div class="n">σ 14</div>
+              <div class="n">—</div>
+            </div>
+            <div class="dist-row">
+              <div class="lo-tag">LO 2<span class="sub">Correctness &amp; complexity</span></div>
+              <div class="stacked">
+                <div class="seg-bar hd" style="width:9%;">9</div>
+                <div class="seg-bar d" style="width:18%;">18</div>
+                <div class="seg-bar c" style="width:21%;">21</div>
+                <div class="seg-bar p" style="width:14%;">14</div>
+                <div class="seg-bar f" style="width:38%;">38</div>
+              </div>
+              <div class="n fail">62%</div>
+              <div class="n">μ 54</div>
+              <div class="n">σ 18</div>
+              <div class="n" style="color:var(--risk);">↓ 9</div>
+            </div>
+            <div class="dist-row">
+              <div class="lo-tag">LO 3<span class="sub">Abstract data types</span></div>
+              <div class="stacked">
+                <div class="seg-bar hd" style="width:24%;">24</div>
+                <div class="seg-bar d" style="width:32%;">32</div>
+                <div class="seg-bar c" style="width:22%;">22</div>
+                <div class="seg-bar p" style="width:10%;">10</div>
+                <div class="seg-bar f" style="width:12%;">12</div>
+              </div>
+              <div class="n pass">88%</div>
+              <div class="n">μ 71</div>
+              <div class="n">σ 12</div>
+              <div class="n" style="color:var(--ok);">↑ 3</div>
+            </div>
+            <div class="dist-row">
+              <div class="lo-tag">LO 4<span class="sub">Implementation</span></div>
+              <div class="stacked">
+                <div class="seg-bar hd" style="width:7%;">7</div>
+                <div class="seg-bar d" style="width:15%;">15</div>
+                <div class="seg-bar c" style="width:20%;">20</div>
+                <div class="seg-bar p" style="width:16%;">16</div>
+                <div class="seg-bar f" style="width:42%;">42</div>
+              </div>
+              <div class="n fail">58%</div>
+              <div class="n">μ 51</div>
+              <div class="n">σ 19</div>
+              <div class="n" style="color:var(--risk);">↓ 7</div>
+            </div>
+
+            <div class="legend">
+              <span><span class="sw" style="background:#16744D;"></span>HD ≥80</span>
+              <span><span class="sw" style="background:#4FA37E;"></span>D 70–79</span>
+              <span><span class="sw" style="background:#E0A33E;"></span>C 60–69</span>
+              <span><span class="sw" style="background:#C97A5C;"></span>P 50–59</span>
+              <span><span class="sw" style="background:#A8321C;"></span>N &lt;50</span>
+              <span style="margin-left:auto;color:var(--ink-3);">Δ column compares pass rate vs S2 2025</span>
+            </div>
+          </div>
+
+          <!-- Assessments mini -->
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h4>Assessments &amp; LO coverage</h4>
+                <div class="h-sub">Weights distribute evenly to tagged LOs</div>
+              </div>
+              <a href="03 - Assessments.html" class="btn ghost" style="height:28px;font-size:11.5px;">Configure ›</a>
+            </div>
+            <table class="tbl">
+              <thead>
+                <tr><th>Assessment</th><th class="num">Weight</th><th>Covers</th><th class="num">Submitted</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="nm">Weekly problem sets<span class="meta">10 × 1.5% · auto-graded</span></td>
+                  <td class="num">15%</td>
+                  <td><span class="tag navy">LO1</span> <span class="tag navy">LO3</span></td>
+                  <td class="num" style="color:var(--ok);font-weight:600;">287/287</td>
+                </tr>
+                <tr>
+                  <td class="nm">A1 — Complexity proofs<span class="meta">Wk 6 · written</span></td>
+                  <td class="num">20%</td>
+                  <td><span class="tag navy">LO1</span> <span class="tag navy">LO2</span></td>
+                  <td class="num" style="color:var(--ok);font-weight:600;">285/287</td>
+                </tr>
+                <tr>
+                  <td class="nm">A2 — Implementation project<span class="meta">Wk 11 · code + report</span></td>
+                  <td class="num">25%</td>
+                  <td><span class="tag navy">LO2</span> <span class="tag navy">LO3</span> <span class="tag navy">LO4</span></td>
+                  <td class="num" style="color:var(--ok);font-weight:600;">281/287</td>
+                </tr>
+                <tr>
+                  <td class="nm">Final examination<span class="meta">3 hr · invigilated</span></td>
+                  <td class="num">40%</td>
+                  <td><span class="tag navy">LO1</span> <span class="tag navy">LO2</span> <span class="tag navy">LO3</span> <span class="tag navy">LO4</span></td>
+                  <td class="num" style="color:var(--ink-3);">Pending</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="margin-top:18px;border-top:1px solid var(--line-2);padding-top:14px;">
+              <div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Cohort attainment trend</div>
+              <div class="trend">
+                <div class="trend-cell">
+                  <div class="sem">S1 · 2024</div>
+                  <div class="v">71<span style="font-size:11px;color:var(--ink-3);">%</span></div>
+                </div>
+                <div class="trend-cell">
+                  <div class="sem">S2 · 2024</div>
+                  <div class="v">73<span style="font-size:11px;color:var(--ink-3);">%</span></div>
+                </div>
+                <div class="trend-cell">
+                  <div class="sem">S2 · 2025</div>
+                  <div class="v">78<span style="font-size:11px;color:var(--ink-3);">%</span></div>
+                </div>
+                <div class="trend-cell now">
+                  <div class="sem">S1 · 2026 ·  NOW</div>
+                  <div class="v">74<span style="font-size:11px;color:var(--ink-3);">%</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LO ↔ PLO mapping — FIT2004</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* Matrix layout */
+  .matrix-wrap {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+  }
+  .matrix {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .mx-head {
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px;
+  }
+  .mx-head h4 { font-size: 14px; font-weight: 600; margin: 0; color: var(--ink); }
+  .mx-head .h-sub { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+  .mx-head .legend {
+    display: flex; gap: 14px; align-items: center;
+    font-size: 11px; color: var(--ink-2);
+    margin: 0; padding: 0; border: none;
+  }
+  .leg-item { display: inline-flex; align-items: center; gap: 6px; }
+  .leg-dot {
+    width: 14px; height: 14px;
+    border-radius: 4px;
+    display: inline-grid; place-items: center;
+  }
+  .leg-dot.confirmed { background: var(--navy); color: white; font-size: 9px; font-weight: 700; }
+  .leg-dot.suggested { border: 1.5px dashed var(--navy-3); background: var(--navy-tint); color: var(--navy); }
+  .leg-dot.removed { background: var(--risk-bg); color: var(--risk); border:1px solid #F2D8CC; font-size: 10px; font-weight: 700; }
+
+  /* Grid table */
+  .mx-table {
+    width: 100%;
+    font-size: 12px;
+  }
+  .mx-table th, .mx-table td {
+    text-align: center;
+    padding: 0;
+    border-right: 1px solid var(--line-2);
+    border-bottom: 1px solid var(--line-2);
+  }
+  .mx-table th:last-child, .mx-table td:last-child { border-right: none; }
+  .mx-table thead th {
+    background: var(--paper-2);
+    font-weight: 500;
+    color: var(--ink-2);
+    font-size: 11px;
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mx-table thead th.plo-h {
+    text-align: left;
+    width: 340px;
+    padding: 12px 18px;
+  }
+  .mx-table thead th .lo-h {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--navy);
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .mx-table thead th .lo-h-text {
+    font-size: 10.5px;
+    color: var(--ink-3);
+    line-height: 1.3;
+    font-weight: 400;
+    text-align: center;
+    text-transform: none;
+    letter-spacing: 0;
+    max-width: 130px;
+    margin: 0 auto;
+  }
+
+  .plo-cell {
+    padding: 14px 18px;
+    text-align: left;
+    background: var(--paper-2);
+  }
+  .plo-cell .plo-h {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--navy);
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .plo-cell .plo-t {
+    font-size: 12px;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+  .plo-cell .plo-t .em {
+    font-style: italic;
+    color: var(--ink-2);
+  }
+  .mx-table tbody tr.active .plo-cell { background: var(--navy-tint); }
+  .mx-table tbody tr.active td { background: rgba(11,46,92,0.025); }
+
+  .cell {
+    width: 42px; height: 42px;
+    display: grid; place-items: center;
+    margin: 0 auto;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background .12s;
+  }
+  .cell:hover { background: var(--paper); }
+  .check {
+    width: 22px; height: 22px;
+    border-radius: 5px;
+    display: grid; place-items: center;
+    background: var(--navy);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .check.suggested {
+    background: var(--navy-tint);
+    border: 1.5px dashed var(--navy-3);
+    color: var(--navy);
+  }
+  .check.removed {
+    background: var(--risk-bg);
+    border: 1px solid #F2D8CC;
+    color: var(--risk);
+    font-size: 13px;
+  }
+  .cell.selected .check {
+    box-shadow: 0 0 0 3px rgba(11,46,92,0.18);
+  }
+  .cell .empty {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--line);
+  }
+
+  .totals-row {
+    background: var(--paper-2);
+    border-top: 1px solid var(--line);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .totals-row td {
+    padding: 10px 8px;
+    color: var(--ink-2);
+    border-bottom: none;
+  }
+  .totals-row td:first-child {
+    text-align: right;
+    padding-right: 18px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .cov-num { font-weight: 600; color: var(--navy); font-size: 13px; }
+  .cov-warn { color: var(--warn); }
+
+  /* Right rail */
+  .rail-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .rail-card h5 {
+    font-size: 12px; font-weight: 600; margin: 0 0 10px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .rail-card .sel-h {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--navy);
+    font-size: 12px;
+    font-weight: 600;
+    margin: 6px 0;
+  }
+  .rail-card .sel-h .arrow { color: var(--ink-3); margin: 0 8px; }
+  .rail-card p.sel-body {
+    font-size: 12.5px;
+    color: var(--ink-2);
+    line-height: 1.5;
+    margin: 4px 0 14px;
+  }
+  .hist-list {
+    display: flex; flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .hist-list .row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px;
+    background: var(--paper-2);
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .hist-list .row .sem { font-family: 'JetBrains Mono', monospace; color: var(--ink-2); }
+  .hist-list .row .st { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; }
+  .hist-list .row .st.y { background: var(--ok-bg); color: var(--ok); }
+  .hist-list .row .st.n { background: var(--risk-bg); color: var(--risk); }
+  .hist-list .row.now { background: var(--navy-tint); border-color: #DBE3F0; }
+
+  .mapping-tools {
+    display: flex; gap: 8px;
+    margin-top: 8px;
+  }
+  .mapping-tools .btn { flex: 1; }
+
+  .changes-log {
+    font-size: 11.5px; color: var(--ink-2);
+    line-height: 1.55;
+  }
+  .changes-log .item {
+    display: flex; gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+  .changes-log .item:last-child { border: none; }
+  .changes-log .item .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .changes-log .item .dot.add { background: var(--ok); }
+  .changes-log .item .dot.rm { background: var(--risk); }
+  .changes-log .item .body strong { font-weight: 600; color: var(--ink); }
+  .changes-log .item .body .m { color: var(--ink-3); font-size: 10.5px; margin-top: 2px; }
+
+  /* Sticky save bar */
+  .save-bar {
+    margin-top: 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex; align-items: center;
+    gap: 16px;
+  }
+  .save-bar .stat {
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .save-bar .stat strong { color: var(--ink); }
+  .save-bar .stat .ok { color: var(--ok); font-weight: 600; }
+  .save-bar .actions { margin-left: auto; display: flex; gap: 8px; }
+
+  .pre {
+    display: inline-block;
+    width: 14px; height: 14px;
+    margin-right: 6px;
+    background: var(--navy-tint);
+    border: 1.5px dashed var(--navy-3);
+    border-radius: 3px;
+    vertical-align: -2px;
+  }
+</style>
+</head>
+<body data-screen-label="02 Mapping">
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="side">
+      <div class="brand">
+        <div class="mark">M</div>
+        <div class="name">Curriculum<br>Analytics<span class="sub">Faculty of IT</span></div>
+      </div>
+      <div class="sec">Workspace</div>
+      <nav>
+        <a href="01 - Dashboard.html"><span class="ic i-home"></span> Dashboard</a>
+        <a href="01 - Dashboard.html"><span class="ic i-units"></span> Units <span class="badge">14</span></a>
+        <a href="02 - Mapping.html" class="active"><span class="ic i-map"></span> LO ↔ PLO mapping</a>
+        <a href="03 - Assessments.html"><span class="ic i-ass"></span> Assessments</a>
+        <a href="04 - CSV Upload.html"><span class="ic i-up"></span> Grade upload</a>
+        <a href="01 - Dashboard.html"><span class="ic i-rep"></span> Reports</a>
+      </nav>
+      <div class="sec">Administration</div>
+      <nav>
+        <a href="05 - Admin.html"><span class="ic i-users"></span> Users &amp; roles</a>
+        <a href="01 - Dashboard.html"><span class="ic i-sync"></span> Handbook sync <span class="badge warn">!</span></a>
+        <a href="01 - Dashboard.html"><span class="ic i-set"></span> Settings</a>
+      </nav>
+      <div class="user">
+        <div class="av a2">EC</div>
+        <div>
+          <div>Dr. Elise Chen</div>
+          <div class="role">Unit Coordinator · FIT</div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs">
+          Mapping <span class="sep">›</span> <strong>FIT2004</strong> <span class="sep">›</span> Bachelor of Information Technology <span class="sep">›</span> Semester 1 2026
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost">Compare semesters</button>
+          <button class="btn">Discard changes</button>
+          <button class="btn primary">Save mapping</button>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <div class="unit-banner">
+          <div>
+            <h1 style="font-size:26px;">LO ↔ PLO mapping</h1>
+            <div class="sub"><span class="code">FIT2004</span> Algorithms and Data Structures &nbsp;·&nbsp; Course: <strong style="color:var(--ink);">Bachelor of Information Technology</strong> &nbsp;·&nbsp; 8 PLOs &nbsp;·&nbsp; 4 ULOs</div>
+          </div>
+          <div class="sem-switch">
+            <span class="arrow">‹</span>
+            <span class="v">Semester 1, 2026</span>
+            <span class="arrow">›</span>
+          </div>
+        </div>
+
+        <!-- Historical insight banner -->
+        <div class="banner">
+          <div class="ico">i</div>
+          <div class="body">
+            <strong>Mapping pre-filled from FIT2004 · Semester 2 2025</strong>
+            We've carried over <strong>9 of 11</strong> mappings from the last delivery of this unit. Two LO texts changed in the v2026.1 handbook sync — those PLO links are marked <span class="pre"></span><em>suggested</em> for your review. Confirm or remove each one before publishing.
+          </div>
+          <div class="actions">
+            <button class="btn ghost" style="height:28px;font-size:11.5px;">View handbook diff</button>
+            <button class="btn primary" style="height:28px;font-size:11.5px;">Accept all suggestions</button>
+          </div>
+        </div>
+
+        <!-- Matrix -->
+        <div class="matrix-wrap">
+          <div class="matrix">
+            <div class="mx-head">
+              <div>
+                <h4>Mapping matrix</h4>
+                <div class="h-sub">Click a cell to confirm, suggest, or remove a link. Each ULO must map to at least one PLO.</div>
+              </div>
+              <div class="legend">
+                <span class="leg-item"><span class="leg-dot confirmed">✓</span> Confirmed</span>
+                <span class="leg-item"><span class="leg-dot suggested">?</span> Suggested</span>
+                <span class="leg-item"><span class="leg-dot removed">✕</span> Removed this sem</span>
+              </div>
+            </div>
+
+            <table class="mx-table">
+              <thead>
+                <tr>
+                  <th class="plo-h">Course Program Learning Outcomes</th>
+                  <th>
+                    <div class="lo-h">LO 1</div>
+                    <div class="lo-h-text">Algorithmic paradigms</div>
+                  </th>
+                  <th>
+                    <div class="lo-h">LO 2</div>
+                    <div class="lo-h-text">Correctness &amp; complexity</div>
+                  </th>
+                  <th>
+                    <div class="lo-h">LO 3</div>
+                    <div class="lo-h-text">Abstract data types</div>
+                  </th>
+                  <th>
+                    <div class="lo-h">LO 4</div>
+                    <div class="lo-h-text">Implementation</div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 1 <span class="tag" style="font-size:9.5px;">FOUNDATIONS</span></div>
+                    <div class="plo-t">Apply mathematical and computational foundations to model and solve problems in information technology.</div>
+                  </td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                </tr>
+                <tr class="active">
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 2 <span class="tag" style="font-size:9.5px;">DESIGN</span></div>
+                    <div class="plo-t">Design and implement reliable software solutions using <span class="em">appropriate algorithms and data structures</span>.</div>
+                  </td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                  <td><div class="cell selected"><div class="check">✓</div></div></td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                </tr>
+                <tr>
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 3 <span class="tag" style="font-size:9.5px;">ANALYSIS</span></div>
+                    <div class="plo-t">Analyse system behaviour using rigorous methods including formal proof and empirical evaluation.</div>
+                  </td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="check suggested">?</div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                </tr>
+                <tr>
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 4 <span class="tag" style="font-size:9.5px;">PROFESSIONAL</span></div>
+                    <div class="plo-t">Communicate technical content effectively across written, visual, and oral channels to diverse audiences.</div>
+                  </td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                </tr>
+                <tr>
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 5 <span class="tag" style="font-size:9.5px;">SYSTEMS</span></div>
+                    <div class="plo-t">Evaluate and select abstract data types and architectures appropriate to a given problem context.</div>
+                  </td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                  <td><div class="cell"><div class="check suggested">?</div></div></td>
+                </tr>
+                <tr>
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 6 <span class="tag" style="font-size:9.5px;">PROBLEM-SOLVING</span></div>
+                    <div class="plo-t">Decompose ill-defined problems into tractable sub-problems and devise principled solutions.</div>
+                  </td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="check">✓</div></div></td>
+                </tr>
+                <tr>
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 7 <span class="tag" style="font-size:9.5px;">RESEARCH</span></div>
+                    <div class="plo-t">Investigate current research literature to inform engineering decisions and identify open questions.</div>
+                  </td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="check removed">✕</div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                </tr>
+                <tr>
+                  <td class="plo-cell">
+                    <div class="plo-h">PLO 8 <span class="tag" style="font-size:9.5px;">PRACTICE</span></div>
+                    <div class="plo-t">Demonstrate professional and ethical practice in the development and deployment of IT artefacts.</div>
+                  </td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                  <td><div class="cell"><div class="empty"></div></div></td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="totals-row">
+                  <td>Coverage / LO →</td>
+                  <td><span class="cov-num">3</span></td>
+                  <td><span class="cov-num">3</span> <span style="color:var(--ink-3);">+1?</span></td>
+                  <td><span class="cov-num">2</span></td>
+                  <td><span class="cov-num">2</span> <span style="color:var(--ink-3);">+1?</span></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- Right rail -->
+          <aside>
+            <div class="rail-card">
+              <h5>Selected mapping</h5>
+              <div class="sel-h">PLO 2 <span class="arrow">→</span> LO 2</div>
+              <p class="sel-body">
+                <strong style="color:var(--ink);">Design and implement reliable software solutions</strong> ↔ <strong style="color:var(--ink);">Prove correctness of programs; analyse their space and time complexities.</strong>
+              </p>
+              <div class="mapping-tools">
+                <button class="btn danger">Remove link</button>
+                <button class="btn primary" style="flex:1.4;">Confirm link</button>
+              </div>
+            </div>
+
+            <div class="rail-card">
+              <h5>Historical record</h5>
+              <p class="sel-body" style="margin-bottom:8px;">Has this PLO 2 ↔ LO 2 link been used in previous deliveries of FIT2004?</p>
+              <div class="hist-list">
+                <div class="row"><span class="sem">S1 · 2024</span><span class="st y">LINKED</span></div>
+                <div class="row"><span class="sem">S2 · 2024</span><span class="st y">LINKED</span></div>
+                <div class="row"><span class="sem">S2 · 2025</span><span class="st y">LINKED</span></div>
+                <div class="row now"><span class="sem">S1 · 2026 · current</span><span class="st y">CONFIRMED</span></div>
+              </div>
+              <div style="font-size:10.5px;color:var(--ink-3);margin-top:10px;font-family:'JetBrains Mono',monospace;letter-spacing:0.02em;">SOURCE · MONASH HANDBOOK ARCHIVE · 3 SEMESTERS</div>
+            </div>
+
+            <div class="rail-card">
+              <h5>Changes this session</h5>
+              <div class="changes-log">
+                <div class="item">
+                  <div class="dot add"></div>
+                  <div class="body">
+                    <strong>Accepted</strong> PLO 5 → LO 3 from S2'25 history
+                    <div class="m">11:14 · Elise Chen</div>
+                  </div>
+                </div>
+                <div class="item">
+                  <div class="dot rm"></div>
+                  <div class="body">
+                    <strong>Removed</strong> PLO 7 → LO 2 link
+                    <div class="m">11:11 · Elise Chen · reason: LO text changed</div>
+                  </div>
+                </div>
+                <div class="item">
+                  <div class="dot add"></div>
+                  <div class="body">
+                    <strong>Suggested</strong> PLO 3 → LO 2 awaiting review
+                    <div class="m">Auto · keyword match: "complexity"</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- Save bar -->
+        <div class="save-bar">
+          <div class="stat"><strong>2 suggested links</strong> awaiting review</div>
+          <div class="stat" style="color:var(--ink-3);">·</div>
+          <div class="stat"><strong>1 removed</strong> this session</div>
+          <div class="stat" style="color:var(--ink-3);">·</div>
+          <div class="stat">Every ULO has <span class="ok">≥1 PLO link</span></div>
+          <div class="actions">
+            <button class="btn ghost">Preview as report</button>
+            <button class="btn">Save as draft</button>
+            <button class="btn primary">Publish mapping for S1 2026</button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

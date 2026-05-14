@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Grade upload — FIT2004</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* Stepper */
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+    padding: 14px 20px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .step {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  .step .n {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--ink-3);
+    background: white;
+  }
+  .step.done .n { background: var(--ok); border-color: var(--ok); color: white; }
+  .step.now .n { background: var(--navy); border-color: var(--navy); color: white; }
+  .step.now { color: var(--ink); font-weight: 600; }
+  .step.done { color: var(--ink-2); }
+  .step .label { white-space: nowrap; }
+  .stepper .ln {
+    flex: 1; height: 1px;
+    background: var(--line);
+  }
+  .stepper .ln.done { background: var(--ok); }
+
+  /* File header */
+  .file-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 22px;
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .file-card .icn {
+    width: 44px; height: 44px;
+    background: var(--navy-tint);
+    border: 1px solid #DBE3F0;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    color: var(--navy);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .file-card .nm { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .file-card .nm .sub {
+    display: block;
+    font-size: 11.5px;
+    color: var(--ink-3);
+    font-weight: 400;
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+
+  /* Result stats */
+  .result-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+  }
+  .stat-card.ok { border-color: var(--ok-bg-2); background: linear-gradient(180deg, #F4FAF6, white); }
+  .stat-card.warn { border-color: #F1D9B5; background: linear-gradient(180deg, #FEFAF1, white); }
+  .stat-card.risk { border-color: #F2D8CC; background: linear-gradient(180deg, #FDF6F2, white); }
+  .stat-card .lbl {
+    font-size: 11px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .stat-card .lbl .b {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--ink-3);
+  }
+  .stat-card.ok .lbl .b { background: var(--ok); }
+  .stat-card.warn .lbl .b { background: var(--warn); }
+  .stat-card.risk .lbl .b { background: var(--risk); }
+  .stat-card .v {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 32px;
+    color: var(--ink);
+    margin-top: 6px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+  .stat-card .v .u { font-size: 14px; color: var(--ink-3); }
+  .stat-card .sub {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  /* Column mapping */
+  .mapping-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 16px;
+  }
+  .mapping-card .hd {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .mapping-card h4 {
+    margin: 0; font-size: 14px; font-weight: 600;
+  }
+  .mapping-card .pill { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-bg-2); }
+  .col-map {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
+  .col {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--paper-2);
+  }
+  .col .src {
+    padding: 8px 12px;
+    background: white;
+    border-bottom: 1px solid var(--line);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    font-weight: 500;
+  }
+  .col .arr {
+    text-align: center;
+    color: var(--ink-3);
+    font-size: 11px;
+    padding: 4px 0;
+  }
+  .col .tgt {
+    padding: 9px 12px;
+    background: var(--navy-tint);
+    border-top: 1px solid #DBE3F0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--navy);
+    font-weight: 600;
+  }
+  .col.unmapped .tgt {
+    background: var(--paper);
+    color: var(--ink-3);
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  /* Tabs for status */
+  .tabs {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 0;
+    padding: 0 22px;
+    background: white;
+    border-radius: 10px 10px 0 0;
+    border: 1px solid var(--line);
+    border-bottom: none;
+  }
+  .tabs .tab {
+    padding: 14px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-3);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tabs .tab.on { color: var(--navy); border-bottom-color: var(--navy); }
+  .tabs .tab .ct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    background: var(--paper);
+    color: var(--ink-2);
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .tabs .tab.on .ct { background: var(--navy); color: white; }
+  .tabs .tab.risk .ct { background: var(--risk-bg); color: var(--risk); }
+  .tabs .tab.warn .ct { background: var(--warn-bg); color: var(--warn); }
+
+  .recon-tbl-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .recon-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .recon-tbl th {
+    text-align: left;
+    font-weight: 500;
+    font-size: 10.5px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+  }
+  .recon-tbl td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line-2);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  .recon-tbl tr:last-child td { border-bottom: none; }
+  .recon-tbl tr.err { background: #FDF6F2; }
+  .recon-tbl tr.warn { background: #FDF9F0; }
+  .recon-tbl .id { font-family: 'JetBrains Mono', monospace; color: var(--ink-2); font-size: 11px; }
+  .recon-tbl .nm { font-weight: 500; }
+  .recon-tbl .nm .em { color: var(--ink-3); font-weight: 400; font-size: 11px; display: block; margin-top: 2px; }
+  .recon-tbl .num { font-variant-numeric: tabular-nums; }
+  .recon-tbl .reason { font-size: 11.5px; color: var(--risk); }
+  .recon-tbl .reason.w { color: var(--warn); }
+  .recon-tbl .fix-link {
+    color: var(--navy);
+    font-weight: 500;
+    font-size: 11.5px;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .err-toolbar {
+    padding: 12px 22px;
+    display: flex; align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid var(--line);
+    border-bottom: none;
+    border-radius: 0;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .err-toolbar strong { color: var(--ink); }
+  .err-toolbar .right { margin-left: auto; display: flex; gap: 6px; }
+
+  /* Confirm footer */
+  .confirm-bar {
+    margin-top: 16px;
+    background: var(--navy);
+    color: white;
+    border-radius: 10px;
+    padding: 18px 22px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  .confirm-bar .hd {
+    font-family: 'Newsreader', serif;
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .confirm-bar .sb {
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+    margin-top: 4px;
+  }
+  .confirm-bar .actions { margin-left: auto; display: flex; gap: 8px; }
+  .confirm-bar .btn { background: rgba(255,255,255,0.08); color: white; border-color: rgba(255,255,255,0.18); }
+  .confirm-bar .btn:hover { background: rgba(255,255,255,0.16); }
+  .confirm-bar .btn.primary { background: var(--amber); color: var(--navy); border-color: var(--amber); font-weight: 600; }
+</style>
+</head>
+<body data-screen-label="04 CSV Upload">
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="side">
+      <div class="brand">
+        <div class="mark">M</div>
+        <div class="name">Curriculum<br>Analytics<span class="sub">Faculty of IT</span></div>
+      </div>
+      <div class="sec">Workspace</div>
+      <nav>
+        <a href="01 - Dashboard.html"><span class="ic i-home"></span> Dashboard</a>
+        <a href="01 - Dashboard.html"><span class="ic i-units"></span> Units <span class="badge">14</span></a>
+        <a href="02 - Mapping.html"><span class="ic i-map"></span> LO ↔ PLO mapping</a>
+        <a href="03 - Assessments.html"><span class="ic i-ass"></span> Assessments</a>
+        <a href="04 - CSV Upload.html" class="active"><span class="ic i-up"></span> Grade upload</a>
+        <a href="01 - Dashboard.html"><span class="ic i-rep"></span> Reports</a>
+      </nav>
+      <div class="sec">Administration</div>
+      <nav>
+        <a href="05 - Admin.html"><span class="ic i-users"></span> Users &amp; roles</a>
+        <a href="01 - Dashboard.html"><span class="ic i-sync"></span> Handbook sync <span class="badge warn">!</span></a>
+        <a href="01 - Dashboard.html"><span class="ic i-set"></span> Settings</a>
+      </nav>
+      <div class="user">
+        <div class="av a6">JT</div>
+        <div>
+          <div>Dr. James Truong</div>
+          <div class="role">Lecturer · FIT2004</div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs">
+          Grade upload <span class="sep">›</span> <strong>FIT2004</strong> <span class="sep">›</span> Assignment 2 — Implementation project
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost">Cancel upload</button>
+          <button class="btn">Save as draft</button>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <div class="unit-banner">
+          <div>
+            <h1 style="font-size:26px;">Reconcile grades</h1>
+            <div class="sub"><span class="code">FIT2004</span> Algorithms and Data Structures &nbsp;·&nbsp; Uploading grades for <strong style="color:var(--ink);">Assignment 2 — Implementation project</strong></div>
+          </div>
+        </div>
+
+        <!-- Stepper -->
+        <div class="stepper">
+          <div class="step done"><div class="n">✓</div><div class="label">Upload file</div></div>
+          <div class="ln done"></div>
+          <div class="step done"><div class="n">✓</div><div class="label">Map columns</div></div>
+          <div class="ln done"></div>
+          <div class="step now"><div class="n">3</div><div class="label">Reconcile records</div></div>
+          <div class="ln"></div>
+          <div class="step"><div class="n">4</div><div class="label">Confirm &amp; commit</div></div>
+        </div>
+
+        <!-- File -->
+        <div class="file-card">
+          <div class="icn">CSV</div>
+          <div>
+            <div class="nm">FIT2004_S1-2026_A2_grades_final.csv</div>
+            <div class="sub">287 rows · 6 columns · 24.3 KB · Uploaded by Dr. James Truong, 11 May 2026 09:42</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn ghost">Preview raw</button>
+            <button class="btn">Replace file</button>
+          </div>
+        </div>
+
+        <!-- Result stats -->
+        <div class="result-row">
+          <div class="stat-card ok">
+            <div class="lbl"><span class="b"></span>Matched &amp; ready</div>
+            <div class="v">281 <span class="u">/ 287</span></div>
+            <div class="sub">Student IDs found in cohort, grades valid</div>
+          </div>
+          <div class="stat-card warn">
+            <div class="lbl"><span class="b"></span>Out-of-range marks</div>
+            <div class="v">3</div>
+            <div class="sub">Mark exceeds A2 max (100). Review needed.</div>
+          </div>
+          <div class="stat-card risk">
+            <div class="lbl"><span class="b"></span>Unmatched IDs</div>
+            <div class="v">2</div>
+            <div class="sub">Student ID not in S1 2026 enrolment</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl"><span class="b"></span>Missing rows</div>
+            <div class="v">6</div>
+            <div class="sub">Enrolled students absent from CSV</div>
+          </div>
+        </div>
+
+        <!-- Column mapping -->
+        <div class="mapping-card">
+          <div class="hd">
+            <div>
+              <h4>Column mapping</h4>
+              <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px;">Detected from row 1. Re-map any column if it's pointing to the wrong field.</div>
+            </div>
+            <span class="pill"><span class="dot"></span>5 of 5 required mapped · 1 ignored</span>
+          </div>
+          <div class="col-map">
+            <div class="col">
+              <div class="src">student_id</div>
+              <div class="arr">↓ mapped to</div>
+              <div class="tgt">Student ID</div>
+            </div>
+            <div class="col">
+              <div class="src">first_name</div>
+              <div class="arr">↓ mapped to</div>
+              <div class="tgt">Given name</div>
+            </div>
+            <div class="col">
+              <div class="src">last_name</div>
+              <div class="arr">↓ mapped to</div>
+              <div class="tgt">Surname</div>
+            </div>
+            <div class="col">
+              <div class="src">a2_score</div>
+              <div class="arr">↓ mapped to</div>
+              <div class="tgt">A2 mark · /100</div>
+            </div>
+            <div class="col unmapped">
+              <div class="src">tutor_note</div>
+              <div class="arr">↓ </div>
+              <div class="tgt">— ignored —</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <div class="tab"><span>Matched</span><span class="ct">281</span></div>
+          <div class="tab warn on"><span>Needs review</span><span class="ct">3</span></div>
+          <div class="tab risk"><span>Unmatched</span><span class="ct">2</span></div>
+          <div class="tab"><span>Missing</span><span class="ct">6</span></div>
+          <div class="tab" style="margin-left:auto;"><span>All rows</span><span class="ct">292</span></div>
+        </div>
+
+        <div class="err-toolbar">
+          <strong>3 rows need review</strong>
+          <span style="color:var(--ink-3);">·</span>
+          A2 mark exceeds the assessment maximum.
+          <div class="right">
+            <button class="btn ghost" style="height:28px;font-size:11.5px;">Skip these rows</button>
+            <button class="btn" style="height:28px;font-size:11.5px;">Apply cap (100)</button>
+          </div>
+        </div>
+
+        <div class="recon-tbl-card">
+          <table class="recon-tbl">
+            <thead>
+              <tr>
+                <th style="width:38px;"><span class="lo-chip" style="width:18px;height:18px;font-size:9px;background:white;color:var(--ink-3);border-radius:3px;border:1.5px solid var(--ink-3);"></span></th>
+                <th>Student</th>
+                <th>Row in CSV</th>
+                <th>Detected A2 mark</th>
+                <th>Computed</th>
+                <th>Status</th>
+                <th style="text-align:right;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="warn">
+                <td><span class="lo-chip" style="width:18px;height:18px;font-size:9px;background:var(--warn);color:white;border-radius:3px;border:none;">!</span></td>
+                <td class="nm">Aaron J. Pereira <span class="em">aaron.pereira@student.monash.edu</span></td>
+                <td class="id">row 47 · student_id 31882104</td>
+                <td class="num"><strong style="color:var(--warn);">104</strong> / 100</td>
+                <td class="num" style="color:var(--ink-3);">cap to 100</td>
+                <td><span class="reason w">Mark exceeds A2 max</span></td>
+                <td style="text-align:right;"><span class="fix-link">Cap at 100 →</span></td>
+              </tr>
+              <tr class="warn">
+                <td><span class="lo-chip" style="width:18px;height:18px;font-size:9px;background:var(--warn);color:white;border-radius:3px;border:none;">!</span></td>
+                <td class="nm">Mei Lin Chua <span class="em">mei.chua@student.monash.edu</span></td>
+                <td class="id">row 112 · student_id 31903456</td>
+                <td class="num"><strong style="color:var(--warn);">102</strong> / 100</td>
+                <td class="num" style="color:var(--ink-3);">cap to 100</td>
+                <td><span class="reason w">Mark exceeds A2 max</span></td>
+                <td style="text-align:right;"><span class="fix-link">Cap at 100 →</span></td>
+              </tr>
+              <tr class="warn">
+                <td><span class="lo-chip" style="width:18px;height:18px;font-size:9px;background:var(--warn);color:white;border-radius:3px;border:none;">!</span></td>
+                <td class="nm">Noah Krishnan <span class="em">noah.krishnan@student.monash.edu</span></td>
+                <td class="id">row 199 · student_id 31998021</td>
+                <td class="num"><strong style="color:var(--warn);">105</strong> / 100</td>
+                <td class="num" style="color:var(--ink-3);">cap to 100</td>
+                <td><span class="reason w">Mark exceeds A2 max (bonus credit?)</span></td>
+                <td style="text-align:right;"><span class="fix-link">Cap at 100 →</span></td>
+              </tr>
+
+              <tr class="err">
+                <td><span class="lo-chip" style="width:18px;height:18px;font-size:9px;background:var(--risk);color:white;border-radius:3px;border:none;">✕</span></td>
+                <td class="nm">— <span class="em">student_id 31774500 — not in cohort</span></td>
+                <td class="id">row 215</td>
+                <td class="num" style="color:var(--ink-3);">82 / 100</td>
+                <td class="num" style="color:var(--ink-3);">skip</td>
+                <td><span class="reason">Student ID not enrolled in S1 2026</span></td>
+                <td style="text-align:right;"><span class="fix-link">Search cohorts →</span></td>
+              </tr>
+              <tr class="err">
+                <td><span class="lo-chip" style="width:18px;height:18px;font-size:9px;background:var(--risk);color:white;border-radius:3px;border:none;">✕</span></td>
+                <td class="nm">— <span class="em">malformed: "stuID 318..."</span></td>
+                <td class="id">row 256</td>
+                <td class="num" style="color:var(--ink-3);">61 / 100</td>
+                <td class="num" style="color:var(--ink-3);">skip</td>
+                <td><span class="reason">Student ID could not be parsed</span></td>
+                <td style="text-align:right;"><span class="fix-link">Edit row →</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Per-LO preview -->
+        <div class="mapping-card">
+          <div class="hd">
+            <div>
+              <h4>Preview: how this upload will affect LO attainment</h4>
+              <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px;">A2's 25% weight distributes across its 3 tagged LOs (LO2 · LO3 · LO4) — 8.33% to each.</div>
+            </div>
+            <span class="tag navy">A2 → LO2 · LO3 · LO4</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+            <div style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--paper-2);">
+              <div style="font-size:11px;color:var(--ink-3);font-family:'JetBrains Mono',monospace;">LO 1</div>
+              <div style="display:flex;align-items:baseline;gap:6px;margin-top:6px;">
+                <span style="font-family:'Newsreader',serif;font-size:22px;font-weight:500;color:var(--ink-3);">—</span>
+                <span style="font-size:11px;color:var(--ink-3);">not affected</span>
+              </div>
+            </div>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:white;">
+              <div style="font-size:11px;color:var(--ink-3);font-family:'JetBrains Mono',monospace;">LO 2</div>
+              <div style="display:flex;align-items:baseline;gap:6px;margin-top:6px;">
+                <span style="font-family:'Newsreader',serif;font-size:22px;font-weight:500;color:var(--ink);">+8.3%</span>
+                <span style="font-size:11px;color:var(--ok);font-weight:600;">·  62 → 70%</span>
+              </div>
+            </div>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:white;">
+              <div style="font-size:11px;color:var(--ink-3);font-family:'JetBrains Mono',monospace;">LO 3</div>
+              <div style="display:flex;align-items:baseline;gap:6px;margin-top:6px;">
+                <span style="font-family:'Newsreader',serif;font-size:22px;font-weight:500;color:var(--ink);">+8.3%</span>
+                <span style="font-size:11px;color:var(--ok);font-weight:600;">·  88 → 91%</span>
+              </div>
+            </div>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:white;">
+              <div style="font-size:11px;color:var(--ink-3);font-family:'JetBrains Mono',monospace;">LO 4</div>
+              <div style="display:flex;align-items:baseline;gap:6px;margin-top:6px;">
+                <span style="font-family:'Newsreader',serif;font-size:22px;font-weight:500;color:var(--ink);">+8.3%</span>
+                <span style="font-size:11px;color:var(--ok);font-weight:600;">·  58 → 64%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Confirm bar -->
+        <div class="confirm-bar">
+          <div>
+            <div class="hd">Ready to commit 284 rows</div>
+            <div class="sb">281 matched · 3 auto-capped at 100 · 2 errors and 6 missing will be skipped &amp; flagged on the dashboard</div>
+          </div>
+          <div class="actions">
+            <button class="btn">Back to mapping</button>
+            <button class="btn primary">Continue → Confirm &amp; commit</button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

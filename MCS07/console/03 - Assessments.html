@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Assessment setup — FIT2004</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+  }
+
+  /* Weight bar */
+  .weight-bar-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 16px;
+  }
+  .wbar-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .wbar-head .lbl {
+    font-size: 12px;
+    color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .wbar-head .total {
+    font-family: 'Newsreader', serif;
+    font-size: 24px;
+    color: var(--ok);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .wbar {
+    height: 28px;
+    background: var(--paper);
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    overflow: hidden;
+    display: flex;
+  }
+  .wbar .seg {
+    height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    border-right: 1px solid rgba(255,255,255,0.2);
+  }
+  .wbar .seg:last-child { border-right: none; }
+  .wbar .a1 { background: #2D5A9E; }
+  .wbar .a2 { background: #163E76; }
+  .wbar .a3 { background: #0B2E5C; }
+  .wbar .a4 { background: #E0A33E; color: var(--navy); }
+  .wbar-key {
+    display: flex; gap: 18px;
+    margin-top: 10px;
+    font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .wbar-key .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* Assessment table */
+  .ass-row {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: 32px 1fr 100px 220px 140px 90px;
+    gap: 18px;
+    align-items: center;
+  }
+  .grip {
+    width: 16px; height: 24px;
+    color: var(--ink-3);
+    cursor: grab;
+    display: grid; place-items: center;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .ass-name .h {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .ass-name .h .num {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--navy);
+    background: var(--navy-tint);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10.5px;
+    margin-right: 8px;
+    vertical-align: 1px;
+  }
+  .ass-name .meta {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    margin-top: 4px;
+  }
+  .ass-name .meta .dot { margin: 0 6px; color: var(--ink-4); }
+
+  .weight-cell {
+    display: flex; align-items: center;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 0 12px;
+    height: 36px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .weight-cell .pct {
+    margin-left: auto;
+    color: var(--ink-3);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .lo-chips {
+    display: flex; gap: 4px; flex-wrap: wrap;
+  }
+  .lo-chip {
+    width: 30px; height: 30px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-3);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .lo-chip.on {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+  .lo-chip.suggested {
+    background: var(--navy-tint);
+    border: 1.5px dashed var(--navy-3);
+    color: var(--navy);
+  }
+
+  .due {
+    font-size: 12.5px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .due .sub { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+
+  .row-tools {
+    display: flex; gap: 4px;
+    justify-content: flex-end;
+  }
+  .row-tools .ic {
+    width: 28px; height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: white;
+    display: grid; place-items: center;
+    color: var(--ink-3);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .row-tools .ic:hover { color: var(--ink); }
+
+  /* Per-LO allocation breakdown */
+  .per-lo-breakdown {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-top: 16px;
+  }
+  .per-lo-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 100px;
+    gap: 16px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line-2);
+    align-items: center;
+    font-size: 12.5px;
+  }
+  .per-lo-row:last-child { border-bottom: none; }
+  .per-lo-row .lo-l {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .per-lo-row .lo-l .sub {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    color: var(--ink-3);
+    font-size: 10.5px;
+    margin-top: 2px;
+  }
+  .alloc-bar {
+    height: 18px;
+    background: var(--paper);
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    display: flex;
+    overflow: hidden;
+  }
+  .alloc-bar .a1 { background: #2D5A9E; }
+  .alloc-bar .a2 { background: #163E76; }
+  .alloc-bar .a3 { background: #0B2E5C; }
+  .alloc-bar .a4 { background: #E0A33E; }
+  .alloc-bar .seg-a {
+    display: flex; align-items: center;
+    padding: 0 6px;
+    font-size: 10px;
+    color: white;
+    font-weight: 600;
+    border-right: 1px solid rgba(255,255,255,0.18);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .alloc-bar .seg-a:last-child { border-right: none; }
+  .alloc-bar .seg-a.a4 { color: var(--navy); }
+  .per-lo-total {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* Right rail */
+  .rail .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .rail .card h5 {
+    font-size: 12px; font-weight: 600; margin: 0 0 12px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .rail .formula {
+    background: var(--paper-2);
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    padding: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    line-height: 1.7;
+    margin-bottom: 12px;
+  }
+  .rail .formula .lab { color: var(--ink-3); }
+  .rail .formula .val { color: var(--navy); font-weight: 600; }
+  .rail p { font-size: 12px; color: var(--ink-2); line-height: 1.55; margin: 0; }
+
+  /* Add row */
+  .add-row {
+    background: var(--paper-2);
+    border: 1.5px dashed var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    color: var(--ink-3);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .add-row:hover { border-color: var(--navy-3); color: var(--navy); background: white; }
+</style>
+</head>
+<body data-screen-label="03 Assessments">
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="side">
+      <div class="brand">
+        <div class="mark">M</div>
+        <div class="name">Curriculum<br>Analytics<span class="sub">Faculty of IT</span></div>
+      </div>
+      <div class="sec">Workspace</div>
+      <nav>
+        <a href="01 - Dashboard.html"><span class="ic i-home"></span> Dashboard</a>
+        <a href="01 - Dashboard.html"><span class="ic i-units"></span> Units <span class="badge">14</span></a>
+        <a href="02 - Mapping.html"><span class="ic i-map"></span> LO ↔ PLO mapping</a>
+        <a href="03 - Assessments.html" class="active"><span class="ic i-ass"></span> Assessments</a>
+        <a href="04 - CSV Upload.html"><span class="ic i-up"></span> Grade upload</a>
+        <a href="01 - Dashboard.html"><span class="ic i-rep"></span> Reports</a>
+      </nav>
+      <div class="sec">Administration</div>
+      <nav>
+        <a href="05 - Admin.html"><span class="ic i-users"></span> Users &amp; roles</a>
+        <a href="01 - Dashboard.html"><span class="ic i-sync"></span> Handbook sync <span class="badge warn">!</span></a>
+        <a href="01 - Dashboard.html"><span class="ic i-set"></span> Settings</a>
+      </nav>
+      <div class="user">
+        <div class="av a6">JT</div>
+        <div>
+          <div>Dr. James Truong</div>
+          <div class="role">Lecturer · FIT2004</div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs">
+          Assessments <span class="sep">›</span> <strong>FIT2004</strong> <span class="sep">›</span> Semester 1 2026
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost">Copy from S2 2025</button>
+          <button class="btn">Discard</button>
+          <button class="btn primary">Save assessments</button>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <div class="unit-banner">
+          <div>
+            <h1 style="font-size:26px;">Assessment setup</h1>
+            <div class="sub"><span class="code">FIT2004</span> Algorithms and Data Structures &nbsp;·&nbsp; Define what's assessed and which LOs each assessment covers. Weight distributes evenly across tagged LOs.</div>
+          </div>
+          <div class="sem-switch">
+            <span class="arrow">‹</span>
+            <span class="v">Semester 1, 2026</span>
+            <span class="arrow">›</span>
+          </div>
+        </div>
+
+        <div class="layout">
+          <div>
+            <!-- Total weight -->
+            <div class="weight-bar-card">
+              <div class="wbar-head">
+                <div>
+                  <div class="lbl">Total assessment weight</div>
+                  <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px;">Must sum to exactly 100% before publishing.</div>
+                </div>
+                <div class="total">100<span style="font-size:14px;color:var(--ink-3);">% / 100%</span></div>
+              </div>
+              <div class="wbar">
+                <div class="seg a1" style="width:15%;">Problem sets · 15%</div>
+                <div class="seg a2" style="width:20%;">A1 · 20%</div>
+                <div class="seg a3" style="width:25%;">A2 · 25%</div>
+                <div class="seg a4" style="width:40%;">Final · 40%</div>
+              </div>
+              <div class="wbar-key">
+                <span><span class="sw" style="background:#2D5A9E;"></span>Problem sets</span>
+                <span><span class="sw" style="background:#163E76;"></span>Assignment 1</span>
+                <span><span class="sw" style="background:#0B2E5C;"></span>Assignment 2</span>
+                <span><span class="sw" style="background:#E0A33E;"></span>Final exam</span>
+                <span style="margin-left:auto;color:var(--ink-3);">Rebalance as you edit · drag to reorder</span>
+              </div>
+            </div>
+
+            <!-- Assessment rows -->
+            <div class="ass-row">
+              <div class="grip">⋮⋮</div>
+              <div class="ass-name">
+                <div class="h"><span class="num">A1</span>Weekly problem sets</div>
+                <div class="meta">10 × 1.5% submissions <span class="dot">·</span> Auto-graded via Ed <span class="dot">·</span> Weeks 1–11</div>
+              </div>
+              <div class="weight-cell">15<span class="pct">%</span></div>
+              <div>
+                <div class="lo-chips">
+                  <span class="lo-chip on">LO1</span>
+                  <span class="lo-chip">LO2</span>
+                  <span class="lo-chip on">LO3</span>
+                  <span class="lo-chip">LO4</span>
+                </div>
+              </div>
+              <div class="due">
+                Weekly
+                <span class="sub">Wk 1 – Wk 11</span>
+              </div>
+              <div class="row-tools">
+                <div class="ic">⤓</div>
+                <div class="ic">⋯</div>
+              </div>
+            </div>
+
+            <div class="ass-row">
+              <div class="grip">⋮⋮</div>
+              <div class="ass-name">
+                <div class="h"><span class="num">A2</span>Assignment 1 — Complexity proofs</div>
+                <div class="meta">Written · 6 problems <span class="dot">·</span> Submission via Moodle <span class="dot">·</span> Released Wk 4</div>
+              </div>
+              <div class="weight-cell">20<span class="pct">%</span></div>
+              <div>
+                <div class="lo-chips">
+                  <span class="lo-chip on">LO1</span>
+                  <span class="lo-chip on">LO2</span>
+                  <span class="lo-chip">LO3</span>
+                  <span class="lo-chip">LO4</span>
+                </div>
+              </div>
+              <div class="due">
+                Fri 28 Mar
+                <span class="sub">Wk 6 · 23:55</span>
+              </div>
+              <div class="row-tools">
+                <div class="ic">⤓</div>
+                <div class="ic">⋯</div>
+              </div>
+            </div>
+
+            <div class="ass-row">
+              <div class="grip">⋮⋮</div>
+              <div class="ass-name">
+                <div class="h"><span class="num">A3</span>Assignment 2 — Implementation project</div>
+                <div class="meta">Code + report <span class="dot">·</span> Python <span class="dot">·</span> Pair submission allowed</div>
+              </div>
+              <div class="weight-cell">25<span class="pct">%</span></div>
+              <div>
+                <div class="lo-chips">
+                  <span class="lo-chip">LO1</span>
+                  <span class="lo-chip on">LO2</span>
+                  <span class="lo-chip on">LO3</span>
+                  <span class="lo-chip on">LO4</span>
+                </div>
+              </div>
+              <div class="due">
+                Fri 16 May
+                <span class="sub">Wk 11 · 23:55</span>
+              </div>
+              <div class="row-tools">
+                <div class="ic">⤓</div>
+                <div class="ic">⋯</div>
+              </div>
+            </div>
+
+            <div class="ass-row">
+              <div class="grip">⋮⋮</div>
+              <div class="ass-name">
+                <div class="h"><span class="num">EX</span>Final examination</div>
+                <div class="meta">3 hour · invigilated <span class="dot">·</span> Open-book <span class="dot">·</span> Hurdle: 40%</div>
+              </div>
+              <div class="weight-cell">40<span class="pct">%</span></div>
+              <div>
+                <div class="lo-chips">
+                  <span class="lo-chip on">LO1</span>
+                  <span class="lo-chip on">LO2</span>
+                  <span class="lo-chip on">LO3</span>
+                  <span class="lo-chip on">LO4</span>
+                </div>
+              </div>
+              <div class="due">
+                12 Jun
+                <span class="sub">Exam period</span>
+              </div>
+              <div class="row-tools">
+                <div class="ic">⤓</div>
+                <div class="ic">⋯</div>
+              </div>
+            </div>
+
+            <div class="add-row">＋ &nbsp; Add an assessment</div>
+
+            <!-- Per-LO allocation breakdown -->
+            <div class="per-lo-breakdown">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);">
+                <div>
+                  <h4 style="margin:0;font-size:14px;font-weight:600;">Computed weight per learning outcome</h4>
+                  <div style="font-size:12px;color:var(--ink-3);margin-top:4px;">Calculated by evenly distributing each assessment's weight across the LOs it covers.</div>
+                </div>
+                <div class="pill ok"><span class="dot"></span>All LOs covered</div>
+              </div>
+
+              <div class="per-lo-row">
+                <div class="lo-l">LO 1<span class="sub">Algorithmic paradigms</span></div>
+                <div class="alloc-bar">
+                  <div class="seg-a a1" style="width:25%;">7.5</div>
+                  <div class="seg-a a2" style="width:33%;">10.0</div>
+                  <div class="seg-a a4" style="width:42%;">10.0</div>
+                </div>
+                <div class="per-lo-total">27.5%</div>
+              </div>
+              <div class="per-lo-row">
+                <div class="lo-l">LO 2<span class="sub">Correctness &amp; complexity</span></div>
+                <div class="alloc-bar">
+                  <div class="seg-a a2" style="width:30%;">10.0</div>
+                  <div class="seg-a a3" style="width:25%;">8.3</div>
+                  <div class="seg-a a4" style="width:45%;">10.0</div>
+                </div>
+                <div class="per-lo-total">28.3%</div>
+              </div>
+              <div class="per-lo-row">
+                <div class="lo-l">LO 3<span class="sub">Abstract data types</span></div>
+                <div class="alloc-bar">
+                  <div class="seg-a a1" style="width:21%;">7.5</div>
+                  <div class="seg-a a3" style="width:24%;">8.3</div>
+                  <div class="seg-a a4" style="width:55%;">10.0</div>
+                </div>
+                <div class="per-lo-total">25.8%</div>
+              </div>
+              <div class="per-lo-row">
+                <div class="lo-l">LO 4<span class="sub">Implementation</span></div>
+                <div class="alloc-bar">
+                  <div class="seg-a a3" style="width:45%;">8.3</div>
+                  <div class="seg-a a4" style="width:55%;">10.0</div>
+                </div>
+                <div class="per-lo-total">18.3%</div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3);margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2);">
+                <span>SUM ACROSS LOs · 100% (matches total assessment weight)</span>
+                <span style="color:var(--warn);">⚠ LO 4 has lowest assessment weight — consider raising</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right rail -->
+          <aside class="rail">
+            <div class="card">
+              <h5>How weights distribute</h5>
+              <div class="formula">
+<span class="lab">// for each assessment A</span>
+<span class="lab">weight_per_LO =</span>
+  <span class="val">A.weight ÷ count(A.LOs)</span>
+
+<span class="lab">// for each LO</span>
+<span class="lab">total_LO_weight =</span>
+  <span class="val">Σ weight_per_LO</span>
+   for every A tagged with LO
+
+<span class="lab">// pass criterion</span>
+  student earned ≥<span class="val">50%</span>
+  of total_LO_weight
+              </div>
+              <p>Each assessment's weight is split <strong>evenly</strong> across the LOs it covers. A student passes an LO when they earn at least 50% of that LO's total available weight across all assessments.</p>
+            </div>
+
+            <div class="card">
+              <h5>This unit's checks</h5>
+              <div style="display:flex;flex-direction:column;gap:10px;font-size:12.5px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>Weights sum to 100%</span>
+                  <span class="pill ok"><span class="dot"></span>Pass</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>All LOs covered ≥ 1×</span>
+                  <span class="pill ok"><span class="dot"></span>Pass</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>Hurdle on final exam</span>
+                  <span class="pill ok"><span class="dot"></span>Set</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>LO 4 weight ≥ 20%</span>
+                  <span class="pill warn"><span class="dot"></span>18.3%</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>Due dates set</span>
+                  <span class="pill ok"><span class="dot"></span>4 of 4</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h5>Carry-over from S2 2025</h5>
+              <p>The 4 assessments and weights below were carried over unchanged. <strong style="color:var(--ink);">A1 problem set count</strong> increased from 8 → 10 in S1 2026; weight remained 15%.</p>
+              <button class="btn" style="width:100%;margin-top:12px;">View S2 2025 setup ›</button>
+            </div>
+          </aside>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>
