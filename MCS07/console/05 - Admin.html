@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Users &amp; roles — Curriculum Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* Tabs */
+  .h-tabs {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 22px;
+    margin-top: 6px;
+  }
+  .h-tabs .tab {
+    padding: 10px 4px;
+    margin-right: 22px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink-3);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .h-tabs .tab.on { color: var(--navy); border-bottom-color: var(--navy); }
+  .h-tabs .tab .ct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    background: var(--paper);
+    color: var(--ink-2);
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .h-tabs .tab.on .ct { background: var(--navy); color: white; }
+
+  /* Filter row */
+  .filter-row {
+    display: flex; gap: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+  .filter-row .search {
+    flex: 1; max-width: 320px;
+    height: 34px;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    display: flex; align-items: center;
+    padding: 0 10px;
+    gap: 8px;
+    color: var(--ink-2);
+    font-size: 13px;
+  }
+  .filter-pill {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    background: white;
+    border-radius: 7px;
+    font-size: 12.5px;
+    color: var(--ink);
+    display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer;
+  }
+  .filter-pill .ind {
+    color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .filter-pill .arr { color: var(--ink-3); margin-left: 2px; }
+  .filter-pill.on {
+    background: var(--navy-tint);
+    border-color: #C9DCF1;
+    color: var(--navy);
+  }
+
+  /* User table */
+  .users-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .users-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .users-tbl th {
+    text-align: left;
+    font-weight: 500;
+    font-size: 10.5px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+  }
+  .users-tbl td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line-2);
+    color: var(--ink);
+    vertical-align: middle;
+  }
+  .users-tbl tr:last-child td { border: none; }
+  .users-tbl tr:hover td { background: var(--paper-2); }
+  .person {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .person .meta-line {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .person .em {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.01em;
+    margin-top: 2px;
+    font-weight: 400;
+  }
+
+  .role-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--navy-tint);
+    color: var(--navy);
+    border: 1px solid #DBE3F0;
+  }
+  .role-chip.lec { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-bg-2); }
+  .role-chip.admin { background: var(--warn-bg); color: var(--warn); border-color: #F1D9B5; }
+  .role-chip.ext { background: var(--paper); color: var(--ink-2); }
+  .role-chip .icn {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    background: currentColor;
+    opacity: 0.4;
+  }
+
+  .unit-tags {
+    display: flex; gap: 4px; flex-wrap: wrap;
+  }
+  .unit-tags .tag { font-size: 10.5px; }
+  .unit-tags .more {
+    font-size: 11px;
+    color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 4px;
+  }
+
+  .status-dot {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .status-dot .d {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+  }
+  .status-dot.active .d { background: var(--ok); }
+  .status-dot.pending .d { background: var(--amber); }
+  .status-dot.disabled .d { background: var(--ink-4); }
+
+  .last-active {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .row-act {
+    display: flex; gap: 4px;
+    justify-content: flex-end;
+  }
+  .row-act .ic {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-3);
+    display: grid; place-items: center;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .row-act .ic:hover { background: var(--paper); color: var(--ink); }
+
+  /* Role legend */
+  .role-legend {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .role-legend .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .role-legend .card .top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .role-legend .card .ct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-3);
+    background: var(--paper);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .role-legend .card p {
+    font-size: 11.5px;
+    color: var(--ink-2);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .role-legend .card ul {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .role-legend .card ul li {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 0;
+  }
+  .role-legend .card ul li::before {
+    content: '✓';
+    color: var(--ok);
+    font-weight: 700;
+    font-size: 10px;
+  }
+  .role-legend .card ul li.no::before {
+    content: '—';
+    color: var(--ink-4);
+  }
+
+  .pagination {
+    display: flex; align-items: center;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--paper-2);
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .pagination .right {
+    margin-left: auto;
+    display: flex; gap: 4px;
+  }
+  .pagination .pg {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: white;
+    display: grid; place-items: center;
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pagination .pg.on {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+  .pagination .pg.dis { color: var(--ink-4); cursor: default; }
+</style>
+</head>
+<body data-screen-label="05 Admin">
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="side">
+      <div class="brand">
+        <div class="mark">M</div>
+        <div class="name">Curriculum<br>Analytics<span class="sub">Faculty of IT</span></div>
+      </div>
+      <div class="sec">Workspace</div>
+      <nav>
+        <a href="01 - Dashboard.html"><span class="ic i-home"></span> Dashboard</a>
+        <a href="01 - Dashboard.html"><span class="ic i-units"></span> Units <span class="badge">14</span></a>
+        <a href="02 - Mapping.html"><span class="ic i-map"></span> LO ↔ PLO mapping</a>
+        <a href="03 - Assessments.html"><span class="ic i-ass"></span> Assessments</a>
+        <a href="04 - CSV Upload.html"><span class="ic i-up"></span> Grade upload</a>
+        <a href="01 - Dashboard.html"><span class="ic i-rep"></span> Reports</a>
+      </nav>
+      <div class="sec">Administration</div>
+      <nav>
+        <a href="05 - Admin.html" class="active"><span class="ic i-users"></span> Users &amp; roles</a>
+        <a href="01 - Dashboard.html"><span class="ic i-sync"></span> Handbook sync <span class="badge warn">!</span></a>
+        <a href="01 - Dashboard.html"><span class="ic i-set"></span> Settings</a>
+      </nav>
+      <div class="user">
+        <div class="av a4">SR</div>
+        <div>
+          <div>A/Prof. Sara Rashid</div>
+          <div class="role">Faculty admin · FIT</div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs">
+          Administration <span class="sep">›</span> <strong>Users &amp; roles</strong>
+        </div>
+        <div class="top-actions">
+          <div class="search">⌕ Search users… <span class="kbd">⌘K</span></div>
+          <button class="btn ghost">Audit log</button>
+          <button class="btn">Export</button>
+          <button class="btn primary">+ Invite user</button>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <div class="unit-banner">
+          <div>
+            <h1 style="font-size:26px;">Management portal</h1>
+            <div class="sub">Faculty of IT &nbsp;·&nbsp; <strong style="color:var(--ink);">38 active users</strong> &nbsp;·&nbsp; 3 pending invitations &nbsp;·&nbsp; Last audited 09 May 2026</div>
+          </div>
+        </div>
+
+        <div class="h-tabs">
+          <div class="tab on">People <span class="ct">38</span></div>
+          <div class="tab">Roles &amp; permissions <span class="ct">4</span></div>
+          <div class="tab">Pending invitations <span class="ct">3</span></div>
+          <div class="tab">Audit log</div>
+          <div class="tab" style="margin-left:auto;">Faculty settings</div>
+        </div>
+
+        <!-- Role legend -->
+        <div class="role-legend">
+          <div class="card">
+            <div class="top">
+              <span class="role-chip admin"><span class="icn"></span>Faculty admin</span>
+              <span class="ct">2 ppl</span>
+            </div>
+            <p>Manages users, roles, and faculty-wide settings. Can do anything in this tool.</p>
+            <ul>
+              <li>Invite &amp; remove users</li>
+              <li>Edit all units &amp; mappings</li>
+              <li>Approve handbook syncs</li>
+            </ul>
+          </div>
+          <div class="card">
+            <div class="top">
+              <span class="role-chip"><span class="icn"></span>Unit coordinator</span>
+              <span class="ct">11 ppl</span>
+            </div>
+            <p>Owns one or more units. Manages mappings and the lecturers for those units.</p>
+            <ul>
+              <li>Edit LO ↔ PLO mapping</li>
+              <li>Add lecturers to their units</li>
+              <li>Publish reports &amp; AI summaries</li>
+            </ul>
+          </div>
+          <div class="card">
+            <div class="top">
+              <span class="role-chip lec"><span class="icn"></span>Lecturer</span>
+              <span class="ct">22 ppl</span>
+            </div>
+            <p>Sets up assessments and uploads grades for units they teach.</p>
+            <ul>
+              <li>Configure assessments &amp; weights</li>
+              <li>Upload &amp; reconcile grade CSVs</li>
+              <li class="no">Edit mappings (view only)</li>
+            </ul>
+          </div>
+          <div class="card">
+            <div class="top">
+              <span class="role-chip ext"><span class="icn"></span>External reviewer</span>
+              <span class="ct">3 ppl</span>
+            </div>
+            <p>Read-only access for accreditation reviewers. Time-bound and scoped.</p>
+            <ul>
+              <li>View published reports</li>
+              <li class="no">Edit anything</li>
+              <li class="no">Download student-level data</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Filter -->
+        <div class="filter-row">
+          <div class="search">⌕ Search by name, email, or unit code…</div>
+          <span class="filter-pill on">Role <span class="ind">·</span><span>All</span> <span class="arr">▾</span></span>
+          <span class="filter-pill">Unit <span class="ind">·</span><span>All</span> <span class="arr">▾</span></span>
+          <span class="filter-pill">Status <span class="ind">·</span><span>Active</span> <span class="arr">▾</span></span>
+          <span class="filter-pill">Last active <span class="ind">·</span><span>Any time</span> <span class="arr">▾</span></span>
+          <span style="margin-left:auto;font-size:11.5px;color:var(--ink-3);">Showing 1–8 of 38</span>
+        </div>
+
+        <!-- User table -->
+        <div class="users-card">
+          <table class="users-tbl">
+            <thead>
+              <tr>
+                <th style="width:32px;"><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></th>
+                <th>Person</th>
+                <th>Role</th>
+                <th>Units</th>
+                <th>Status</th>
+                <th>Last active</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a4 lg">SR</div>
+                    <div>
+                      <div class="meta-line">A/Prof. Sara Rashid <span class="tag" style="margin-left:6px;font-size:9.5px;">YOU</span></div>
+                      <div class="em">sara.rashid@monash.edu</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip admin"><span class="icn"></span>Faculty admin</span></td>
+                <td><div class="unit-tags"><span class="tag navy">All FIT</span></div></td>
+                <td><span class="status-dot active"><span class="d"></span>Active</span></td>
+                <td class="last-active">Just now</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a2 lg">EC</div>
+                    <div>
+                      <div class="meta-line">Dr. Elise Chen</div>
+                      <div class="em">elise.chen@monash.edu</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip"><span class="icn"></span>Unit coordinator</span></td>
+                <td>
+                  <div class="unit-tags">
+                    <span class="tag navy">FIT2004</span>
+                    <span class="tag navy">FIT3155</span>
+                    <span class="more">+1</span>
+                  </div>
+                </td>
+                <td><span class="status-dot active"><span class="d"></span>Active</span></td>
+                <td class="last-active">15 min ago</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a6 lg">JT</div>
+                    <div>
+                      <div class="meta-line">Dr. James Truong</div>
+                      <div class="em">james.truong@monash.edu</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip lec"><span class="icn"></span>Lecturer</span></td>
+                <td>
+                  <div class="unit-tags">
+                    <span class="tag navy">FIT2004</span>
+                    <span class="tag navy">FIT2086</span>
+                  </div>
+                </td>
+                <td><span class="status-dot active"><span class="d"></span>Active</span></td>
+                <td class="last-active">2 hr ago</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a3 lg">MO</div>
+                    <div>
+                      <div class="meta-line">Dr. Mariam Obi</div>
+                      <div class="em">mariam.obi@monash.edu</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip"><span class="icn"></span>Unit coordinator</span></td>
+                <td>
+                  <div class="unit-tags">
+                    <span class="tag navy">FIT3179</span>
+                    <span class="tag navy">FIT5147</span>
+                  </div>
+                </td>
+                <td><span class="status-dot active"><span class="d"></span>Active</span></td>
+                <td class="last-active">Yesterday</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a5 lg">DR</div>
+                    <div>
+                      <div class="meta-line">Daniel Rodríguez</div>
+                      <div class="em">daniel.rodriguez@monash.edu</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip lec"><span class="icn"></span>Lecturer</span></td>
+                <td>
+                  <div class="unit-tags">
+                    <span class="tag navy">FIT1045</span>
+                    <span class="tag navy">FIT1051</span>
+                    <span class="more">+2</span>
+                  </div>
+                </td>
+                <td><span class="status-dot active"><span class="d"></span>Active</span></td>
+                <td class="last-active">2 days ago</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a1 lg">PK</div>
+                    <div>
+                      <div class="meta-line">Prof. Priya Kapadia</div>
+                      <div class="em">priya.kapadia@external.accred.org</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip ext"><span class="icn"></span>External reviewer</span></td>
+                <td><div class="unit-tags"><span class="tag" style="font-size:9.5px;background:var(--warn-bg);border-color:#F1D9B5;color:var(--warn);">EXPIRES 30 JUN</span></div></td>
+                <td><span class="status-dot active"><span class="d"></span>Active</span></td>
+                <td class="last-active">04 May 2026</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a7 lg">WN</div>
+                    <div>
+                      <div class="meta-line">Dr. Will Nakamura</div>
+                      <div class="em">will.nakamura@monash.edu</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip lec"><span class="icn"></span>Lecturer</span></td>
+                <td>
+                  <div class="unit-tags">
+                    <span class="tag navy">FIT2099</span>
+                  </div>
+                </td>
+                <td><span class="status-dot pending"><span class="d"></span>Invited</span></td>
+                <td class="last-active">—</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+              <tr>
+                <td><span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink-4);border-radius:3px;"></span></td>
+                <td>
+                  <div class="person">
+                    <div class="av a2 lg">AL</div>
+                    <div>
+                      <div class="meta-line">Dr. Anna Lindqvist</div>
+                      <div class="em">anna.lindqvist@monash.edu</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="role-chip lec"><span class="icn"></span>Lecturer</span></td>
+                <td>
+                  <div class="unit-tags">
+                    <span class="tag" style="font-size:10.5px;color:var(--ink-4);background:white;">No units</span>
+                  </div>
+                </td>
+                <td><span class="status-dot disabled"><span class="d"></span>Disabled</span></td>
+                <td class="last-active">12 Feb 2025</td>
+                <td><div class="row-act"><div class="ic">✎</div><div class="ic">⋯</div></div></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pagination">
+            <span>Showing 1–8 of 38</span>
+            <div class="right">
+              <div class="pg dis">‹</div>
+              <div class="pg on">1</div>
+              <div class="pg">2</div>
+              <div class="pg">3</div>
+              <div class="pg">4</div>
+              <div class="pg">5</div>
+              <div class="pg">›</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

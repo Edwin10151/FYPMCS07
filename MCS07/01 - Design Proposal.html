@@ -1,0 +1,1846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LO Attainment Dashboard — Design Proposal v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0B2E5C;
+    --navy-2: #163E76;
+    --navy-3: #2D5A9E;
+    --ink: #1A1F2E;
+    --ink-2: #4A5468;
+    --ink-3: #7B8499;
+    --line: #E4E2DC;
+    --line-2: #EEEBE2;
+    --paper: #F6F4ED;
+    --paper-2: #FBFAF4;
+    --card: #FFFFFF;
+    --ok: #16744D;
+    --ok-bg: #E6F2EC;
+    --warn: #B5530B;
+    --warn-bg: #FBEDDB;
+    --risk: #A8321C;
+    --risk-bg: #F7E2DC;
+    --amber: #E0A33E;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* ===== Page chrome ===== */
+  .page {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 56px 48px 96px;
+  }
+  .proposal-head {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 64px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 16px;
+  }
+  h1.title {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    margin: 0 0 16px;
+    color: var(--navy);
+    max-width: 720px;
+  }
+  .lede {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    max-width: 640px;
+    margin: 0;
+  }
+  .meta-block {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--ink-2);
+    border-left: 2px solid var(--navy);
+    padding: 4px 0 4px 16px;
+  }
+  .meta-block strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .meta-block .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+  .meta-block .row:last-child { border: none; }
+  .meta-block .row .k { color: var(--ink-3); }
+
+  /* ===== Screen inventory ===== */
+  .screens {
+    margin-top: 48px;
+    margin-bottom: 56px;
+  }
+  .screens h3 {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 16px;
+  }
+  .screen-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+  }
+  .screen-pill {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 14px 16px;
+    font-size: 13px;
+  }
+  .screen-pill .n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+  }
+  .screen-pill .nm {
+    font-weight: 600;
+    color: var(--ink);
+    margin-top: 4px;
+    line-height: 1.3;
+  }
+  .screen-pill.focus {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+  .screen-pill.focus .n,
+  .screen-pill.focus .nm { color: white; }
+
+  /* ===== Direction block ===== */
+  .direction {
+    margin-top: 64px;
+  }
+  .dir-head {
+    display: grid;
+    grid-template-columns: 220px 1fr 280px;
+    gap: 40px;
+    align-items: end;
+    margin-bottom: 28px;
+  }
+  .dir-tag {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .dir-tag .letter {
+    font-family: 'Newsreader', serif;
+    font-size: 72px;
+    line-height: 0.85;
+    font-weight: 500;
+    color: var(--navy);
+    letter-spacing: -0.04em;
+  }
+  .dir-tag .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .dir-title {
+    font-family: 'Newsreader', serif;
+    font-size: 32px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+    color: var(--ink);
+  }
+  .dir-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    margin: 0;
+  }
+  .dir-spec {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--ink-2);
+  }
+  .dir-spec .k { color: var(--ink-3); }
+  .dir-spec .v { color: var(--ink); font-weight: 500; }
+
+  /* Browser frame wrapping each mockup */
+  .frame {
+    background: var(--card);
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    box-shadow: 0 1px 0 rgba(11,46,92,0.04), 0 24px 60px -28px rgba(11,46,92,0.18);
+    overflow: hidden;
+  }
+  .frame-bar {
+    height: 38px;
+    background: #EFEDE5;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 8px;
+  }
+  .frame-bar .dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #D6D2C4;
+  }
+  .frame-bar .url {
+    flex: 1;
+    margin: 0 16px;
+    height: 22px;
+    background: #FBFAF4;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-3);
+    border: 1px solid var(--line);
+  }
+  .frame-bar .url .lock {
+    width: 9px; height: 9px;
+    border: 1.5px solid var(--ink-3);
+    border-radius: 2px;
+    margin-right: 8px;
+    position: relative;
+  }
+  .frame-bar .url .lock::after {
+    content: '';
+    position: absolute; left: 50%; top: -4px;
+    transform: translateX(-50%);
+    width: 5px; height: 4px;
+    border: 1.5px solid var(--ink-3);
+    border-bottom: none;
+    border-radius: 3px 3px 0 0;
+  }
+
+  /* ============================================================ */
+  /* ===== DIRECTION A — CONSOLE                              ===== */
+  /* ============================================================ */
+  .console {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    height: 820px;
+    background: var(--paper-2);
+    font-size: 13px;
+  }
+  .console-side {
+    background: #0B2E5C;
+    color: rgba(255,255,255,0.92);
+    padding: 22px 14px;
+    display: flex;
+    flex-direction: column;
+  }
+  .console-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 8px 22px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 18px;
+  }
+  .console-brand .mark {
+    width: 28px; height: 28px;
+    background: white;
+    border-radius: 6px;
+    display: grid; place-items: center;
+    font-family: 'Newsreader', serif;
+    color: var(--navy);
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .console-brand .name {
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+  }
+  .console-brand .name .sub {
+    display: block;
+    font-weight: 400;
+    font-size: 10px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .nav-section { font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    padding: 8px;
+    margin-top: 6px;
+  }
+  .nav a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    color: rgba(255,255,255,0.78);
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .nav a.active {
+    background: rgba(255,255,255,0.12);
+    color: white;
+  }
+  .nav a .ic {
+    width: 14px; height: 14px;
+    border: 1.5px solid currentColor;
+    border-radius: 3px;
+    opacity: 0.7;
+  }
+  .nav a.active .ic { opacity: 1; }
+  .console-side .footer {
+    margin-top: auto;
+    padding: 12px 8px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px;
+  }
+  .console-side .footer .av {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #E0A33E, #B5530B);
+    display: grid; place-items: center;
+    font-weight: 600;
+    color: white;
+    font-size: 11px;
+  }
+  .console-side .footer .role {
+    font-size: 10px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .console-main {
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .console-top {
+    display: flex; align-items: center;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--card);
+    gap: 24px;
+  }
+  .crumbs {
+    font-size: 12px;
+    color: var(--ink-3);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .crumbs strong { color: var(--ink); font-weight: 600; }
+  .top-actions {
+    margin-left: auto;
+    display: flex; gap: 8px;
+  }
+  .btn {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 500;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer;
+  }
+  .btn.primary {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+  .btn.ghost { background: transparent; }
+  .btn .spark {
+    width: 12px; height: 12px;
+    background: currentColor;
+    -webkit-mask: radial-gradient(circle at 50% 50%, transparent 35%, currentColor 36%);
+    mask: radial-gradient(circle at 50% 50%, transparent 35%, currentColor 36%);
+  }
+
+  .console-body {
+    padding: 24px 28px;
+    overflow: auto;
+    flex: 1;
+  }
+  .unit-banner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 20px;
+  }
+  .unit-banner h2 {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 28px;
+    margin: 0;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .unit-banner .code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--navy);
+    background: rgba(11,46,92,0.07);
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-right: 10px;
+  }
+  .unit-banner .sub {
+    font-size: 13px;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+  .sem-switch {
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 7px;
+    height: 32px;
+    padding: 0 4px 0 12px;
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .sem-switch .arrow {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    display: grid; place-items: center;
+    color: var(--ink-3);
+  }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .kpi .lbl {
+    font-size: 11px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .kpi .val {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.1;
+    margin-top: 8px;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+  }
+  .kpi .val.warn { color: var(--warn); }
+  .kpi .delta {
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .kpi .delta .up { color: var(--ok); font-weight: 600; }
+  .kpi .delta .dn { color: var(--risk); font-weight: 600; }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px 20px;
+    margin-bottom: 16px;
+  }
+  .panel-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line-2);
+    margin-bottom: 16px;
+  }
+  .panel-head h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .panel-head .h-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 3px;
+  }
+  .panel-head .tools {
+    display: flex; gap: 6px;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .seg {
+    display: flex;
+    background: var(--paper);
+    border-radius: 6px;
+    padding: 2px;
+    font-size: 11px;
+  }
+  .seg span {
+    padding: 4px 10px;
+    border-radius: 4px;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .seg span.on {
+    background: var(--card);
+    color: var(--ink);
+    font-weight: 500;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  .lo-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .lo-card {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    position: relative;
+  }
+  .lo-card.risk { background: #FCF2EC; border-color: #F2D8CC; }
+  .lo-card .lo-h {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .lo-card .lo-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+  }
+  .lo-card .status {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--ok-bg);
+    color: var(--ok);
+    letter-spacing: 0.02em;
+  }
+  .lo-card.risk .status { background: var(--risk-bg); color: var(--risk); }
+  .lo-card .lo-text {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--ink-2);
+    height: 48px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .lo-card .lo-pct {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 26px;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+  }
+  .lo-card.risk .lo-pct { color: var(--risk); }
+  .lo-card .lo-bar {
+    margin-top: 10px;
+    height: 6px;
+    background: var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .lo-card .lo-bar .fill {
+    position: absolute; inset: 0;
+    background: var(--ok);
+    border-radius: 3px;
+  }
+  .lo-card.risk .lo-bar .fill { background: var(--risk); }
+  .lo-card .lo-meta {
+    display: flex; justify-content: space-between;
+    margin-top: 8px;
+    font-size: 10.5px;
+    color: var(--ink-3);
+  }
+
+  /* Distribution bars */
+  .dist-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .dist-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 56px 56px 56px 56px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line-2);
+    font-size: 12px;
+  }
+  .dist-row:last-child { border-bottom: none; }
+  .dist-row .lo-tag {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .dist-row .lo-tag .sub {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    color: var(--ink-3);
+    font-size: 10.5px;
+    margin-top: 2px;
+    letter-spacing: 0;
+  }
+  .stacked {
+    display: flex;
+    height: 22px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0 16px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+  }
+  .stacked .seg-bar {
+    height: 100%;
+    display: flex; align-items: center;
+    padding: 0 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    min-width: 22px;
+  }
+  .stacked .hd { background: #16744D; }
+  .stacked .d  { background: #4FA37E; color: white; }
+  .stacked .c  { background: #E0A33E; color: rgba(0,0,0,0.75); }
+  .stacked .p  { background: #C97A5C; }
+  .stacked .f  { background: #A8321C; }
+  .dist-row .n {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--ink-2);
+  }
+  .dist-row .n.pass {
+    color: var(--ok);
+    font-weight: 600;
+  }
+  .dist-row .n.fail {
+    color: var(--risk);
+    font-weight: 600;
+  }
+  .legend {
+    display: flex; gap: 16px;
+    font-size: 11px;
+    color: var(--ink-2);
+    margin-top: 14px;
+  }
+  .legend .sw {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+  }
+
+  /* Assessment table */
+  .ass-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .ass-table th {
+    text-align: left;
+    font-weight: 500;
+    font-size: 11px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .ass-table td {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line-2);
+    color: var(--ink);
+  }
+  .ass-table tr:last-child td { border: none; }
+  .ass-table .nm { font-weight: 500; }
+  .ass-table .nm .meta {
+    display: block;
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 2px;
+    font-weight: 400;
+  }
+  .tag {
+    display: inline-block;
+    padding: 2px 6px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-2);
+    margin-right: 4px;
+  }
+
+  /* ============================================================ */
+  /* ===== DIRECTION B — BRIEFING                             ===== */
+  /* ============================================================ */
+  .brief {
+    background: #FBFAF4;
+    height: 820px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+  }
+  .brief-top {
+    background: white;
+    border-bottom: 1px solid var(--line);
+    padding: 0 40px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    gap: 36px;
+  }
+  .brief-brand {
+    font-family: 'Newsreader', serif;
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--navy);
+    letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .brief-brand .mark {
+    width: 24px; height: 24px;
+    background: var(--navy);
+    border-radius: 5px;
+    display: grid; place-items: center;
+    color: white;
+    font-size: 13px;
+  }
+  .brief-nav {
+    display: flex; gap: 28px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .brief-nav a {
+    color: var(--ink-2);
+    text-decoration: none;
+    padding: 19px 0;
+    border-bottom: 2px solid transparent;
+  }
+  .brief-nav a.on {
+    color: var(--navy);
+    border-bottom-color: var(--navy);
+  }
+  .brief-right {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 14px;
+    font-size: 12px;
+  }
+  .brief-right .search {
+    width: 200px;
+    height: 30px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    display: flex; align-items: center;
+    padding: 0 10px;
+    color: var(--ink-3);
+    font-size: 11.5px;
+    gap: 8px;
+  }
+  .brief-right .av {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #163E76, #0B2E5C);
+    display: grid; place-items: center;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .brief-body {
+    flex: 1;
+    overflow: auto;
+    padding: 32px 40px 40px;
+  }
+
+  .brief-headline {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    margin-bottom: 28px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brief-headline .code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--navy);
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+  }
+  .brief-headline h2 {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1.05;
+    margin: 0;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    max-width: 720px;
+  }
+  .brief-headline .deck {
+    font-size: 14px;
+    color: var(--ink-2);
+    margin-top: 12px;
+    max-width: 560px;
+    line-height: 1.55;
+  }
+  .brief-filters {
+    display: flex; gap: 10px;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  .pill-row { display: flex; gap: 8px; }
+  .pill {
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    background: white;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ink);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .pill.on {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+
+  /* Headline numbers */
+  .brief-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    margin-bottom: 36px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: white;
+  }
+  .brief-stat {
+    padding: 22px 24px;
+    border-right: 1px solid var(--line);
+  }
+  .brief-stat:last-child { border-right: none; }
+  .brief-stat .lbl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+  .brief-stat .big {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--navy);
+  }
+  .brief-stat .big.risk { color: var(--risk); }
+  .brief-stat .big .unit {
+    font-size: 18px;
+    color: var(--ink-3);
+    margin-left: 2px;
+  }
+  .brief-stat .ctx {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+  .brief-stat .ctx .ok { color: var(--ok); font-weight: 600; }
+  .brief-stat .ctx .down { color: var(--risk); font-weight: 600; }
+
+  /* Section heads in editorial style */
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .sec-head h3 {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 22px;
+    margin: 0;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .sec-head .meta-line {
+    font-size: 12px;
+    color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+  .sec-head .ai-cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--navy);
+    background: white;
+    color: var(--navy);
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .sec-head .ai-cta .glyph {
+    width: 12px; height: 12px;
+    background: var(--amber);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(224,163,62,0.18);
+  }
+
+  .brief-lo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+  .blo {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px;
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    gap: 22px;
+    align-items: start;
+  }
+  .blo.risk { border-color: #E8C9BD; background: #FFFBF8; }
+  .blo .lo-no {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .blo h5 {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 1.3;
+    margin: 0 0 10px;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .blo .blo-body { display: flex; flex-direction: column; }
+  .blo .blo-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ok);
+    margin-bottom: 10px;
+  }
+  .blo.risk .blo-status { color: var(--risk); }
+  .blo .blo-status .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+  }
+  .blo.risk .blo-status .dot { background: var(--risk); }
+  .blo .ass-tags {
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+    display: flex; gap: 4px;
+    font-size: 10.5px;
+    color: var(--ink-3);
+    align-items: center;
+  }
+  .blo .ass-tags .lab {
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+    margin-right: 4px;
+  }
+  .blo .ass-tags .at {
+    padding: 2px 6px;
+    background: var(--paper);
+    border-radius: 3px;
+    color: var(--ink-2);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* histogram */
+  .hist {
+    height: 96px;
+    display: flex; align-items: flex-end; gap: 3px;
+    padding: 8px 0 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .hist .bar {
+    flex: 1;
+    background: var(--navy-3);
+    border-radius: 2px 2px 0 0;
+    opacity: 0.85;
+  }
+  .hist .bar.threshold {
+    background: var(--amber);
+  }
+  .blo.risk .hist .bar { background: #C97A5C; }
+  .blo.risk .hist .bar.threshold { background: var(--risk); opacity: 1; }
+  .hist-axis {
+    display: flex; justify-content: space-between;
+    font-size: 9.5px;
+    color: var(--ink-3);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .blo-num {
+    display: flex; align-items: baseline; gap: 6px;
+    margin-top: 12px;
+  }
+  .blo-num .big {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+  .blo.risk .blo-num .big { color: var(--risk); }
+  .blo-num .sub {
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .threshold-note {
+    font-size: 10.5px;
+    color: var(--ink-3);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Footer card row for Direction B */
+  .brief-foot {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+  }
+  .brief-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px;
+  }
+  .brief-card h6 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  .brief-card .ass-row {
+    display: grid;
+    grid-template-columns: 1fr 60px 80px 1fr;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line-2);
+    align-items: center;
+    font-size: 12.5px;
+  }
+  .brief-card .ass-row:last-child { border: none; }
+  .ass-row .nm { font-weight: 500; }
+  .ass-row .nm .sub {
+    display: block;
+    font-size: 10.5px;
+    color: var(--ink-3);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+  .ass-row .wt {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .ass-row .lo-chips {
+    display: flex; gap: 3px;
+  }
+  .ass-row .lo-chips span {
+    width: 22px; height: 22px;
+    background: var(--paper);
+    border-radius: 4px;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-2);
+    font-weight: 500;
+    border: 1px solid var(--line);
+  }
+  .ass-row .lo-chips span.on {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+  .ass-row .mini {
+    height: 6px;
+    background: var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .ass-row .mini .fill {
+    height: 100%;
+    background: var(--ok);
+    border-radius: 3px;
+  }
+
+  /* AI panel teaser */
+  .ai-teaser {
+    background: linear-gradient(180deg, #FFFCF4, #FFFEFB);
+    border: 1px solid #ECDCB8;
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .ai-teaser .hd {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .ai-teaser .hd .star {
+    width: 14px; height: 14px;
+    background: var(--amber);
+    border-radius: 50%;
+    box-shadow: 0 0 0 4px rgba(224,163,62,0.18);
+  }
+  .ai-teaser .hd h6 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--ink);
+  }
+  .ai-teaser p {
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.5;
+    margin: 0 0 14px;
+  }
+  .ai-teaser .gen {
+    width: 100%;
+    height: 36px;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 500;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer;
+  }
+  .ai-teaser .gen .glyph {
+    width: 10px; height: 10px;
+    background: var(--amber);
+    border-radius: 50%;
+  }
+  .ai-teaser .since {
+    font-size: 10.5px;
+    color: var(--ink-3);
+    margin-top: 10px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ===== Footer "pick a direction" ===== */
+  .pickbar {
+    margin-top: 56px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px 28px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: center;
+  }
+  .pickbar h4 {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 20px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .pickbar p {
+    font-size: 13px;
+    color: var(--ink-2);
+    margin: 0;
+    max-width: 560px;
+    line-height: 1.55;
+  }
+  .pickbar .picks {
+    display: flex; gap: 10px;
+  }
+  .pickbar .picks .opt {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 18px;
+    background: var(--paper-2);
+    font-size: 13px;
+    text-align: left;
+    min-width: 160px;
+  }
+  .pickbar .picks .opt .l {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .pickbar .picks .opt .n {
+    font-weight: 600;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body data-screen-label="00 Design Proposal">
+  <div class="page">
+
+    <!-- ===== Proposal head ===== -->
+    <header class="proposal-head">
+      <div>
+        <div class="eyebrow">Design Proposal · v1 · 13 May 2026</div>
+        <h1 class="title">LO Attainment Dashboard for Monash unit coordinators &amp; lecturers</h1>
+        <p class="lede">
+          A static hi-fi pass at the main dashboard in two directions. Both share the same information architecture, sample data (FIT2004 · Semester 1 2026) and academic deep-blue palette — they diverge in <strong>layout philosophy</strong>. Pick one and we'll go deep on the full screen set: login, mapping (with historical handbook fallback), assessment setup, CSV upload, and the management portal.
+        </p>
+      </div>
+      <aside class="meta-block">
+        <div class="row"><span class="k">Primary users</span><strong>UC · Lecturer</strong></div>
+        <div class="row"><span class="k">Fidelity</span><strong>Hi-fi static</strong></div>
+        <div class="row"><span class="k">Density</span><strong>Balanced</strong></div>
+        <div class="row"><span class="k">AI surface</span><strong>On-demand</strong></div>
+        <div class="row"><span class="k">Brand</span><strong>Monash-adjacent</strong></div>
+      </aside>
+    </header>
+
+    <!-- ===== Screen inventory ===== -->
+    <section class="screens">
+      <h3>Full screen set (to be designed after direction is chosen)</h3>
+      <div class="screen-grid">
+        <div class="screen-pill"><div class="n">01</div><div class="nm">Login &amp; role landing</div></div>
+        <div class="screen-pill focus"><div class="n">02 · this proposal</div><div class="nm">Main dashboard</div></div>
+        <div class="screen-pill"><div class="n">03</div><div class="nm">LO ↔ PLO mapping (historical)</div></div>
+        <div class="screen-pill"><div class="n">04</div><div class="nm">Assessment setup &amp; weighting</div></div>
+        <div class="screen-pill"><div class="n">05</div><div class="nm">CSV upload &amp; reconcile</div></div>
+        <div class="screen-pill"><div class="n">06</div><div class="nm">Management portal · users &amp; roles</div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- ===== DIRECTION A — CONSOLE                              ===== -->
+    <!-- ============================================================ -->
+    <section class="direction" data-screen-label="A · Console">
+      <div class="dir-head">
+        <div class="dir-tag">
+          <div class="letter">A</div>
+          <div>
+            <div class="label">Direction A</div>
+            <div style="font-family:'Newsreader',serif;font-size:22px;color:var(--ink);margin-top:4px;letter-spacing:-0.01em;">Console</div>
+          </div>
+        </div>
+        <div>
+          <p class="dir-desc">
+            Persistent left-rail navigation, KPI strip across the top, then a compact LO grid + stacked cohort distribution. Feels like a familiar admin console (Notion / Linear / Stripe for academia). <strong>Best if</strong> coordinators will live in this tool daily and need every metric one click away.
+          </p>
+        </div>
+        <div class="dir-spec">
+          <div><span class="k">layout</span> &nbsp; <span class="v">sidebar + main</span></div>
+          <div><span class="k">hero</span> &nbsp;&nbsp; <span class="v">KPI strip</span></div>
+          <div><span class="k">tone</span> &nbsp;&nbsp; <span class="v">utilitarian</span></div>
+          <div><span class="k">screens</span> &nbsp;<span class="v">scale to ~12+</span></div>
+        </div>
+      </div>
+
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <div class="url"><span class="lock"></span>app.curriculum-analytics.monash.edu/units/FIT2004/2026-S1</div>
+          <div style="width:60px;"></div>
+        </div>
+
+        <div class="console">
+          <!-- Sidebar -->
+          <aside class="console-side">
+            <div class="console-brand">
+              <div class="mark">M</div>
+              <div class="name">Curriculum<br>Analytics<span class="sub">Monash · FIT</span></div>
+            </div>
+            <div class="nav-section">Workspace</div>
+            <nav class="nav">
+              <a href="#"><span class="ic"></span> Home</a>
+              <a href="#" class="active"><span class="ic"></span> Units</a>
+              <a href="#"><span class="ic"></span> LO ↔ PLO mapping</a>
+              <a href="#"><span class="ic"></span> Assessments</a>
+              <a href="#"><span class="ic"></span> Reports</a>
+            </nav>
+            <div class="nav-section">Admin</div>
+            <nav class="nav">
+              <a href="#"><span class="ic"></span> Users &amp; roles</a>
+              <a href="#"><span class="ic"></span> Handbook sync</a>
+              <a href="#"><span class="ic"></span> Settings</a>
+            </nav>
+            <div class="footer">
+              <div class="av">EC</div>
+              <div>
+                <div>Dr. E. Chen</div>
+                <div class="role">Unit Coordinator</div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Main -->
+          <main class="console-main">
+            <div class="console-top">
+              <div class="crumbs">Units &nbsp;›&nbsp; FIT &nbsp;›&nbsp; <strong>FIT2004</strong> &nbsp;›&nbsp; Semester 1 2026</div>
+              <div class="top-actions">
+                <button class="btn ghost">Export CSV</button>
+                <button class="btn">Print report</button>
+                <button class="btn primary"><span class="spark"></span> Generate AI summary</button>
+              </div>
+            </div>
+
+            <div class="console-body">
+
+              <div class="unit-banner">
+                <div>
+                  <h2><span class="code">FIT2004</span>Algorithms and Data Structures</h2>
+                  <div class="sub">Synced from Monash Handbook · v2026.1 &nbsp;·&nbsp; Last grade upload: 11 May 2026, 09:42</div>
+                </div>
+                <div class="sem-switch">
+                  <span class="arrow">‹</span>
+                  <span>Semester 1, 2026</span>
+                  <span class="arrow">›</span>
+                </div>
+              </div>
+
+              <!-- KPI strip -->
+              <div class="kpi-row">
+                <div class="kpi">
+                  <div class="lbl">Enrolled</div>
+                  <div class="val">287</div>
+                  <div class="delta">vs S2'25 (264) <span class="up">+8.7%</span></div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl">Cohort attainment</div>
+                  <div class="val">74<span style="font-size:18px;color:var(--ink-3);">%</span></div>
+                  <div class="delta">weighted avg across 4 LOs</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl">LOs at risk</div>
+                  <div class="val warn">2<span style="font-size:18px;color:var(--ink-3);"> / 4</span></div>
+                  <div class="delta">LO2, LO4 below 65% pass</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl">Students at risk</div>
+                  <div class="val">41</div>
+                  <div class="delta">failing ≥1 LO &nbsp; <span class="dn">14.3% of cohort</span></div>
+                </div>
+              </div>
+
+              <!-- LO cards -->
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h4>Learning outcomes</h4>
+                    <div class="h-sub">% of cohort meeting the 50% attainment threshold per LO</div>
+                  </div>
+                  <div class="seg">
+                    <span class="on">Pass rate</span>
+                    <span>Mean score</span>
+                    <span>Distribution</span>
+                  </div>
+                </div>
+                <div class="lo-grid">
+                  <div class="lo-card">
+                    <div class="lo-h"><span class="lo-code">LO 1</span><span class="status">ON TRACK</span></div>
+                    <div class="lo-text">Analyse general problem-solving strategies and algorithmic paradigms, and apply them to new problems.</div>
+                    <div class="lo-pct">83<span style="font-size:14px;color:var(--ink-3);">%</span></div>
+                    <div class="lo-bar"><div class="fill" style="right:17%;"></div></div>
+                    <div class="lo-meta"><span>238 / 287 passed</span><span>μ 68</span></div>
+                  </div>
+                  <div class="lo-card risk">
+                    <div class="lo-h"><span class="lo-code">LO 2</span><span class="status">AT RISK</span></div>
+                    <div class="lo-text">Prove correctness of programs; analyse their space and time complexities.</div>
+                    <div class="lo-pct">62<span style="font-size:14px;color:var(--ink-3);">%</span></div>
+                    <div class="lo-bar"><div class="fill" style="right:38%;"></div></div>
+                    <div class="lo-meta"><span>178 / 287 passed</span><span>μ 54</span></div>
+                  </div>
+                  <div class="lo-card">
+                    <div class="lo-h"><span class="lo-code">LO 3</span><span class="status">ON TRACK</span></div>
+                    <div class="lo-text">Compare and contrast various abstract data types and use them appropriately.</div>
+                    <div class="lo-pct">88<span style="font-size:14px;color:var(--ink-3);">%</span></div>
+                    <div class="lo-bar"><div class="fill" style="right:12%;"></div></div>
+                    <div class="lo-meta"><span>253 / 287 passed</span><span>μ 71</span></div>
+                  </div>
+                  <div class="lo-card risk">
+                    <div class="lo-h"><span class="lo-code">LO 4</span><span class="status">AT RISK</span></div>
+                    <div class="lo-text">Develop and implement algorithms to solve computational problems.</div>
+                    <div class="lo-pct">58<span style="font-size:14px;color:var(--ink-3);">%</span></div>
+                    <div class="lo-bar"><div class="fill" style="right:42%;"></div></div>
+                    <div class="lo-meta"><span>166 / 287 passed</span><span>μ 51</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="two-col">
+                <!-- Distribution -->
+                <div class="panel">
+                  <div class="panel-head">
+                    <div>
+                      <h4>Cohort grade distribution per LO</h4>
+                      <div class="h-sub">Stacked share of HD / D / C / P / N for each outcome</div>
+                    </div>
+                    <div class="tools">287 students</div>
+                  </div>
+                  <div class="dist-table">
+                    <div class="dist-row">
+                      <div class="lo-tag">LO 1<span class="sub">Algorithmic paradigms</span></div>
+                      <div class="stacked">
+                        <div class="seg-bar hd" style="width:18%;">18</div>
+                        <div class="seg-bar d" style="width:31%;">31</div>
+                        <div class="seg-bar c" style="width:24%;">24</div>
+                        <div class="seg-bar p" style="width:10%;">10</div>
+                        <div class="seg-bar f" style="width:17%;">17</div>
+                      </div>
+                      <div class="n pass">83%</div>
+                      <div class="n">μ 68</div>
+                      <div class="n">σ 14</div>
+                      <div class="n">−</div>
+                    </div>
+                    <div class="dist-row">
+                      <div class="lo-tag">LO 2<span class="sub">Correctness &amp; complexity</span></div>
+                      <div class="stacked">
+                        <div class="seg-bar hd" style="width:9%;">9</div>
+                        <div class="seg-bar d" style="width:18%;">18</div>
+                        <div class="seg-bar c" style="width:21%;">21</div>
+                        <div class="seg-bar p" style="width:14%;">14</div>
+                        <div class="seg-bar f" style="width:38%;">38</div>
+                      </div>
+                      <div class="n fail">62%</div>
+                      <div class="n">μ 54</div>
+                      <div class="n">σ 18</div>
+                      <div class="n">↓ 9</div>
+                    </div>
+                    <div class="dist-row">
+                      <div class="lo-tag">LO 3<span class="sub">Abstract data types</span></div>
+                      <div class="stacked">
+                        <div class="seg-bar hd" style="width:24%;">24</div>
+                        <div class="seg-bar d" style="width:32%;">32</div>
+                        <div class="seg-bar c" style="width:22%;">22</div>
+                        <div class="seg-bar p" style="width:10%;">10</div>
+                        <div class="seg-bar f" style="width:12%;">12</div>
+                      </div>
+                      <div class="n pass">88%</div>
+                      <div class="n">μ 71</div>
+                      <div class="n">σ 12</div>
+                      <div class="n">↑ 3</div>
+                    </div>
+                    <div class="dist-row">
+                      <div class="lo-tag">LO 4<span class="sub">Implementation</span></div>
+                      <div class="stacked">
+                        <div class="seg-bar hd" style="width:7%;">7</div>
+                        <div class="seg-bar d" style="width:15%;">15</div>
+                        <div class="seg-bar c" style="width:20%;">20</div>
+                        <div class="seg-bar p" style="width:16%;">16</div>
+                        <div class="seg-bar f" style="width:42%;">42</div>
+                      </div>
+                      <div class="n fail">58%</div>
+                      <div class="n">μ 51</div>
+                      <div class="n">σ 19</div>
+                      <div class="n">↓ 7</div>
+                    </div>
+                  </div>
+                  <div class="legend">
+                    <span><span class="sw" style="background:#16744D;"></span>HD ≥80</span>
+                    <span><span class="sw" style="background:#4FA37E;"></span>D 70–79</span>
+                    <span><span class="sw" style="background:#E0A33E;"></span>C 60–69</span>
+                    <span><span class="sw" style="background:#C97A5C;"></span>P 50–59</span>
+                    <span><span class="sw" style="background:#A8321C;"></span>N &lt;50</span>
+                    <span style="margin-left:auto;color:var(--ink-3);">Δ vs S2 2025</span>
+                  </div>
+                </div>
+
+                <!-- Assessments table -->
+                <div class="panel">
+                  <div class="panel-head">
+                    <div>
+                      <h4>Assessments &amp; LO coverage</h4>
+                      <div class="h-sub">Weights distribute evenly to tagged LOs</div>
+                    </div>
+                    <div class="tools" style="color:var(--navy);font-weight:500;cursor:pointer;">Configure ›</div>
+                  </div>
+                  <table class="ass-table">
+                    <thead>
+                      <tr><th>Assessment</th><th>Weight</th><th>LOs covered</th><th style="text-align:right;">Submission</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="nm">Weekly problem sets<span class="meta">10 × 1.5% · auto-graded</span></td>
+                        <td>15%</td>
+                        <td><span class="tag">LO1</span><span class="tag">LO3</span></td>
+                        <td style="text-align:right;color:var(--ok);font-weight:500;">287 / 287</td>
+                      </tr>
+                      <tr>
+                        <td class="nm">Assignment 1 — Complexity proofs<span class="meta">Wk 6 · written</span></td>
+                        <td>20%</td>
+                        <td><span class="tag">LO1</span><span class="tag">LO2</span></td>
+                        <td style="text-align:right;color:var(--ok);font-weight:500;">285 / 287</td>
+                      </tr>
+                      <tr>
+                        <td class="nm">Assignment 2 — Implementation project<span class="meta">Wk 11 · code + report</span></td>
+                        <td>25%</td>
+                        <td><span class="tag">LO2</span><span class="tag">LO3</span><span class="tag">LO4</span></td>
+                        <td style="text-align:right;color:var(--ok);font-weight:500;">281 / 287</td>
+                      </tr>
+                      <tr>
+                        <td class="nm">Final examination<span class="meta">3hr · invigilated</span></td>
+                        <td>40%</td>
+                        <td><span class="tag">LO1</span><span class="tag">LO2</span><span class="tag">LO3</span><span class="tag">LO4</span></td>
+                        <td style="text-align:right;color:var(--ink-3);">Pending</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- ===== DIRECTION B — BRIEFING                             ===== -->
+    <!-- ============================================================ -->
+    <section class="direction" data-screen-label="B · Briefing">
+      <div class="dir-head">
+        <div class="dir-tag">
+          <div class="letter">B</div>
+          <div>
+            <div class="label">Direction B</div>
+            <div style="font-family:'Newsreader',serif;font-size:22px;color:var(--ink);margin-top:4px;letter-spacing:-0.01em;">Briefing</div>
+          </div>
+        </div>
+        <div>
+          <p class="dir-desc">
+            Top-of-page editorial layout — like opening a briefing document. Big headline numbers, LO cards become the hero with embedded distribution histograms, sidebar holds the AI-on-demand panel. <strong>Best if</strong> the dashboard is opened once a week to read the state of a cohort and share with faculty leadership.
+          </p>
+        </div>
+        <div class="dir-spec">
+          <div><span class="k">layout</span> &nbsp; <span class="v">top nav · single column</span></div>
+          <div><span class="k">hero</span> &nbsp;&nbsp; <span class="v">unit headline + 4 stats</span></div>
+          <div><span class="k">tone</span> &nbsp;&nbsp; <span class="v">editorial · narrative</span></div>
+          <div><span class="k">screens</span> &nbsp;<span class="v">~6–8 (more focused)</span></div>
+        </div>
+      </div>
+
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <div class="url"><span class="lock"></span>analytics.monash.edu/units/FIT2004</div>
+          <div style="width:60px;"></div>
+        </div>
+
+        <div class="brief">
+          <!-- Top nav -->
+          <div class="brief-top">
+            <div class="brief-brand"><div class="mark">M</div> Curriculum Analytics</div>
+            <nav class="brief-nav">
+              <a href="#" class="on">Dashboard</a>
+              <a href="#">Mapping</a>
+              <a href="#">Assessments</a>
+              <a href="#">Reports</a>
+              <a href="#">Admin</a>
+            </nav>
+            <div class="brief-right">
+              <div class="search">⌕ &nbsp; Search units, students…</div>
+              <div class="av">EC</div>
+            </div>
+          </div>
+
+          <div class="brief-body">
+
+            <!-- Headline -->
+            <div class="brief-headline">
+              <div>
+                <div class="code">FIT2004 · FACULTY OF INFORMATION TECHNOLOGY</div>
+                <h2>Algorithms and Data Structures</h2>
+                <div class="deck">A snapshot of cohort attainment for Semester 1 2026. Two of the unit's four learning outcomes are tracking below the 65% pass threshold heading into final assessment.</div>
+              </div>
+              <div class="brief-filters">
+                <div class="pill-row">
+                  <span class="pill on">Semester 1 · 2026</span>
+                  <span class="pill">Compare ›</span>
+                </div>
+                <div class="pill-row" style="margin-top:4px;">
+                  <span class="pill">Lecture stream A</span>
+                  <span class="pill">Lecture stream B</span>
+                  <span class="pill">All campuses</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Headline numbers -->
+            <div class="brief-stats">
+              <div class="brief-stat">
+                <div class="lbl">Enrolled cohort</div>
+                <div class="big">287</div>
+                <div class="ctx">across 2 lecture streams &nbsp;·&nbsp; <span class="ok">+8.7%</span> vs S2 2025</div>
+              </div>
+              <div class="brief-stat">
+                <div class="lbl">Weighted LO attainment</div>
+                <div class="big">74<span class="unit">%</span></div>
+                <div class="ctx">cohort mean across 4 outcomes</div>
+              </div>
+              <div class="brief-stat">
+                <div class="lbl">Outcomes at risk</div>
+                <div class="big risk">2<span class="unit"> of 4</span></div>
+                <div class="ctx">LO 2 &amp; LO 4 below 65% pass</div>
+              </div>
+              <div class="brief-stat">
+                <div class="lbl">Students failing ≥1 LO</div>
+                <div class="big">41</div>
+                <div class="ctx">14.3% of cohort &nbsp;·&nbsp; <span class="down">↑ 6</span> vs S2 2025</div>
+              </div>
+            </div>
+
+            <!-- Section head -->
+            <div class="sec-head">
+              <div>
+                <h3>By learning outcome</h3>
+                <div class="meta-line" style="margin-top:4px;">PASS THRESHOLD · 50% OF AVAILABLE WEIGHT</div>
+              </div>
+              <button class="ai-cta"><span class="glyph"></span> Generate cohort insights</button>
+            </div>
+
+            <!-- LO grid -->
+            <div class="brief-lo-grid">
+              <div class="blo">
+                <div class="blo-body">
+                  <div class="lo-no">LEARNING OUTCOME 01</div>
+                  <h5>Analyse general problem-solving strategies and algorithmic paradigms, and apply them to new problems.</h5>
+                  <div class="blo-status"><span class="dot"></span> ON TRACK · 83% PASS</div>
+                  <div class="ass-tags">
+                    <span class="lab">ASSESSED IN</span>
+                    <span class="at">Problem sets</span><span class="at">A1</span><span class="at">Final</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="hist">
+                    <div class="bar" style="height:14%;"></div>
+                    <div class="bar" style="height:18%;"></div>
+                    <div class="bar" style="height:22%;"></div>
+                    <div class="bar" style="height:30%;"></div>
+                    <div class="bar threshold" style="height:42%;"></div>
+                    <div class="bar" style="height:68%;"></div>
+                    <div class="bar" style="height:90%;"></div>
+                    <div class="bar" style="height:78%;"></div>
+                    <div class="bar" style="height:62%;"></div>
+                    <div class="bar" style="height:36%;"></div>
+                  </div>
+                  <div class="hist-axis"><span>0</span><span>50</span><span>100</span></div>
+                  <div class="blo-num"><span class="big">68</span><span class="sub">mean / 100</span></div>
+                  <div class="threshold-note">238 / 287 above threshold</div>
+                </div>
+              </div>
+
+              <div class="blo risk">
+                <div class="blo-body">
+                  <div class="lo-no">LEARNING OUTCOME 02</div>
+                  <h5>Prove correctness of programs; analyse their space and time complexities.</h5>
+                  <div class="blo-status"><span class="dot"></span> AT RISK · 62% PASS</div>
+                  <div class="ass-tags">
+                    <span class="lab">ASSESSED IN</span>
+                    <span class="at">A1</span><span class="at">A2</span><span class="at">Final</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="hist">
+                    <div class="bar" style="height:38%;"></div>
+                    <div class="bar" style="height:52%;"></div>
+                    <div class="bar" style="height:68%;"></div>
+                    <div class="bar" style="height:80%;"></div>
+                    <div class="bar threshold" style="height:74%;"></div>
+                    <div class="bar" style="height:52%;"></div>
+                    <div class="bar" style="height:40%;"></div>
+                    <div class="bar" style="height:28%;"></div>
+                    <div class="bar" style="height:18%;"></div>
+                    <div class="bar" style="height:10%;"></div>
+                  </div>
+                  <div class="hist-axis"><span>0</span><span>50</span><span>100</span></div>
+                  <div class="blo-num"><span class="big">54</span><span class="sub">mean / 100</span></div>
+                  <div class="threshold-note">178 / 287 above threshold</div>
+                </div>
+              </div>
+
+              <div class="blo">
+                <div class="blo-body">
+                  <div class="lo-no">LEARNING OUTCOME 03</div>
+                  <h5>Compare and contrast various abstract data types and use them appropriately.</h5>
+                  <div class="blo-status"><span class="dot"></span> ON TRACK · 88% PASS</div>
+                  <div class="ass-tags">
+                    <span class="lab">ASSESSED IN</span>
+                    <span class="at">Problem sets</span><span class="at">A2</span><span class="at">Final</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="hist">
+                    <div class="bar" style="height:8%;"></div>
+                    <div class="bar" style="height:14%;"></div>
+                    <div class="bar" style="height:18%;"></div>
+                    <div class="bar" style="height:24%;"></div>
+                    <div class="bar threshold" style="height:36%;"></div>
+                    <div class="bar" style="height:72%;"></div>
+                    <div class="bar" style="height:92%;"></div>
+                    <div class="bar" style="height:82%;"></div>
+                    <div class="bar" style="height:70%;"></div>
+                    <div class="bar" style="height:48%;"></div>
+                  </div>
+                  <div class="hist-axis"><span>0</span><span>50</span><span>100</span></div>
+                  <div class="blo-num"><span class="big">71</span><span class="sub">mean / 100</span></div>
+                  <div class="threshold-note">253 / 287 above threshold</div>
+                </div>
+              </div>
+
+              <div class="blo risk">
+                <div class="blo-body">
+                  <div class="lo-no">LEARNING OUTCOME 04</div>
+                  <h5>Develop and implement algorithms to solve computational problems.</h5>
+                  <div class="blo-status"><span class="dot"></span> AT RISK · 58% PASS</div>
+                  <div class="ass-tags">
+                    <span class="lab">ASSESSED IN</span>
+                    <span class="at">A2</span><span class="at">Final</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="hist">
+                    <div class="bar" style="height:44%;"></div>
+                    <div class="bar" style="height:62%;"></div>
+                    <div class="bar" style="height:72%;"></div>
+                    <div class="bar" style="height:88%;"></div>
+                    <div class="bar threshold" style="height:78%;"></div>
+                    <div class="bar" style="height:48%;"></div>
+                    <div class="bar" style="height:34%;"></div>
+                    <div class="bar" style="height:22%;"></div>
+                    <div class="bar" style="height:14%;"></div>
+                    <div class="bar" style="height:8%;"></div>
+                  </div>
+                  <div class="hist-axis"><span>0</span><span>50</span><span>100</span></div>
+                  <div class="blo-num"><span class="big">51</span><span class="sub">mean / 100</span></div>
+                  <div class="threshold-note">166 / 287 above threshold</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="brief-foot">
+              <div class="brief-card">
+                <h6>Assessments &amp; weight allocation</h6>
+                <div class="ass-row">
+                  <div class="nm">Weekly problem sets<span class="sub">10 sets, auto-graded</span></div>
+                  <div class="wt">15%</div>
+                  <div class="lo-chips"><span class="on">1</span><span>2</span><span class="on">3</span><span>4</span></div>
+                  <div class="mini"><div class="fill" style="width:100%;"></div></div>
+                </div>
+                <div class="ass-row">
+                  <div class="nm">Assignment 1 — Complexity proofs<span class="sub">Submitted week 6</span></div>
+                  <div class="wt">20%</div>
+                  <div class="lo-chips"><span class="on">1</span><span class="on">2</span><span>3</span><span>4</span></div>
+                  <div class="mini"><div class="fill" style="width:99%;"></div></div>
+                </div>
+                <div class="ass-row">
+                  <div class="nm">Assignment 2 — Implementation project<span class="sub">Submitted week 11</span></div>
+                  <div class="wt">25%</div>
+                  <div class="lo-chips"><span>1</span><span class="on">2</span><span class="on">3</span><span class="on">4</span></div>
+                  <div class="mini"><div class="fill" style="width:98%;"></div></div>
+                </div>
+                <div class="ass-row">
+                  <div class="nm">Final examination<span class="sub">Awaiting upload · due 12 Jun</span></div>
+                  <div class="wt">40%</div>
+                  <div class="lo-chips"><span class="on">1</span><span class="on">2</span><span class="on">3</span><span class="on">4</span></div>
+                  <div class="mini" style="background:var(--paper);border:1px dashed var(--line);"></div>
+                </div>
+              </div>
+
+              <aside class="ai-teaser">
+                <div class="hd"><span class="star"></span><h6>AI cohort summary</h6></div>
+                <p>Generate a one-page narrative briefing on this cohort's strengths and weaknesses across all four learning outcomes. Drafted from grade distributions and historical comparisons.</p>
+                <button class="gen"><span class="glyph"></span> Generate summary</button>
+                <div class="since">Last generated · never</div>
+              </aside>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Pick a direction ===== -->
+    <div class="pickbar">
+      <div>
+        <h4>Which direction should we polish?</h4>
+        <p>Tell me <strong>A</strong>, <strong>B</strong>, or a hybrid (e.g. "A's chrome with B's LO cards"). I'll then build out the remaining 5 screens — login, mapping w/ historical, assessment setup, CSV upload, and the management portal — in the chosen direction.</p>
+      </div>
+      <div class="picks">
+        <div class="opt"><div class="l">Direction A</div><div class="n">Console</div></div>
+        <div class="opt"><div class="l">Direction B</div><div class="n">Briefing</div></div>
+        <div class="opt"><div class="l">Hybrid</div><div class="n">A + B mix</div></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

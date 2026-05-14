@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Screen index — Curriculum Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { background: var(--paper); }
+  .page {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 64px 48px 96px;
+  }
+  header {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 64px;
+    padding-bottom: 36px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 40px;
+  }
+  .eye {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1.1;
+    margin: 0 0 16px;
+    color: var(--navy);
+    letter-spacing: -0.02em;
+    max-width: 760px;
+  }
+  .lede {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    max-width: 640px;
+    margin: 0;
+  }
+  .meta {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-2);
+    border-left: 2px solid var(--navy);
+    padding: 4px 0 4px 16px;
+  }
+  .meta strong { color: var(--ink); }
+  .meta .r {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+  .meta .r:last-child { border: none; }
+  .meta .k { color: var(--ink-3); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  .scr {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow .15s, transform .15s, border-color .15s;
+  }
+  .scr:hover {
+    box-shadow: 0 16px 48px -24px rgba(11,46,92,0.22);
+    transform: translateY(-2px);
+    border-color: #D2D4D2;
+  }
+  .scr .thumb {
+    aspect-ratio: 4 / 2.6;
+    background: var(--paper-2);
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+  .scr .thumb-inner {
+    position: absolute;
+    inset: 0;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* Mini chrome elements */
+  .mini-side {
+    background: var(--navy);
+    border-radius: 4px;
+  }
+  .mini-bar {
+    background: var(--line);
+    border-radius: 2px;
+  }
+  .mini-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .mini-pill {
+    background: var(--paper);
+    border-radius: 999px;
+    border: 1px solid var(--line);
+  }
+  .mini-accent { background: var(--navy); }
+  .mini-amber { background: var(--amber); }
+  .mini-risk { background: var(--risk); }
+  .mini-ok { background: var(--ok); }
+
+  /* Specific layouts per screen */
+  .t-login {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    inset: 0;
+    position: absolute;
+  }
+  .t-login .l {
+    background: var(--navy);
+    background-image:
+      radial-gradient(circle at 100% 0%, rgba(224,163,62,0.12), transparent 50%),
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: auto, 28px 28px, 28px 28px;
+    padding: 18px;
+    display: flex; flex-direction: column; gap: 6px; justify-content: flex-end;
+  }
+  .t-login .l .head {
+    width: 50%; height: 6px; background: white; border-radius: 2px;
+  }
+  .t-login .l .head.sm { width: 28%; height: 4px; background: rgba(255,255,255,0.6); }
+  .t-login .l .head.bg { width: 80%; height: 12px; background: rgba(255,255,255,0.9); margin-top: 12px; }
+  .t-login .l .head.lg { width: 60%; height: 12px; background: rgba(255,255,255,0.9); }
+  .t-login .l .head.amber-line { width: 36%; height: 12px; background: var(--amber); }
+  .t-login .r { background: var(--paper); padding: 18px; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+  .t-login .r .head { width: 50%; height: 10px; background: var(--ink); border-radius: 2px; }
+  .t-login .r .field { height: 22px; background: white; border: 1px solid var(--line); border-radius: 4px; }
+  .t-login .r .button-mini { height: 22px; background: var(--navy); border-radius: 4px; }
+
+  .t-dash, .t-mapping, .t-ass, .t-csv, .t-admin {
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 8px;
+    inset: 0;
+    position: absolute;
+    padding: 8px;
+  }
+  .t-dash .mini-side, .t-mapping .mini-side, .t-ass .mini-side, .t-csv .mini-side, .t-admin .mini-side {
+    display: flex; flex-direction: column; gap: 4px; padding: 6px 4px;
+  }
+  .t-dash .mini-side .nav-i, .t-mapping .mini-side .nav-i, .t-ass .mini-side .nav-i, .t-csv .mini-side .nav-i, .t-admin .mini-side .nav-i {
+    height: 6px; background: rgba(255,255,255,0.3); border-radius: 1px;
+  }
+  .t-dash .mini-side .nav-i.on, .t-mapping .mini-side .nav-i.on, .t-ass .mini-side .nav-i.on, .t-csv .mini-side .nav-i.on, .t-admin .mini-side .nav-i.on { background: white; }
+
+  .t-body { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; padding-right: 4px; }
+  .t-body .topbar { display: flex; gap: 4px; align-items: center; height: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .t-body .crumb { height: 6px; width: 40%; background: var(--line); border-radius: 1px; }
+  .t-body .btn { height: 12px; width: 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 3px; margin-left: auto; }
+  .t-body .btn.p { background: var(--navy); border-color: var(--navy); }
+
+  /* Dashboard thumb */
+  .t-dash .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .t-dash .kpi-row .k { background: white; border: 1px solid var(--line); border-radius: 3px; height: 28px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+  .t-dash .kpi-row .k .v { height: 10px; width: 50%; background: var(--ink); border-radius: 1px; }
+  .t-dash .kpi-row .k .v.w { background: var(--warn); }
+  .t-dash .kpi-row .k .l { height: 3px; width: 70%; background: var(--line); border-radius: 1px; }
+  .t-dash .lo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .t-dash .lo-grid .lo { background: var(--paper); border: 1px solid var(--line); border-radius: 3px; height: 44px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+  .t-dash .lo-grid .lo.r { background: #FCF2EC; border-color: #F2D8CC; }
+  .t-dash .lo-grid .lo .v { height: 10px; width: 50%; background: var(--ok); border-radius: 1px; }
+  .t-dash .lo-grid .lo.r .v { background: var(--risk); }
+  .t-dash .lo-grid .lo .bar { margin-top: auto; height: 3px; background: var(--line); border-radius: 1px; }
+  .t-dash .two { display: grid; grid-template-columns: 1.5fr 1fr; gap: 4px; }
+  .t-dash .two .panel { background: white; border: 1px solid var(--line); border-radius: 3px; height: 48px; padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+  .t-dash .two .panel .line { height: 4px; background: var(--line); border-radius: 1px; }
+
+  /* Mapping thumb */
+  .t-mapping .mx { background: white; border: 1px solid var(--line); border-radius: 3px; flex: 1; padding: 4px; display: grid; grid-template-rows: auto repeat(4, 1fr); gap: 2px; }
+  .t-mapping .mx-row { display: grid; grid-template-columns: 50px repeat(4, 1fr); gap: 2px; align-items: center; }
+  .t-mapping .mx-row .lbl { height: 7px; background: var(--line); border-radius: 1px; }
+  .t-mapping .mx-row .c { width: 100%; aspect-ratio: 1; max-width: 12px; max-height: 12px; margin: 0 auto; border-radius: 2px; background: transparent; border: 1px solid var(--line); }
+  .t-mapping .mx-row .c.on { background: var(--navy); border-color: var(--navy); }
+  .t-mapping .mx-row .c.sug { background: var(--navy-tint); border: 1px dashed var(--navy-3); }
+  .t-mapping .mx-row .c.x { background: var(--risk-bg); border: 1px solid #F2D8CC; }
+  .t-mapping .banner-mini { background: var(--info-bg); border: 1px solid #C9DCF1; border-radius: 3px; height: 14px; }
+
+  /* Assessment thumb */
+  .t-ass .wbar { height: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 2px; overflow: hidden; display: flex; }
+  .t-ass .wbar .s1 { width: 15%; background: #2D5A9E; }
+  .t-ass .wbar .s2 { width: 20%; background: #163E76; }
+  .t-ass .wbar .s3 { width: 25%; background: #0B2E5C; }
+  .t-ass .wbar .s4 { width: 40%; background: var(--amber); }
+  .t-ass .rows { display: flex; flex-direction: column; gap: 3px; }
+  .t-ass .rows .row { background: white; border: 1px solid var(--line); border-radius: 3px; height: 18px; display: grid; grid-template-columns: 1fr 24px 60px; gap: 3px; align-items: center; padding: 0 4px; }
+  .t-ass .rows .row .nm { height: 4px; background: var(--ink-3); border-radius: 1px; }
+  .t-ass .rows .row .wt { height: 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 1px; }
+  .t-ass .rows .row .chips { display: flex; gap: 2px; }
+  .t-ass .rows .row .chip { width: 10px; height: 10px; border-radius: 2px; background: var(--paper); border: 1px solid var(--line); }
+  .t-ass .rows .row .chip.on { background: var(--navy); border-color: var(--navy); }
+
+  /* CSV thumb */
+  .t-csv .stepper { display: flex; gap: 4px; align-items: center; padding: 4px; background: white; border: 1px solid var(--line); border-radius: 3px; }
+  .t-csv .stepper .step { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--line); background: white; }
+  .t-csv .stepper .step.d { background: var(--ok); border-color: var(--ok); }
+  .t-csv .stepper .step.n { background: var(--navy); border-color: var(--navy); }
+  .t-csv .stepper .ln { flex: 1; height: 1px; background: var(--line); }
+  .t-csv .stepper .ln.d { background: var(--ok); }
+  .t-csv .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  .t-csv .stats .s { background: white; border: 1px solid var(--line); border-radius: 3px; height: 22px; padding: 3px; }
+  .t-csv .stats .s.ok { border-color: var(--ok-bg-2); background: #F4FAF6; }
+  .t-csv .stats .s.w { border-color: #F1D9B5; background: #FEFAF1; }
+  .t-csv .stats .s.r { border-color: #F2D8CC; background: #FDF6F2; }
+  .t-csv .tbl { background: white; border: 1px solid var(--line); border-radius: 3px; flex: 1; padding: 3px; display: flex; flex-direction: column; gap: 2px; }
+  .t-csv .tbl .row { height: 6px; background: var(--paper); border-radius: 1px; }
+  .t-csv .tbl .row.w { background: #FDF9F0; }
+  .t-csv .tbl .row.r { background: #FDF6F2; }
+
+  /* Admin thumb */
+  .t-admin .legend-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  .t-admin .legend-row .c { background: white; border: 1px solid var(--line); border-radius: 3px; height: 22px; padding: 3px; display: flex; flex-direction: column; gap: 2px; }
+  .t-admin .legend-row .c .chip { height: 5px; width: 50%; border-radius: 1px; background: var(--navy); }
+  .t-admin .legend-row .c .chip.a { background: var(--warn); }
+  .t-admin .legend-row .c .chip.l { background: var(--ok); }
+  .t-admin .legend-row .c .chip.e { background: var(--ink-3); }
+  .t-admin .legend-row .c .l1 { height: 2px; background: var(--line); border-radius: 1px; }
+  .t-admin .ut { background: white; border: 1px solid var(--line); border-radius: 3px; flex: 1; padding: 3px; display: flex; flex-direction: column; gap: 2px; }
+  .t-admin .ut .row { height: 10px; background: var(--paper); border-radius: 1px; display: grid; grid-template-columns: 10px 1fr 24px; gap: 3px; align-items: center; padding: 0 3px; }
+  .t-admin .ut .row .av-m { width: 6px; height: 6px; border-radius: 50%; background: var(--navy-3); }
+  .t-admin .ut .row .nm-m { height: 3px; background: var(--ink-3); border-radius: 1px; }
+  .t-admin .ut .row .role-m { height: 5px; background: var(--navy); border-radius: 1px; }
+
+  .scr .body {
+    padding: 18px 20px;
+    border-top: 1px solid var(--line-2);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+  .scr .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+  }
+  .scr .nm {
+    font-family: 'Newsreader', serif;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  .scr .desc {
+    font-size: 12.5px;
+    color: var(--ink-2);
+    line-height: 1.5;
+    margin-top: 2px;
+  }
+  .scr .open {
+    margin-top: auto;
+    padding-top: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11.5px;
+    color: var(--navy);
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body data-screen-label="Screen Index">
+  <div class="page">
+    <header>
+      <div>
+        <div class="eye">Direction A · Console · 6 screens</div>
+        <h1>Curriculum Analytics — design hand-off</h1>
+        <p class="lede">Hi-fi static screens covering the unit coordinator + lecturer workflow end-to-end. Shared chrome (sidebar, top bar, tokens) lives in <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--paper);padding:1px 5px;border-radius:3px;color:var(--navy);">shared.css</code>. Sample data is FIT2004 · Algorithms and Data Structures · S1 2026.</p>
+      </div>
+      <aside class="meta">
+        <div class="r"><span class="k">Direction</span> <strong>A · Console</strong></div>
+        <div class="r"><span class="k">Type</span> <strong>Inter + Newsreader</strong></div>
+        <div class="r"><span class="k">Palette</span> <strong>Navy + warm neutrals</strong></div>
+        <div class="r"><span class="k">Sample unit</span> <strong>FIT2004 · S1 2026</strong></div>
+        <div class="r"><span class="k">Screens</span> <strong>6</strong></div>
+      </aside>
+    </header>
+
+    <div class="grid">
+
+      <a href="00 - Login.html" class="scr">
+        <div class="thumb">
+          <div class="t-login">
+            <div class="l">
+              <div class="head sm"></div>
+              <div class="head bg"></div>
+              <div class="head lg"></div>
+              <div class="head amber-line"></div>
+            </div>
+            <div class="r">
+              <div class="head"></div>
+              <div class="field"></div>
+              <div class="field"></div>
+              <div class="button-mini"></div>
+            </div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="num">SCREEN 00</div>
+          <div class="nm">Login &amp; role landing</div>
+          <div class="desc">Split brand + sign-in. Monash Authcate SSO or email fallback. Role is inferred from account.</div>
+          <div class="open"><span>Open screen</span><span>→</span></div>
+        </div>
+      </a>
+
+      <a href="01 - Dashboard.html" class="scr">
+        <div class="thumb">
+          <div class="t-dash">
+            <div class="mini-side">
+              <div class="nav-i on"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+            </div>
+            <div class="t-body">
+              <div class="topbar"><div class="crumb"></div><div class="btn"></div><div class="btn p"></div></div>
+              <div class="kpi-row">
+                <div class="k"><div class="v"></div><div class="l"></div></div>
+                <div class="k"><div class="v"></div><div class="l"></div></div>
+                <div class="k"><div class="v w"></div><div class="l"></div></div>
+                <div class="k"><div class="v"></div><div class="l"></div></div>
+              </div>
+              <div class="lo-grid">
+                <div class="lo"><div class="v"></div><div class="bar"></div></div>
+                <div class="lo r"><div class="v"></div><div class="bar"></div></div>
+                <div class="lo"><div class="v"></div><div class="bar"></div></div>
+                <div class="lo r"><div class="v"></div><div class="bar"></div></div>
+              </div>
+              <div class="two">
+                <div class="panel"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+                <div class="panel"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="num">SCREEN 01 · HOME</div>
+          <div class="nm">Main dashboard</div>
+          <div class="desc">Unit overview with KPIs, LO attainment cards, cohort distribution stacked bars, assessments mini-table, semester trend.</div>
+          <div class="open"><span>Open screen</span><span>→</span></div>
+        </div>
+      </a>
+
+      <a href="02 - Mapping.html" class="scr">
+        <div class="thumb">
+          <div class="t-mapping">
+            <div class="mini-side">
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i on"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+            </div>
+            <div class="t-body">
+              <div class="topbar"><div class="crumb"></div><div class="btn"></div><div class="btn p"></div></div>
+              <div class="banner-mini"></div>
+              <div class="mx">
+                <div class="mx-row">
+                  <div></div>
+                  <div style="height:5px;background:var(--navy);border-radius:1px;width:60%;margin:0 auto;"></div>
+                  <div style="height:5px;background:var(--navy);border-radius:1px;width:60%;margin:0 auto;"></div>
+                  <div style="height:5px;background:var(--navy);border-radius:1px;width:60%;margin:0 auto;"></div>
+                  <div style="height:5px;background:var(--navy);border-radius:1px;width:60%;margin:0 auto;"></div>
+                </div>
+                <div class="mx-row"><div class="lbl"></div><div class="c on"></div><div class="c on"></div><div class="c"></div><div class="c"></div></div>
+                <div class="mx-row"><div class="lbl"></div><div class="c on"></div><div class="c sug"></div><div class="c on"></div><div class="c on"></div></div>
+                <div class="mx-row"><div class="lbl"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c x"></div></div>
+                <div class="mx-row"><div class="lbl"></div><div class="c"></div><div class="c"></div><div class="c on"></div><div class="c sug"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="num">SCREEN 02</div>
+          <div class="nm">LO ↔ PLO mapping</div>
+          <div class="desc">Matrix view with historical pre-fill from S2 2025. Confirmed / suggested / removed states. Selected cell drawer + change log.</div>
+          <div class="open"><span>Open screen</span><span>→</span></div>
+        </div>
+      </a>
+
+      <a href="03 - Assessments.html" class="scr">
+        <div class="thumb">
+          <div class="t-ass">
+            <div class="mini-side">
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i on"></div>
+              <div class="nav-i"></div>
+            </div>
+            <div class="t-body">
+              <div class="topbar"><div class="crumb"></div><div class="btn"></div><div class="btn p"></div></div>
+              <div class="wbar"><div class="s1"></div><div class="s2"></div><div class="s3"></div><div class="s4"></div></div>
+              <div class="rows">
+                <div class="row"><div class="nm"></div><div class="wt"></div><div class="chips"><div class="chip on"></div><div class="chip"></div><div class="chip on"></div><div class="chip"></div></div></div>
+                <div class="row"><div class="nm"></div><div class="wt"></div><div class="chips"><div class="chip on"></div><div class="chip on"></div><div class="chip"></div><div class="chip"></div></div></div>
+                <div class="row"><div class="nm"></div><div class="wt"></div><div class="chips"><div class="chip"></div><div class="chip on"></div><div class="chip on"></div><div class="chip on"></div></div></div>
+                <div class="row"><div class="nm"></div><div class="wt"></div><div class="chips"><div class="chip on"></div><div class="chip on"></div><div class="chip on"></div><div class="chip on"></div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="num">SCREEN 03</div>
+          <div class="nm">Assessment setup</div>
+          <div class="desc">Total weight bar, per-assessment rows with LO chips, per-LO allocation preview computed by even distribution.</div>
+          <div class="open"><span>Open screen</span><span>→</span></div>
+        </div>
+      </a>
+
+      <a href="04 - CSV Upload.html" class="scr">
+        <div class="thumb">
+          <div class="t-csv">
+            <div class="mini-side">
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i on"></div>
+            </div>
+            <div class="t-body">
+              <div class="topbar"><div class="crumb"></div><div class="btn"></div></div>
+              <div class="stepper">
+                <div class="step d"></div>
+                <div class="ln d"></div>
+                <div class="step d"></div>
+                <div class="ln d"></div>
+                <div class="step n"></div>
+                <div class="ln"></div>
+                <div class="step"></div>
+              </div>
+              <div class="stats">
+                <div class="s ok"></div>
+                <div class="s w"></div>
+                <div class="s r"></div>
+                <div class="s"></div>
+              </div>
+              <div class="tbl">
+                <div class="row w"></div>
+                <div class="row w"></div>
+                <div class="row w"></div>
+                <div class="row r"></div>
+                <div class="row r"></div>
+                <div class="row"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="num">SCREEN 04</div>
+          <div class="nm">CSV upload &amp; reconcile</div>
+          <div class="desc">4-step flow (currently on reconcile). Column mapping preview, validation stats, row-by-row reasons + fix actions, LO impact preview.</div>
+          <div class="open"><span>Open screen</span><span>→</span></div>
+        </div>
+      </a>
+
+      <a href="05 - Admin.html" class="scr">
+        <div class="thumb">
+          <div class="t-admin">
+            <div class="mini-side">
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i"></div>
+              <div class="nav-i" style="background:rgba(255,255,255,0.15);margin-top:8px;height:1px;"></div>
+              <div class="nav-i on"></div>
+            </div>
+            <div class="t-body">
+              <div class="topbar"><div class="crumb"></div><div class="btn"></div><div class="btn p"></div></div>
+              <div class="legend-row">
+                <div class="c"><div class="chip a"></div><div class="l1"></div><div class="l1"></div></div>
+                <div class="c"><div class="chip"></div><div class="l1"></div><div class="l1"></div></div>
+                <div class="c"><div class="chip l"></div><div class="l1"></div><div class="l1"></div></div>
+                <div class="c"><div class="chip e"></div><div class="l1"></div><div class="l1"></div></div>
+              </div>
+              <div class="ut">
+                <div class="row"><div class="av-m"></div><div class="nm-m"></div><div class="role-m"></div></div>
+                <div class="row"><div class="av-m" style="background:var(--amber);"></div><div class="nm-m"></div><div class="role-m"></div></div>
+                <div class="row"><div class="av-m" style="background:var(--ok);"></div><div class="nm-m"></div><div class="role-m" style="background:var(--ok);"></div></div>
+                <div class="row"><div class="av-m" style="background:#6B4FA0;"></div><div class="nm-m"></div><div class="role-m"></div></div>
+                <div class="row"><div class="av-m" style="background:var(--risk);"></div><div class="nm-m"></div><div class="role-m" style="background:var(--ok);"></div></div>
+                <div class="row"><div class="av-m" style="background:var(--navy-3);"></div><div class="nm-m"></div><div class="role-m" style="background:var(--ink-3);"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="num">SCREEN 05</div>
+          <div class="nm">Users &amp; roles</div>
+          <div class="desc">Management portal. 4 roles with permission matrix. Searchable user table with status, units, last active.</div>
+          <div class="open"><span>Open screen</span><span>→</span></div>
+        </div>
+      </a>
+    </div>
+
+    <div style="margin-top:48px;padding-top:24px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-3);display:flex;justify-content:space-between;">
+      <span>v2026.1 · 13 May 2026 · static hi-fi pass · all sample data is illustrative</span>
+      <a href="../01 - Design Proposal.html" style="color:var(--navy);font-weight:500;">← Back to proposal v1</a>
+    </div>
+
+  </div>
+</body>
+</html>
