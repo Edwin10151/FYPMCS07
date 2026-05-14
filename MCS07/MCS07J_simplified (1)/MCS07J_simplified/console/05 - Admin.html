@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Wireframe</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div class="title">MCS07 Dashboard</div>
+        <div class="sub">Sidebar / Navigation</div>
+      </div>
+      <div class="nav-group">
+        <a class="nav-link" href="00 - Login.html">00 Login</a>
+        <a class="nav-link" href="01 - Dashboard.html">01 Dashboard</a>
+        <a class="nav-link" href="02 - Mapping.html">02 Mapping</a>
+        <a class="nav-link" href="03 - Assessments.html">03 Assessments</a>
+        <a class="nav-link" href="04 - CSV Upload.html">04 CSV Upload</a>
+        <a class="nav-link active" href="05 - Admin.html">05 Admin</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs"><strong>Users and Roles</strong></div>
+        <div class="top-actions">
+          <button class="btn">Filter Role</button>
+          <button class="btn primary">Invite User</button>
+        </div>
+      </div>
+
+      <section class="content">
+        <header class="page-head">
+          <div>
+            <span class="phase-tag">Screen 05</span>
+            <h1>Users and Roles</h1>
+          </div>
+        </header>
+
+        <section class="grid-3">
+          <div class="wire-box"><strong>Unit Coordinator</strong></div>
+          <div class="wire-box"><strong>Lecturer</strong></div>
+          <div class="wire-box"><strong>Management Team</strong></div>
+        </section>
+
+        <section class="grid-2">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>User List</h2>
+            </div>
+            <div class="wire-box" style="min-height:130px; display:flex; align-items:center; justify-content:center;">
+              <strong>[User table: name, role, unit, actions]</strong>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Permission Matrix</h2>
+            </div>
+            <div class="wire-box" style="min-height:130px; display:flex; align-items:center; justify-content:center;">
+              <strong>[Permission table: action × role]</strong>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCS07 Simplified Design Proposal</title>
+<link rel="stylesheet" href="console/shared.css">
+<style>
+  .proposal {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 42px 24px 72px;
+  }
+  .proposal-head {
+    border-bottom: 2px solid var(--line-dark);
+    padding-bottom: 24px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+    align-items: end;
+  }
+  .proposal-head h1 {
+    margin: 10px 0;
+    font-size: 36px;
+    line-height: 1.12;
+  }
+  .proposal-head p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 780px;
+  }
+  .slide-map {
+    counter-reset: slide;
+  }
+  .slide-item {
+    counter-increment: slide;
+    border: 1px solid var(--line-dark);
+    background: var(--white);
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    gap: 12px;
+  }
+  .slide-item::before {
+    content: counter(slide);
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--line-dark);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    background: var(--soft);
+  }
+  .slide-item h3 {
+    margin: 0 0 4px;
+    font-size: 15px;
+  }
+  .slide-item p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  @media (max-width: 860px) {
+    .proposal-head {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+  <main class="proposal">
+    <header class="proposal-head">
+      <div>
+        <span class="phase-tag">MCS07J simplified</span>
+        <h1>Phase 1 simplified design proposal</h1>
+        <p>This version turns the high-fidelity dashboard into proposal-stage wireframes. It is easier to defend in the final proposal because it shows workflow and scope without looking like the project is already fully implemented.</p>
+      </div>
+      <div class="panel soft">
+        <strong>Use for final proposal</strong>
+        <p class="small">Slides 7-9: UI walkthrough plus system architecture. WSM should stay as backup or short rationale, not a main slide.</p>
+      </div>
+    </header>
+
+    <section class="grid-3">
+      <div class="panel">
+        <h2>Why simplified</h2>
+        <p class="small">This is Phase 1. The marker expects proposed GUI/wireframes and design reasoning, not a production-looking analytics product.</p>
+      </div>
+      <div class="panel">
+        <h2>What changed</h2>
+        <p class="small">Reduced polish, simpler layout boxes, fewer fake metrics, clearer report/PDF export, clearer role permissions.</p>
+      </div>
+      <div class="panel">
+        <h2>What stays</h2>
+        <p class="small">The core workflow remains: Handbook data, mapping, assessment setup, CSV upload, calculation, dashboard, local LLM summary, report export.</p>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:18px;">
+      <div class="panel-head">
+        <div>
+          <h2>System workflow for the presentation</h2>
+          <p>Use this simplified flow when explaining the UI and architecture.</p>
+        </div>
+      </div>
+      <div class="flow">
+        <div class="flow-node"><h4>1. Handbook data</h4><p>Scrape unit and LO information, with manual fallback.</p></div>
+        <div class="flow-node"><h4>2. Setup</h4><p>Map LO-PLO links and tag assessments to LOs.</p></div>
+        <div class="flow-node"><h4>3. Upload grades</h4><p>Validate CSV rows before committing data.</p></div>
+        <div class="flow-node"><h4>4. Calculate</h4><p>Distribute weights and compute LO attainment.</p></div>
+        <div class="flow-node"><h4>5. Report</h4><p>View dashboard, generate local LLM summary, export PDF.</p></div>
+      </div>
+    </section>
+
+    <section class="grid-2" style="margin-top:18px;">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Open the wireframes</h2>
+            <p>Use these in Slide 7 and Slide 8.</p>
+          </div>
+        </div>
+        <div class="form-stack">
+          <a class="btn" href="console/index.html">Screen index</a>
+          <a class="btn" href="console/00 - Login.html">00 Login and roles</a>
+          <a class="btn" href="console/01 - Dashboard.html">01 Dashboard and report export</a>
+          <a class="btn" href="console/02 - Mapping.html">02 LO-PLO mapping</a>
+          <a class="btn" href="console/03 - Assessments.html">03 Assessment setup</a>
+          <a class="btn" href="console/04 - CSV Upload.html">04 CSV upload</a>
+          <a class="btn" href="console/05 - Admin.html">05 Admin roles</a>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Architecture to show on Slide 9</h2>
+            <p>Do not show ERD as the main Slide 9 unless requested.</p>
+          </div>
+        </div>
+        <div class="form-stack">
+          <div class="wire-box"><strong>Frontend</strong> React dashboard screens</div>
+          <div class="wire-box"><strong>Backend</strong> FastAPI auth, scraper, CSV validation, calculation, reports</div>
+          <div class="wire-box"><strong>Data and AI</strong> PostgreSQL plus local LLM summarisation</div>
+          <div class="wire-box"><strong>Deployment</strong> Docker containers</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel slide-map" style="margin-top:18px;">
+      <div class="panel-head">
+        <div>
+          <h2>Final 14-slide alignment</h2>
+          <p>This confirms the simplified prototype supports the rubric.</p>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="slide-item"><div><h3>Title/team</h3><p>Use formal project title and team details.</p></div></div>
+        <div class="slide-item"><div><h3>Problem/opportunity</h3><p>Manual LO reporting and weak integrated analytics.</p></div></div>
+        <div class="slide-item"><div><h3>Project goals</h3><p>Dashboard, mapping, calculation, AI summary, PDF report.</p></div></div>
+        <div class="slide-item"><div><h3>Requirements</h3><p>Role access, scraper, CSV, LO engine, local LLM, Docker.</p></div></div>
+        <div class="slide-item"><div><h3>Stakeholders</h3><p>Coordinator, lecturer, management team, supervisor.</p></div></div>
+        <div class="slide-item"><div><h3>WBS</h3><p>Module-based work packages, not another timeline.</p></div></div>
+        <div class="slide-item"><div><h3>UI walkthrough 1</h3><p>Login and dashboard.</p></div></div>
+        <div class="slide-item"><div><h3>UI walkthrough 2</h3><p>Mapping, assessment setup, CSV, admin/report mention.</p></div></div>
+        <div class="slide-item"><div><h3>System architecture</h3><p>Frontend, FastAPI, PostgreSQL, local LLM, Docker.</p></div></div>
+        <div class="slide-item"><div><h3>Timeline</h3><p>April to October 2026, aligned to WBS modules.</p></div></div>
+        <div class="slide-item"><div><h3>Scope</h3><p>In-scope vs out-of-scope.</p></div></div>
+        <div class="slide-item"><div><h3>Challenges</h3><p>PDPA, scraper reliability, CSV quality, AI consistency.</p></div></div>
+        <div class="slide-item"><div><h3>Teamwork</h3><p>Late meetings, communication gaps, ownership improvements.</p></div></div>
+        <div class="slide-item"><div><h3>Project management</h3><p>Google Drive, Trello, GitHub, feedback loop.</p></div></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
