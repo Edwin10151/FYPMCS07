@@ -93,7 +93,7 @@
       </div>
       <div class="panel">
         <h2>What stays</h2>
-        <p class="small">The core workflow remains: Handbook data, mapping, assessment setup, CSV upload, calculation, dashboard, local LLM summary, report export.</p>
+        <p class="small">The core workflow remains: Handbook ULO and assessment data, ULO-PLO mapping review, CSV upload, calculation, dashboard, local LLM summary, report export.</p>
       </div>
     </section>
 
@@ -105,8 +105,8 @@
         </div>
       </div>
       <div class="flow">
-        <div class="flow-node"><h4>1. Handbook data</h4><p>Scrape unit and LO information, with manual fallback.</p></div>
-        <div class="flow-node"><h4>2. Setup</h4><p>Map LO-PLO links and tag assessments to LOs.</p></div>
+        <div class="flow-node"><h4>1. Handbook data</h4><p>Scrape unit, ULO, assessment, weight, and assessment-to-ULO data where available.</p></div>
+        <div class="flow-node"><h4>2. Setup</h4><p>Review ULO-PLO links from approved or historical mapping, then verify assessment-to-ULO links.</p></div>
         <div class="flow-node"><h4>3. Upload grades</h4><p>Validate CSV rows before committing data.</p></div>
         <div class="flow-node"><h4>4. Calculate</h4><p>Distribute weights and compute LO attainment.</p></div>
         <div class="flow-node"><h4>5. Report</h4><p>View dashboard, generate local LLM summary, export PDF.</p></div>
@@ -125,8 +125,8 @@
           <a class="btn" href="console/index.html">Screen index</a>
           <a class="btn" href="console/00 - Login.html">00 Login and roles</a>
           <a class="btn" href="console/01 - Dashboard.html">01 Dashboard and report export</a>
-          <a class="btn" href="console/02 - Mapping.html">02 LO-PLO mapping</a>
-          <a class="btn" href="console/03 - Assessments.html">03 Assessment setup</a>
+          <a class="btn" href="console/02 - Mapping.html">02 ULO-PLO review</a>
+          <a class="btn" href="console/03 - Assessments.html">03 Assessment verification</a>
           <a class="btn" href="console/04 - CSV Upload.html">04 CSV upload</a>
           <a class="btn" href="console/05 - Admin.html">05 Admin roles</a>
         </div>
@@ -158,12 +158,12 @@
       <div class="grid-2">
         <div class="slide-item"><div><h3>Title/team</h3><p>Use formal project title and team details.</p></div></div>
         <div class="slide-item"><div><h3>Problem/opportunity</h3><p>Manual LO reporting and weak integrated analytics.</p></div></div>
-        <div class="slide-item"><div><h3>Project goals</h3><p>Dashboard, mapping, calculation, AI summary, PDF report.</p></div></div>
-        <div class="slide-item"><div><h3>Requirements</h3><p>Role access, scraper, CSV, LO engine, local LLM, Docker.</p></div></div>
+        <div class="slide-item"><div><h3>Project goals</h3><p>Dashboard, ULO/PLO review, calculation, AI summary, PDF report.</p></div></div>
+        <div class="slide-item"><div><h3>Requirements</h3><p>Role access, Handbook ULO/assessment import, CSV, LO engine, local LLM, Docker.</p></div></div>
         <div class="slide-item"><div><h3>Stakeholders</h3><p>Coordinator, lecturer, management team, supervisor.</p></div></div>
         <div class="slide-item"><div><h3>WBS</h3><p>Module-based work packages, not another timeline.</p></div></div>
         <div class="slide-item"><div><h3>UI walkthrough 1</h3><p>Login and dashboard.</p></div></div>
-        <div class="slide-item"><div><h3>UI walkthrough 2</h3><p>Mapping, assessment setup, CSV, admin/report mention.</p></div></div>
+        <div class="slide-item"><div><h3>UI walkthrough 2</h3><p>ULO-PLO review, assessment verification, CSV, admin/report mention.</p></div></div>
         <div class="slide-item"><div><h3>System architecture</h3><p>Frontend, FastAPI, PostgreSQL, local LLM, Docker.</p></div></div>
         <div class="slide-item"><div><h3>Timeline</h3><p>April to October 2026, aligned to WBS modules.</p></div></div>
         <div class="slide-item"><div><h3>Scope</h3><p>In-scope vs out-of-scope.</p></div></div>

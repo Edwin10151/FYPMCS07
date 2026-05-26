@@ -45,6 +45,7 @@ The previous `MCS07J_simplified` content was still mostly copied from the high-f
    - Added local LLM summary action.
    - Added Management Team user CRUD/role assignment explanation.
    - Added Handbook scraper fallback explanation.
+   - Clarified that Handbook import supports ULO and assessment setup data, while final ULO-to-PLO alignment is staff-confirmed from approved or historical mapping records.
 
 ## Simplified Screen Set
 
@@ -60,12 +61,12 @@ The previous `MCS07J_simplified` content was still mostly copied from the high-f
   - Shows LO status, report area, local LLM summary, and PDF export.
 
 - `console/02 - Mapping.html`
-  - LO-PLO mapping matrix.
-  - Shows suggested/manual mapping and Handbook fallback.
+  - ULO-PLO mapping review matrix.
+  - Shows confirmed/manual mapping, historical suggestions, and Handbook ULO fallback.
 
 - `console/03 - Assessments.html`
-  - Assessment setup.
-  - Shows assessment weights, LO tags, and the even-distribution calculation rule.
+  - Assessment setup and verification.
+  - Shows Handbook-imported assessment weights and linked ULOs where available, plus the even-distribution calculation rule.
 
 - `console/04 - CSV Upload.html`
   - CSV upload and reconciliation.
