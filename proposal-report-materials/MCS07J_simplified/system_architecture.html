@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCS07 Slide 9 System Architecture</title>
+<style>
+  :root {
+    --navy: #172a79;
+    --navy-dark: #07184c;
+    --ink: #111217;
+    --muted: #4f5868;
+    --paper: #f4f2ec;
+    --line: #13265f;
+    --gold: #d49a2f;
+    --green: #1f6f54;
+    --green-soft: #e9f6f1;
+    --gold-soft: #fff5df;
+    --white-soft: rgba(255, 255, 255, 0.72);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+  }
+
+  body {
+    font-family: "Trebuchet MS", Arial, sans-serif;
+    background: #dfe3ea;
+    color: var(--ink);
+  }
+
+  .slide {
+    width: 1280px;
+    height: 720px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 22% 12%, rgba(255,255,255,0.96), transparent 24%),
+      radial-gradient(circle at 78% 72%, rgba(255,255,255,0.55), transparent 28%),
+      linear-gradient(180deg, #f8f7f2 0%, var(--paper) 100%);
+    border: 2px solid var(--navy);
+    border-radius: 34px;
+    box-shadow: 0 24px 70px rgba(10, 22, 58, 0.18);
+    padding: 48px 74px 38px 104px;
+  }
+
+  .slide::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle, rgba(0, 0, 0, 0.11) 0.6px, transparent 0.8px),
+      radial-gradient(circle, rgba(0, 0, 0, 0.06) 0.7px, transparent 1px);
+    background-position: 0 0, 18px 12px;
+    background-size: 31px 31px, 43px 43px;
+    opacity: 0.15;
+    pointer-events: none;
+  }
+
+  .slide::after {
+    content: "";
+    position: absolute;
+    left: -22px;
+    top: 330px;
+    width: 44px;
+    height: 44px;
+    background: var(--navy-dark);
+    border-radius: 50%;
+    box-shadow: 1280px 0 0 var(--navy-dark);
+  }
+
+  .speaker {
+    position: absolute;
+    right: 34px;
+    top: 40px;
+    width: 286px;
+    height: 48px;
+    border-radius: 999px;
+    background: #1b2f78;
+    color: white;
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    font-size: 22px;
+    box-shadow: inset 0 -2px 0 rgba(255,255,255,0.12);
+    z-index: 3;
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+  }
+
+  h1 {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 74px;
+    line-height: 0.95;
+    color: var(--navy);
+    letter-spacing: 0;
+  }
+
+  .subtitle {
+    margin: 14px 0 0;
+    font-size: 28px;
+    font-weight: 800;
+    color: #000;
+  }
+
+  .caption {
+    margin-top: 9px;
+    max-width: 760px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.32;
+  }
+
+  .diagram {
+    position: relative;
+    width: 1066px;
+    height: 414px;
+    margin-top: 16px;
+  }
+
+  .diagram svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    z-index: 1;
+  }
+
+  .node {
+    position: absolute;
+    border: 2px solid var(--line);
+    border-radius: 22px;
+    background: var(--white-soft);
+    box-shadow: 0 10px 24px rgba(18, 38, 95, 0.07);
+    padding: 14px 16px;
+    z-index: 3;
+  }
+
+  .node.dark {
+    background: #1b2f78;
+    color: white;
+    border-color: #1b2f78;
+  }
+
+  .node.gold {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+  }
+
+  .node.green {
+    border-color: var(--green);
+    background: var(--green-soft);
+  }
+
+  .node h2,
+  .node h3 {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.08;
+  }
+
+  .node h3 {
+    font-size: 17px;
+  }
+
+  .node p {
+    margin: 7px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.28;
+  }
+
+  .node.dark p {
+    color: rgba(255,255,255,0.78);
+  }
+
+  .chips {
+    margin-top: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .chip {
+    border: 1px solid rgba(19, 38, 95, 0.28);
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: rgba(255,255,255,0.62);
+    font-size: 11px;
+    color: var(--line);
+    white-space: nowrap;
+  }
+
+  .dark .chip {
+    border-color: rgba(255,255,255,0.24);
+    background: rgba(255,255,255,0.1);
+    color: white;
+  }
+
+  .users { left: 0; top: 150px; width: 174px; min-height: 118px; }
+  .frontend { left: 250px; top: 132px; width: 214px; min-height: 142px; }
+  .backend { left: 548px; top: 126px; width: 244px; min-height: 152px; }
+  .report { left: 870px; top: 142px; width: 170px; min-height: 112px; }
+
+  .handbook { left: 520px; top: 0; width: 180px; min-height: 86px; }
+  .csv { left: 744px; top: 0; width: 160px; min-height: 86px; }
+
+  .db { left: 520px; top: 302px; width: 220px; min-height: 86px; }
+  .llm { left: 792px; top: 302px; width: 214px; min-height: 86px; }
+
+  .docker {
+    position: absolute;
+    left: 226px;
+    top: 104px;
+    width: 836px;
+    height: 298px;
+    border: 2px dashed rgba(19, 38, 95, 0.45);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.18);
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 7px 16px 0;
+    gap: 8px;
+    color: var(--line);
+    font-weight: 700;
+    font-size: 11px;
+    z-index: 0;
+    pointer-events: none;
+  }
+  
+  .docker span {
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .print-actions {
+    width: 1280px;
+    margin: 0 auto 24px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn {
+    border: 1px solid #9aa8b8;
+    background: white;
+    padding: 10px 14px;
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .btn.primary {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+
+  marker path {
+    fill: var(--navy);
+  }
+
+  @media print {
+    body {
+      background: white;
+    }
+
+    .slide {
+      margin: 0;
+      width: 100vw;
+      height: 100vh;
+      box-shadow: none;
+    }
+
+    .print-actions {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+  <section class="slide">
+    <div class="speaker">Speaker:</div>
+
+    <main class="content">
+      <h1>Architecture</h1>
+      <div class="subtitle">System Architecture</div>
+      <div class="caption">A role-based dashboard connects Handbook data, CSV grades, LO calculations, local AI summaries, and PDF reporting.</div>
+
+      <section class="diagram" aria-label="System architecture diagram">
+        <svg viewBox="0 0 1066 414" aria-hidden="true" style="position: absolute; width: 100%; height: 100%; inset: 0;">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#13265f"></path>
+            </marker>
+            <marker id="arrowGold" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#d49a2f"></path>
+            </marker>
+          </defs>
+
+          <path d="M174 210 C202 210 220 204 250 204" stroke="#13265f" stroke-width="2.5" fill="none" marker-end="url(#arrow)"></path>
+          <path d="M464 204 L548 204" stroke="#13265f" stroke-width="2.5" fill="none" marker-end="url(#arrow)"></path>
+          <path d="M792 204 L870 204" stroke="#13265f" stroke-width="2.5" fill="none" marker-end="url(#arrow)"></path>
+
+          <path d="M610 86 C612 104 626 114 642 126" stroke="#d49a2f" stroke-width="2.3" fill="none" marker-end="url(#arrowGold)"></path>
+          <path d="M824 86 C812 106 788 120 762 126" stroke="#d49a2f" stroke-width="2.3" fill="none" marker-end="url(#arrowGold)"></path>
+
+          <path d="M640 278 C640 290 632 296 628 302" stroke="#13265f" stroke-width="2.3" fill="none" marker-end="url(#arrow)"></path>
+          <path d="M704 278 C742 294 806 296 870 302" stroke="#13265f" stroke-width="2.3" fill="none" marker-end="url(#arrow)"></path>
+        </svg>
+
+        <article class="node users">
+          <h2>Users</h2>
+          <p>Access changes by role.</p>
+          <div class="chips">
+            <span class="chip">Coordinator</span>
+            <span class="chip">Lecturer</span>
+            <span class="chip">Management</span>
+          </div>
+        </article>
+
+        <article class="node frontend">
+          <h2>Web Dashboard</h2>
+          <p>Main screens from the wireframe.</p>
+          <div class="chips">
+            <span class="chip">Mapping</span>
+            <span class="chip">Assessments</span>
+            <span class="chip">CSV</span>
+            <span class="chip">Reports</span>
+          </div>
+        </article>
+
+        <article class="node dark backend">
+          <h2>FastAPI Backend</h2>
+          <p>Validates data and runs core logic.</p>
+          <div class="chips">
+            <span class="chip">Auth</span>
+            <span class="chip">Validation</span>
+            <span class="chip">LO Calculation</span>
+            <span class="chip">Export</span>
+          </div>
+        </article>
+
+        <article class="node gold handbook">
+          <h3>Monash Handbook</h3>
+          <p>Unit and LO data.</p>
+        </article>
+
+        <article class="node gold csv">
+          <h3>CSV Grades</h3>
+          <p>Assessment marks.</p>
+        </article>
+
+        <article class="node green db">
+          <h2>PostgreSQL</h2>
+          <p>Users, units, LOs, PLOs, assessments, grades, reports.</p>
+        </article>
+
+        <article class="node green llm">
+          <h2>Local LLM</h2>
+          <p>Drafts editable performance summaries.</p>
+        </article>
+
+        <article class="node report">
+          <h2>PDF Report</h2>
+          <p>Reviewed and exported by staff.</p>
+        </article>
+
+        <div class="docker">
+          Docker deployment
+          <span>frontend</span>
+          <span>backend</span>
+          <span>database</span>
+          <span>AI/report</span>
+        </div>
+
+      </section>
+    </main>
+  </section>
+
+  <div class="print-actions">
+    <a class="btn" href="01 - Design Proposal.html">Back to proposal</a>
+    <button class="btn primary" onclick="window.print()">Print / save as PDF</button>
+  </div>
+</body>
+</html>

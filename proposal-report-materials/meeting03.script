@@ -1,0 +1,97 @@
+GROUP MEETING 03 — SCRIPT
+Students Academic Performance Dashboard — MCS07 Date: 28 April 2026 | Time: 10:00 PM | Platform: Zoom
+
+[00:00] ITEM 1 — Attendance & Roles
+Edwin:
+"Okay everyone, recording is running. Let's get Meeting 03 started — it's 1045 PM on 28 April. I'm chairing tonight as usual. Wen Jung, you're on minutes yeah?"
+Wen Jung:
+"Yep, doc is open, I'll timestamp as we go."
+Edwin:
+"Nice. So we've got everyone tonight — me, Sharmanne, YY, Wen Jung. No one's missing which is great. Quick rundown of tonight — we've got five things to get through. Post-mortem on the pitch, Trello cleanup, then the main stuff which is Figma and database planning, and then task delegation to close. Everyone good with that? Anything to add?"
+All: "All good."
+Edwin:
+"Cool. Wen Jung timestamp that. Let's go."
+
+[02:00] ITEM 2 — Pitch Post-Mortem & Feedback Review
+Edwin:
+"Okay so Item 2 — let's talk about the pitch. Overall I think it went pretty well. But there was one piece of feedback that we need to actually address properly. The marker said our constraints are not really constraints — more like concerns or things we solve ourselves. Sharmanne, you caught most of that feedback — what exactly did they say?"
+Sharmanne:
+"Yeah so basically they felt that 16GB RAM is something we chose ourselves by going with a local LLM — so it is our own requirement, not really an external constraint. And the data structure inconsistency one — they said that is more of a design challenge we handle in code. Their point was that a real constraint should be something external that limits us regardless of what we decide."
+YY:
+"Yeah that makes sense actually. Like we can't really call something a constraint if we created the situation ourselves."
+Edwin:
+"Exactly. So I've been thinking about this and I want to propose two replacements that I think are much more defensible. YY, Wen Jung — tell me what you think.
+First one — no access to real student data because of PDPA. Under Malaysia's Personal Data Protection Act, we literally cannot use real Monash student records for development and testing without formal data agreements. So we have to use mock data the whole way through. That directly limits how accurately we can test real-world scenarios. That's external, regulatory, completely out of our hands.
+Second one — Monash Handbook scraper dependency. Our system pulls LO data from the Handbook but Monash controls that site. If they change the structure or block scrapers, our data ingestion breaks and we can't do anything about it. That's also why we made it a nice-to-have rather than a core feature — the dependency is too fragile.
+Does that feel stronger to everyone?"
+YY:
+"Yeah definitely. The PDPA one especially — that's a real legal boundary, we genuinely can't work around it."
+Wen Jung:
+"The scraper one is good too because it actually explains why we scoped it the way we did. It's not just a constraint, it justifies a decision we already made."
+Sharmanne:
+"And the PDPA one ties nicely into our data privacy argument from the WSM as well. It strengthens the overall story."
+Edwin:
+"Good, glad everyone agrees. So we're formally replacing the old two with these. Wen Jung can you log that — PDPA data access and Monash Handbook scraper dependency are our two revised constraints, replacing the 16GB RAM and data inconsistency ones. Timestamp it please.
+One more thing — does this change anything about our scope or SMART goals? I don't think it does but just want to check."
+YY: "No, scope stays the same." Sharmanne: "Agreed, goals are still valid." Wen Jung: "Same from my side."
+Edwin:
+"Perfect. Scope and goals unchanged. Let's move to Item 3."
+
+[12:00] ITEM 3 — Trello Board Audit & Sprint Cleanup
+Wen Jung:
+"Okay Item 3 is mine — quick Trello audit. So looking at the board right now, Done column has compile full deck and send to supervisor, complete pitch slide draft, and attend rehearsal meeting — all ticked off. Good.
+But there are a few earlier tasks that should have been moved to Done already — emailing the supervisor, setting up GitHub and shared docs, research on similar systems, AI integration research, WSM, and the supervisor review. Are those all done from everyone's side?"
+All: "Yes, all done."
+Wen Jung:
+"Okay so everyone please move those to Done before next meeting. Going forward the board should only have active stuff in To Do and In Progress — nothing hanging from old sprints. And can everyone confirm they still have board access? No issues?"
+All: "All good."
+Wen Jung:
+"Great. New tasks from tonight will go straight into To Do after we finish Item 4. Edwin, back to you."
+
+[17:00] ITEM 4 — May Deliverables: Figma & Database Schema
+Edwin:
+"Okay Item 4 — this is the main one tonight. May is design and architecture month based on our timeline. Two workstreams running in parallel — Figma wireframes and database schema. Let me hand over to Sharmanne and YY first since they're taking the Figma side."
+Sharmanne:
+"Yeah so for Figma, me and YY are taking this. Based on our scope we need to cover the core screens that a coordinator would actually use. I'm thinking we need five screens minimum — login page, the main coordinator dashboard, the LO to PLO mapping interface, the assessment setup screen, and the report editing screen. YY, does that cover everything from your side?"
+YY:
+"Yeah I think those five cover the core flow. The dashboard is the most complex one — it needs to show LO attainment charts, cohort comparison, the whole visual layer. I think we split it so Sharmanne takes login and the mapping interface, I take the dashboard and report screen. To make it clear lets move the discussion to the whiteboard for the drafting."
+FREESTYLE START
+Edwin:
+"Good flag. Let's add that as a research task. Okay I think we've covered the main decisions for Item 4. Let's move to Item 5."
+
+[40:00] ITEM 5 — Task Delegation & Next Meeting
+Edwin:
+"Item 5 — locking in tasks and deadlines. Wen Jung, can you read back what we've agreed so far and we confirm who owns what?"
+Wen Jung:
+"Sure. So from tonight:
+One — Sharmanne takes Figma screens for login page and LO to PLO mapping interface, deadline before next meeting on 12 May.
+Two — YY takes Figma screens for coordinator dashboard and report editing screen, same deadline 12 May.
+Three — Wen Jung takes initial PostgreSQL database schema diagram including mock data structure, deadline 12 May.
+Four — Edwin takes system architecture diagram covering data flow between React, FastAPI, PostgreSQL, and Ollama, deadline 12 May.
+Five — research task on Docker and Ollama containerisation integration, owner TBD.
+Six — PDPA constraint documentation — find official PDPA reference to support our constraint statement, owner TBD.
+Seven — create initial mock student dataset for testing, owner TBD."*
+Edwin:
+"Good. For tasks five, six, and seven — who wants to pick these up? Five through seven are smaller research tasks alongside the main deliverables."
+YY:
+"I can take the Docker and Ollama research — it connects to my architecture understanding anyway."
+Sharmanne:
+"I'll take the PDPA documentation — I can find the official Act reference and note the relevant sections."
+Wen Jung:
+"I'll add mock dataset creation to my schema work since they're related."
+Edwin:
+"Perfect. So final task list — Sharmanne on Figma login and mapping plus PDPA documentation. YY on Figma dashboard and report screen plus Docker research. Wen Jung on database schema plus mock dataset. Edwin on system architecture diagram. All due before 12 May.
+Does everyone understand their tasks and feel confident completing them by then? Sharmanne?"
+Sharmanne: "Yes, confirmed."
+Edwin: "YY?"
+YY: "Yes, confirmed."
+Edwin: "Wen Jung?"
+Wen Jung: "All good, confirmed."
+Edwin:
+"Good. Wen Jung please log all of these in Trello as To Do cards with 12 May as the deadline and tag the responsible person on each card.
+Next meeting is 12 May, same time 10 PM, same Zoom link. Agenda will be reviewing Figma drafts and database schema together, getting feedback, and planning the next phase.
+Quick recap of tonight — we addressed the pitch feedback and formally replaced our constraints with PDPA data access and Monash Handbook scraper dependency. We audited the Trello board and cleaned up completed tasks. We split the May deliverables — Figma between Sharmanne and YY, database and architecture between Wen Jung and Edwin. All tasks assigned with 12 May deadline.
+Any final questions before I close? Everyone good?"
+All: "All good."
+Edwin:
+"Great. Thanks everyone, productive meeting. Meeting 03 is officially closed."
