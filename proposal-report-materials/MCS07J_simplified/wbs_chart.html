@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCS07 WBS Chart</title>
+<style>
+  html, body { margin: 0; min-height: 100%; box-sizing: border-box; }
+  * { box-sizing: inherit; }
+
+  body {
+    font-family: Arial, sans-serif;
+    background: #ffffff;
+    color: #000;
+  }
+
+  .slide {
+    width: 1280px;
+    height: 720px;
+    margin: 24px auto;
+    position: relative;
+    border: 1px solid #ccc;
+    background: white;
+    padding: 40px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: bold;
+    color: #000;
+  }
+
+  p.subtitle {
+    margin: 16px 0 32px;
+    font-size: 18px;
+    color: #000;
+    max-width: 900px;
+    line-height: 1.4;
+  }
+
+  .wbs-container {
+    position: relative;
+    width: 100%;
+    height: 500px;
+  }
+
+  .box {
+    position: absolute;
+    border: 1.5px solid #000;
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  /* Level 1 */
+  .level-1 {
+    background-color: #a6a6a6;
+    width: 200px;
+    height: 38px;
+    left: 500px;
+    top: 0;
+  }
+
+  /* Level 2 */
+  .level-2 {
+    background-color: #63a4eb; /* blue matching image */
+    width: 165px;
+    height: 48px;
+    top: 100px;
+  }
+  .l2-1 { left: 40px; }
+  .l2-2 { left: 235px; }
+  .l2-3 { left: 430px; }
+  .l2-4 { left: 625px; }
+  .l2-5 { left: 820px; }
+  .l2-6 { left: 1015px; }
+
+  /* Level 3 */
+  .level-3 {
+    background-color: #bee5f4; /* light blue */
+    width: 155px;
+    height: 48px;
+    font-weight: normal;
+  }
+
+  /* Lines */
+  svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+  }
+
+  polyline, line, path {
+    stroke: #000;
+    stroke-width: 2px;
+    fill: none;
+  }
+
+  .level-indicator {
+    position: absolute;
+    right: 20px;
+    font-size: 16px;
+  }
+  
+  .print-actions {
+    width: 1280px;
+    margin: 0 auto 24px;
+    text-align: right;
+  }
+  .btn { padding: 8px 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div class="print-actions">
+    <a href="01 - Design Proposal.html" class="btn">Back</a>
+    <button class="btn" onclick="window.print()">Print</button>
+  </div>
+  
+  <section class="slide">
+    <h1>Scope : Work Breakdown Structure (WBS)</h1>
+    <p class="subtitle">The WBS is a hierarchical diagram breaking a project into increasingly smaller deliverable components to visualise all that must be done to complete it.</p>
+
+    <div class="wbs-container">
+      <svg>
+        <!-- Root down to Horizontal Bar -->
+        <line x1="600" y1="38" x2="600" y2="80" />
+        <line x1="122.5" y1="80" x2="1097.5" y2="80" />
+        
+        <!-- Horizontal Bar down to L2 boxes -->
+        <line x1="122.5" y1="80" x2="122.5" y2="100" />
+        <line x1="317.5" y1="80" x2="317.5" y2="100" />
+        <line x1="512.5" y1="80" x2="512.5" y2="100" />
+        <line x1="707.5" y1="80" x2="707.5" y2="100" />
+        <line x1="902.5" y1="80" x2="902.5" y2="100" />
+        <line x1="1097.5" y1="80" x2="1097.5" y2="100" />
+
+        <!-- Vertical hangers from L2 boxes -->
+        <line x1="122.5" y1="148" x2="122.5" y2="350" />
+        <line x1="317.5" y1="148" x2="317.5" y2="350" />
+        <line x1="512.5" y1="148" x2="512.5" y2="350" />
+        <line x1="707.5" y1="148" x2="707.5" y2="350" />
+        <line x1="902.5" y1="148" x2="902.5" y2="350" />
+        <line x1="1097.5" y1="148" x2="1097.5" y2="350" />
+
+        <!-- Horizontal stubs to L3 boxes -->
+        <!-- Col 1 -->
+        <line x1="122.5" y1="194" x2="140" y2="194" />
+        <line x1="122.5" y1="264" x2="140" y2="264" />
+        <line x1="122.5" y1="334" x2="140" y2="334" />
+        <!-- Col 2 -->
+        <line x1="317.5" y1="194" x2="335" y2="194" />
+        <line x1="317.5" y1="264" x2="335" y2="264" />
+        <line x1="317.5" y1="334" x2="335" y2="334" />
+        <!-- Col 3 -->
+        <line x1="512.5" y1="194" x2="530" y2="194" />
+        <line x1="512.5" y1="264" x2="530" y2="264" />
+        <line x1="512.5" y1="334" x2="530" y2="334" />
+        <!-- Col 4 -->
+        <line x1="707.5" y1="194" x2="725" y2="194" />
+        <line x1="707.5" y1="264" x2="725" y2="264" />
+        <line x1="707.5" y1="334" x2="725" y2="334" />
+        <!-- Col 5 -->
+        <line x1="902.5" y1="194" x2="920" y2="194" />
+        <line x1="902.5" y1="264" x2="920" y2="264" />
+        <line x1="902.5" y1="334" x2="920" y2="334" />
+        <!-- Col 6 -->
+        <line x1="1097.5" y1="194" x2="1115" y2="194" />
+        <line x1="1097.5" y1="264" x2="1115" y2="264" />
+        <line x1="1097.5" y1="334" x2="1115" y2="334" />
+      </svg>
+
+      <!-- Levels Marker on right -->
+      <div class="level-indicator" style="top: 10px;">Level 1</div>
+      <div class="level-indicator" style="top: 112px;">Level 2</div>
+      <div class="level-indicator" style="top: 250px;">Level 3</div>
+
+      <!-- Level 1 -->
+      <div class="box level-1">MCS07 Project</div>
+
+      <!-- Level 2 -->
+      <div class="box level-2 l2-1">Requirements &<br>Scope</div>
+      <div class="box level-2 l2-2">UI/UX<br>Prototype</div>
+      <div class="box level-2 l2-3">Backend &<br>Database</div>
+      <div class="box level-2 l2-4">Data<br>Ingestion</div>
+      <div class="box level-2 l2-5">Analytics &<br>Reporting</div>
+      <div class="box level-2 l2-6">Testing &<br>Deployment</div>
+
+      <!-- Level 3: Col 1 -->
+      <div class="box level-3" style="left: 140px; top: 170px;">Stakeholder Reqs</div>
+      <div class="box level-3" style="left: 140px; top: 240px;">RTM / Final Reqs</div>
+      <div class="box level-3" style="left: 140px; top: 310px;">Scope & Roles</div>
+
+      <!-- Level 3: Col 2 -->
+      <div class="box level-3" style="left: 335px; top: 170px;">Login & Dashboard</div>
+      <div class="box level-3" style="left: 335px; top: 240px;">Mapping & Setup</div>
+      <div class="box level-3" style="left: 335px; top: 310px;">CSV, Admin, Report</div>
+
+      <!-- Level 3: Col 3 -->
+      <div class="box level-3" style="left: 530px; top: 170px;">Auth & RBAC</div>
+      <div class="box level-3" style="left: 530px; top: 240px;">PostgreSQL Schema</div>
+      <div class="box level-3" style="left: 530px; top: 310px;">Data/API Storage</div>
+
+      <!-- Level 3: Col 4 -->
+      <div class="box level-3" style="left: 725px; top: 170px;">Handbook Scraper</div>
+      <div class="box level-3" style="left: 725px; top: 240px;">Manual Fallback</div>
+      <div class="box level-3" style="left: 725px; top: 310px;">CSV Validation</div>
+
+      <!-- Level 3: Col 5 -->
+      <div class="box level-3" style="left: 920px; top: 170px;">LO Calc Engine</div>
+      <div class="box level-3" style="left: 920px; top: 240px;">Dashboard Charts</div>
+      <div class="box level-3" style="left: 920px; top: 310px;">LLM + PDF Export</div>
+
+      <!-- Level 3: Col 6 -->
+      <div class="box level-3" style="left: 1115px; top: 170px;">Mock Data Tests</div>
+      <div class="box level-3" style="left: 1115px; top: 240px;">Role/Calc Tests</div>
+      <div class="box level-3" style="left: 1115px; top: 310px;">Docker + Handover</div>
+    </div>
+  </section>
+</body>
+</html>

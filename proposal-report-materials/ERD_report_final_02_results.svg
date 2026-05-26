@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      .page { fill: #f8fafc; }
+      .title { font: 700 32px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 16px Arial, sans-serif; fill: #536176; }
+      .lane { fill: #ffffff; stroke: #d7e0eb; stroke-width: 1.3; rx: 18; }
+      .lane-title { font: 700 16px Arial, sans-serif; fill: #334155; letter-spacing: .3px; }
+      .box { fill: #ffffff; stroke: #bdc9d8; stroke-width: 1.5; rx: 10; }
+      .main { fill: #ffffff; stroke: #52637d; stroke-width: 2.2; rx: 10; }
+      .h-ref { fill: #dbeafe; }
+      .h-grade { fill: #ede9fe; }
+      .h-report { fill: #ffe4e6; }
+      .entity { font: 700 15px Arial, sans-serif; fill: #172033; }
+      .field { font: 400 12.5px Arial, sans-serif; fill: #46566d; }
+      .rel { stroke: #65748b; stroke-width: 2; fill: none; }
+      .derived { stroke: #8da0ba; stroke-width: 2; fill: none; stroke-dasharray: 7 6; }
+      .card { font: 700 13px Arial, sans-serif; fill: #334155; }
+      .label { font: 600 12.5px Arial, sans-serif; fill: #475569; }
+      .note { font: 400 13px Arial, sans-serif; fill: #52637a; }
+      .note-bg { fill: #eef4fb; stroke: #d0dae8; stroke-width: 1.2; rx: 12; }
+      .legend { fill: #ffffff; stroke: #d0dae8; stroke-width: 1.2; rx: 10; }
+    </style>
+  </defs>
+
+  <rect class="page" width="1600" height="900"/>
+  <text class="title" x="60" y="58">ERD 2: Grade Import, LO Calculation, And Cohort AI Reporting</text>
+  <text class="subtitle" x="60" y="86">Moodle CSV uploads are validated before marks are committed; committed marks feed LO attainment, cohort aggregation, and editable AI summaries.</text>
+
+  <rect class="lane" x="48" y="125" width="1504" height="300"/>
+  <text class="lane-title" x="74" y="157">CSV IMPORT AND VALIDATION</text>
+
+  <rect class="lane" x="48" y="470" width="1504" height="305"/>
+  <text class="lane-title" x="74" y="502">GRADE STORAGE, CALCULATION, AND REPORTING</text>
+
+  <!-- Relationship lines first -->
+  <path class="rel" d="M300 230 L390 230"/>
+  <text class="card" x="310" y="219">1</text><text class="card" x="370" y="219">M</text>
+  <text class="label" x="330" y="258">items</text>
+
+  <path class="rel" d="M610 230 L720 230"/>
+  <text class="card" x="620" y="219">1</text><text class="card" x="700" y="219">M</text>
+  <text class="label" x="630" y="258">CSV upload</text>
+
+  <path class="rel" d="M960 230 L1240 230"/>
+  <text class="card" x="970" y="219">1</text><text class="card" x="1222" y="219">M</text>
+  <text class="label" x="1082" y="255">chosen columns</text>
+
+  <path class="rel" d="M840 285 L840 320"/>
+  <text class="card" x="824" y="304">1</text><text class="card" x="824" y="316">M</text>
+  <text class="label" x="858" y="308">raw rows</text>
+
+  <path class="rel" d="M960 375 L1240 375"/>
+  <text class="card" x="970" y="364">1</text><text class="card" x="1222" y="364">M</text>
+  <text class="label" x="1068" y="400">row validation issues</text>
+
+  <path class="rel" d="M300 585 L390 585"/>
+  <text class="card" x="310" y="574">1</text><text class="card" x="370" y="574">M</text>
+  <text class="label" x="326" y="610">enrols</text>
+
+  <path class="rel" d="M610 585 L720 585"/>
+  <text class="card" x="620" y="574">1</text><text class="card" x="700" y="574">M</text>
+  <text class="label" x="646" y="610">grades</text>
+
+  <path class="rel" d="M840 430 L840 530"/>
+  <text class="card" x="824" y="455">1</text><text class="card" x="824" y="522">M</text>
+  <text class="label" x="858" y="492">commit valid rows</text>
+
+  <path class="rel" d="M500 285 L760 530"/>
+  <text class="card" x="516" y="305">1</text><text class="card" x="742" y="522">M</text>
+  <text class="label" x="572" y="430">assessment graded for</text>
+
+  <path class="rel" d="M610 705 L720 705"/>
+  <text class="card" x="620" y="694">1</text><text class="card" x="700" y="694">M</text>
+  <text class="label" x="626" y="730">ULO result</text>
+
+  <path class="rel" d="M610 630 L720 685"/>
+  <text class="card" x="620" y="646">1</text><text class="card" x="700" y="678">M</text>
+  <text class="label" x="632" y="662">per enrolment</text>
+
+  <path class="derived" d="M960 585 L1020 660"/>
+  <text class="label" x="965" y="626">calculation input</text>
+
+  <path class="derived" d="M960 705 L1020 705"/>
+  <text class="label" x="982" y="692">agg.</text>
+
+  <path class="derived" d="M1240 705 L1320 705"/>
+  <text class="label" x="1254" y="692">summarise</text>
+
+  <!-- Upper lane entities -->
+  <g>
+    <rect class="main" x="80" y="175" width="220" height="110"/>
+    <rect class="h-ref" x="80" y="175" width="220" height="30" rx="10"/>
+    <text class="entity" x="102" y="195">UNIT_OFFERING</text>
+    <text class="field" x="102" y="227">PK offering_id</text>
+    <text class="field" x="102" y="249">unit + semester context</text>
+    <text class="field" x="102" y="271">reporting boundary</text>
+  </g>
+  <g>
+    <rect class="box" x="390" y="175" width="220" height="110"/>
+    <rect class="h-ref" x="390" y="175" width="220" height="30" rx="10"/>
+    <text class="entity" x="412" y="195">ASSESSMENT</text>
+    <text class="field" x="412" y="227">PK assessment_id</text>
+    <text class="field" x="412" y="249">FK offering_id</text>
+    <text class="field" x="412" y="271">weight, max_mark</text>
+  </g>
+  <g>
+    <rect class="box" x="720" y="175" width="240" height="110"/>
+    <rect class="h-grade" x="720" y="175" width="240" height="30" rx="10"/>
+    <text class="entity" x="742" y="195">GRADE_UPLOAD_BATCH</text>
+    <text class="field" x="742" y="227">PK upload_batch_id</text>
+    <text class="field" x="742" y="249">FK offering_id, assessment_id</text>
+    <text class="field" x="742" y="271">filename, status</text>
+  </g>
+  <g>
+    <rect class="box" x="1240" y="175" width="240" height="110"/>
+    <rect class="h-grade" x="1240" y="175" width="240" height="30" rx="10"/>
+    <text class="entity" x="1262" y="195">COLUMN_MAPPING</text>
+    <text class="field" x="1262" y="227">selected Moodle columns</text>
+    <text class="field" x="1262" y="249">student ID, mark, max mark</text>
+    <text class="field" x="1262" y="271">or ignored</text>
+  </g>
+  <g>
+    <rect class="box" x="720" y="320" width="240" height="110"/>
+    <rect class="h-grade" x="720" y="320" width="240" height="30" rx="10"/>
+    <text class="entity" x="742" y="340">UPLOAD_ROW</text>
+    <text class="field" x="742" y="372">raw Moodle CSV row</text>
+    <text class="field" x="742" y="394">matched_student_id</text>
+    <text class="field" x="742" y="416">valid / warning / error</text>
+  </g>
+  <g>
+    <rect class="box" x="1240" y="320" width="240" height="110"/>
+    <rect class="h-grade" x="1240" y="320" width="240" height="30" rx="10"/>
+    <text class="entity" x="1262" y="340">UPLOAD_ISSUE</text>
+    <text class="field" x="1262" y="372">severity, message</text>
+    <text class="field" x="1262" y="394">resolution</text>
+    <text class="field" x="1262" y="416">resolved_by</text>
+  </g>
+
+  <!-- Lower lane entities -->
+  <g>
+    <rect class="box" x="80" y="530" width="220" height="110"/>
+    <rect class="h-grade" x="80" y="530" width="220" height="30" rx="10"/>
+    <text class="entity" x="102" y="550">STUDENT</text>
+    <text class="field" x="102" y="582">PK student_id</text>
+    <text class="field" x="102" y="604">student_code</text>
+    <text class="field" x="102" y="626">program_id</text>
+  </g>
+  <g>
+    <rect class="box" x="390" y="530" width="220" height="110"/>
+    <rect class="h-grade" x="390" y="530" width="220" height="30" rx="10"/>
+    <text class="entity" x="412" y="550">ENROLLMENT</text>
+    <text class="field" x="412" y="582">PK enrollment_id</text>
+    <text class="field" x="412" y="604">FK student_id</text>
+    <text class="field" x="412" y="626">FK offering_id</text>
+  </g>
+  <g>
+    <rect class="box" x="390" y="650" width="220" height="110"/>
+    <rect class="h-ref" x="390" y="650" width="220" height="30" rx="10"/>
+    <text class="entity" x="412" y="670">OFFERING_ULO</text>
+    <text class="field" x="412" y="702">PK offering_ulo_id</text>
+    <text class="field" x="412" y="724">FK offering_id</text>
+    <text class="field" x="412" y="746">semester-specific ULO</text>
+  </g>
+  <g>
+    <rect class="box" x="720" y="530" width="240" height="110"/>
+    <rect class="h-grade" x="720" y="530" width="240" height="30" rx="10"/>
+    <text class="entity" x="742" y="550">STUDENT_GRADE</text>
+    <text class="field" x="742" y="582">PK grade_id</text>
+    <text class="field" x="742" y="604">FK enrollment_id</text>
+    <text class="field" x="742" y="626">FK assessment_id</text>
+  </g>
+  <g>
+    <rect class="box" x="720" y="650" width="240" height="110"/>
+    <rect class="h-grade" x="720" y="650" width="240" height="30" rx="10"/>
+    <text class="entity" x="742" y="670">STUDENT_ULO_ATTAINMENT</text>
+    <text class="field" x="742" y="702">FK enrollment_id</text>
+    <text class="field" x="742" y="724">FK offering_ulo_id</text>
+    <text class="field" x="742" y="746">attainment_pct, achieved</text>
+  </g>
+  <g>
+    <rect class="box" x="1020" y="650" width="220" height="110"/>
+    <rect class="h-report" x="1020" y="650" width="220" height="30" rx="10"/>
+    <text class="entity" x="1042" y="670">COHORT_ATTAINMENT</text>
+    <text class="field" x="1042" y="702">FK offering_id</text>
+    <text class="field" x="1042" y="724">FK offering_ulo_id</text>
+    <text class="field" x="1042" y="746">pass_rate, average</text>
+  </g>
+  <g>
+    <rect class="box" x="1320" y="650" width="220" height="110"/>
+    <rect class="h-report" x="1320" y="650" width="220" height="30" rx="10"/>
+    <text class="entity" x="1342" y="670">AI_REPORT</text>
+    <text class="field" x="1342" y="702">FK offering_id</text>
+    <text class="field" x="1342" y="724">cohort/unit summary</text>
+    <text class="field" x="1342" y="746">editable before export</text>
+  </g>
+
+  <rect class="legend" x="70" y="805" width="750" height="70"/>
+  <text class="note" x="92" y="832">Solid lines show stored relational links. Dashed lines show derived calculation/reporting outputs.</text>
+  <text class="note" x="92" y="856">Offering links are repeated as FK fields here; ERD 1 shows the setup relationships in full.</text>
+</svg>

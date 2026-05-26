@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      .page { fill: #f8fafc; }
+      .title { font: 700 32px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 16px Arial, sans-serif; fill: #536176; }
+      .box { fill: #ffffff; stroke: #bdc9d8; stroke-width: 1.5; rx: 10; }
+      .main { fill: #ffffff; stroke: #52637d; stroke-width: 2.2; rx: 10; }
+      .h-ref { fill: #dbeafe; }
+      .h-offer { fill: #fef3c7; }
+      .h-map { fill: #dcfce7; }
+      .entity { font: 700 15px Arial, sans-serif; fill: #172033; }
+      .field { font: 400 12.5px Arial, sans-serif; fill: #46566d; }
+      .rel { stroke: #65748b; stroke-width: 2; fill: none; }
+      .rel-dashed { stroke: #8da0ba; stroke-width: 1.8; fill: none; stroke-dasharray: 7 6; }
+      .card { font: 700 13px Arial, sans-serif; fill: #334155; }
+      .label { font: 600 12.5px Arial, sans-serif; fill: #475569; }
+      .note { font: 400 13px Arial, sans-serif; fill: #52637a; }
+      .note-bg { fill: #eef4fb; stroke: #d0dae8; stroke-width: 1.2; rx: 12; }
+    </style>
+  </defs>
+
+  <rect class="page" width="1600" height="900"/>
+  <text class="title" x="60" y="58">ERD 1: Semester Setup And Learning Outcome Mapping</text>
+  <text class="subtitle" x="60" y="86">Core database relationships for staff access, unit offerings, semester-specific ULOs, assessment setup, and coordinator-confirmed PLO mapping.</text>
+
+  <!-- relationships -->
+  <path class="rel" d="M210 250 L210 320"/>
+  <text class="card" x="194" y="278">1</text><text class="card" x="194" y="315">M</text>
+  <text class="label" x="230" y="292">assigned to</text>
+
+  <path class="rel-dashed" d="M340 380 L650 380"/>
+  <text class="label" x="438" y="368">coordinator_id</text>
+
+  <path class="rel" d="M210 430 L210 500"/>
+  <text class="card" x="194" y="458">1</text><text class="card" x="194" y="493">M</text>
+  <text class="label" x="230" y="472">teaches via</text>
+
+  <path class="rel" d="M340 555 L650 405"/>
+  <text class="card" x="348" y="538">M</text><text class="card" x="628" y="412">1</text>
+  <text class="label" x="374" y="536">lecturer assignment</text>
+
+  <path class="rel" d="M760 250 L760 320"/>
+  <text class="card" x="744" y="278">1</text><text class="card" x="744" y="315">M</text>
+  <text class="label" x="780" y="292">offered as</text>
+
+  <path class="rel" d="M970 250 L860 320"/>
+  <text class="card" x="962" y="278">1</text><text class="card" x="868" y="315">M</text>
+  <text class="label" x="890" y="286">scheduled in</text>
+
+  <path class="rel" d="M1150 205 L910 350"/>
+  <text class="card" x="1132" y="228">1</text><text class="card" x="916" y="340">M</text>
+  <text class="label" x="990" y="270">program context</text>
+
+  <path class="rel" d="M1270 250 L1270 320"/>
+  <text class="card" x="1254" y="278">1</text><text class="card" x="1254" y="315">M</text>
+  <text class="label" x="1290" y="292">defines</text>
+
+  <path class="rel" d="M760 450 L760 560"/>
+  <text class="card" x="744" y="482">1</text><text class="card" x="744" y="552">M</text>
+  <text class="label" x="780" y="512">has semester ULOs</text>
+
+  <path class="rel" d="M700 450 L520 560"/>
+  <text class="card" x="680" y="482">1</text><text class="card" x="536" y="552">M</text>
+  <text class="label" x="462" y="520">has assessments</text>
+
+  <path class="rel" d="M480 650 L480 775 L500 775"/>
+  <text class="card" x="464" y="682">1</text><text class="card" x="490" y="766">M</text>
+  <path class="rel" d="M770 650 L770 775 L720 775"/>
+  <text class="card" x="754" y="682">1</text><text class="card" x="724" y="766">M</text>
+  <text class="label" x="515" y="704">bridge: assessment covers ULO</text>
+
+  <path class="rel" d="M890 605 L930 605"/>
+  <text class="card" x="898" y="596">1</text><text class="card" x="914" y="596">M</text>
+  <path class="rel" d="M1270 430 L1270 505 L1190 605"/>
+  <text class="card" x="1254" y="458">1</text><text class="card" x="1198" y="596">M</text>
+  <text class="label" x="956" y="584">coordinator-confirmed mapping</text>
+
+  <path class="rel-dashed" d="M1060 650 L1060 730"/>
+  <text class="label" x="1080" y="696">optional suggestions</text>
+
+  <!-- entities -->
+  <g>
+    <rect class="box" x="80" y="150" width="260" height="100"/>
+    <rect class="h-ref" x="80" y="150" width="260" height="30" rx="10"/>
+    <text class="entity" x="102" y="170">ROLE</text>
+    <text class="field" x="102" y="202">PK role_id</text>
+    <text class="field" x="102" y="224">role_name, permission_level</text>
+  </g>
+  <g>
+    <rect class="box" x="80" y="320" width="260" height="110"/>
+    <rect class="h-ref" x="80" y="320" width="260" height="30" rx="10"/>
+    <text class="entity" x="102" y="340">STAFF</text>
+    <text class="field" x="102" y="372">PK user_id</text>
+    <text class="field" x="102" y="394">FK role_id</text>
+    <text class="field" x="102" y="416">email, full_name</text>
+  </g>
+  <g>
+    <rect class="box" x="80" y="500" width="260" height="110"/>
+    <rect class="h-ref" x="80" y="500" width="260" height="30" rx="10"/>
+    <text class="entity" x="102" y="520">OFFERING_LECTURER</text>
+    <text class="field" x="102" y="552">PK/FK offering_id</text>
+    <text class="field" x="102" y="574">PK/FK lecturer_id</text>
+    <text class="field" x="102" y="596">lecturer access per offering</text>
+  </g>
+
+  <g>
+    <rect class="box" x="650" y="150" width="220" height="100"/>
+    <rect class="h-ref" x="650" y="150" width="220" height="30" rx="10"/>
+    <text class="entity" x="672" y="170">UNIT</text>
+    <text class="field" x="672" y="202">PK unit_id</text>
+    <text class="field" x="672" y="224">unit_code, handbook_url</text>
+  </g>
+  <g>
+    <rect class="box" x="900" y="150" width="220" height="100"/>
+    <rect class="h-ref" x="900" y="150" width="220" height="30" rx="10"/>
+    <text class="entity" x="922" y="170">SEMESTER</text>
+    <text class="field" x="922" y="202">PK semester_id</text>
+    <text class="field" x="922" y="224">year, period</text>
+  </g>
+  <g>
+    <rect class="box" x="1150" y="150" width="240" height="100"/>
+    <rect class="h-ref" x="1150" y="150" width="240" height="30" rx="10"/>
+    <text class="entity" x="1172" y="170">PROGRAM</text>
+    <text class="field" x="1172" y="202">PK program_id</text>
+    <text class="field" x="1172" y="224">program_code, name</text>
+  </g>
+  <g>
+    <rect class="box" x="1150" y="320" width="240" height="110"/>
+    <rect class="h-ref" x="1150" y="320" width="240" height="30" rx="10"/>
+    <text class="entity" x="1172" y="340">PLO</text>
+    <text class="field" x="1172" y="372">PK plo_id</text>
+    <text class="field" x="1172" y="394">FK program_id</text>
+    <text class="field" x="1172" y="416">plo_code, description</text>
+  </g>
+
+  <g>
+    <rect class="main" x="650" y="320" width="260" height="130"/>
+    <rect class="h-offer" x="650" y="320" width="260" height="30" rx="10"/>
+    <text class="entity" x="672" y="340">UNIT_OFFERING</text>
+    <text class="field" x="672" y="372">PK offering_id</text>
+    <text class="field" x="672" y="394">FK unit_id, program_id, semester_id</text>
+    <text class="field" x="672" y="416">FK coordinator_id</text>
+    <text class="field" x="672" y="438">last_scraped_at</text>
+  </g>
+
+  <g>
+    <rect class="box" x="360" y="560" width="240" height="90"/>
+    <rect class="h-offer" x="360" y="560" width="240" height="30" rx="10"/>
+    <text class="entity" x="382" y="580">ASSESSMENT</text>
+    <text class="field" x="382" y="612">PK assessment_id</text>
+    <text class="field" x="382" y="634">FK offering_id, weight, max_mark</text>
+  </g>
+  <g>
+    <rect class="box" x="650" y="560" width="240" height="90"/>
+    <rect class="h-offer" x="650" y="560" width="240" height="30" rx="10"/>
+    <text class="entity" x="672" y="580">OFFERING_ULO</text>
+    <text class="field" x="672" y="612">PK offering_ulo_id</text>
+    <text class="field" x="672" y="634">FK offering_id, source</text>
+  </g>
+  <g>
+    <rect class="box" x="500" y="730" width="220" height="90"/>
+    <rect class="h-map" x="500" y="730" width="220" height="30" rx="10"/>
+    <text class="entity" x="522" y="750">ASSESSMENT_ULO</text>
+    <text class="field" x="522" y="782">FK assessment_id</text>
+    <text class="field" x="522" y="804">FK offering_ulo_id</text>
+  </g>
+  <g>
+    <rect class="box" x="930" y="560" width="260" height="90"/>
+    <rect class="h-map" x="930" y="560" width="260" height="30" rx="10"/>
+    <text class="entity" x="952" y="580">ULO_PLO_MAPPING</text>
+    <text class="field" x="952" y="612">FK offering_ulo_id, plo_id</text>
+    <text class="field" x="952" y="634">confirmed_by, mapping_source</text>
+  </g>
+  <g>
+    <rect class="box" x="930" y="730" width="260" height="90"/>
+    <rect class="h-map" x="930" y="730" width="260" height="30" rx="10"/>
+    <text class="entity" x="952" y="750">MAPPING_SUGGESTION</text>
+    <text class="field" x="952" y="782">historical / keyword / existing</text>
+    <text class="field" x="952" y="804">accepted or rejected</text>
+  </g>
+
+  <rect class="note-bg" x="60" y="845" width="1480" height="38"/>
+  <text class="note" x="82" y="869">Report point: ULOs and assessments belong to UNIT_OFFERING because they can change each semester. PLO alignment is confirmed by the Unit Coordinator, not treated as Handbook truth.</text>
+</svg>
