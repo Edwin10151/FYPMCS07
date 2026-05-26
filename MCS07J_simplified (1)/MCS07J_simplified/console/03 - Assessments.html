@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Assessment Setup Wireframe</title>
+<title>Assessment Verification Wireframe</title>
 <link rel="stylesheet" href="shared.css">
 </head>
 <body>
@@ -16,8 +16,8 @@
       <div class="nav-group">
         <a class="nav-link" href="00 - Login.html">00 Login</a>
         <a class="nav-link" href="01 - Dashboard.html">01 Dashboard</a>
-        <a class="nav-link" href="02 - Mapping.html">02 Mapping</a>
-        <a class="nav-link active" href="03 - Assessments.html">03 Assessments</a>
+        <a class="nav-link" href="02 - Mapping.html">02 ULO-PLO Review</a>
+        <a class="nav-link active" href="03 - Assessments.html">03 Assessment Verify</a>
         <a class="nav-link" href="04 - CSV Upload.html">04 CSV Upload</a>
         <a class="nav-link" href="05 - Admin.html">05 Admin</a>
       </div>
@@ -25,8 +25,9 @@
 
     <main class="main">
       <div class="topbar">
-        <div class="crumbs"><strong>Assessment Setup</strong></div>
+        <div class="crumbs"><strong>Assessment Verification</strong></div>
         <div class="top-actions">
+          <button class="btn">Import Handbook Assessments</button>
           <button class="btn">Copy Previous Semester</button>
           <button class="btn primary">Save Assessments</button>
         </div>
@@ -36,7 +37,8 @@
         <header class="page-head">
           <div>
             <span class="phase-tag">Screen 03</span>
-            <h1>Assessment Setup</h1>
+            <h1>Assessment Setup and ULO Links</h1>
+            <p>Import assessment weights and linked ULOs from the Handbook where available, then verify before calculation.</p>
           </div>
         </header>
 
@@ -45,7 +47,7 @@
             <h2>Assessment List</h2>
           </div>
           <div class="wire-box" style="min-height:120px; display:flex; align-items:center; justify-content:center;">
-            <strong>[Assessment table: name, weight, LOs covered, status]</strong>
+            <strong>[Assessment table: name, weight, linked ULOs, source, status]</strong>
           </div>
         </section>
 
@@ -55,16 +57,16 @@
               <h2>Weight Distribution Rule</h2>
             </div>
             <div class="wire-box" style="min-height:90px; display:flex; align-items:center; justify-content:center;">
-              <strong>Formula: assessment weight ÷ number of tagged LOs</strong>
+              <strong>Formula: assessment weight ÷ number of linked ULOs</strong>
             </div>
           </div>
 
           <div class="panel">
             <div class="panel-head">
-              <h2>LO Weight Preview</h2>
+              <h2>ULO Weight Preview</h2>
             </div>
             <div class="wire-box" style="min-height:90px; display:flex; align-items:center; justify-content:center;">
-              <strong>[Computed LO weight table]</strong>
+              <strong>[Computed ULO weight preview]</strong>
             </div>
           </div>
         </section>
