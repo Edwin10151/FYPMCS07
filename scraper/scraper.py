@@ -1,4 +1,5 @@
 import asyncio
+import re
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
@@ -15,12 +16,14 @@ async def scrape_monash_unit(url):
         
         try:
             await page.goto(url, wait_until="networkidle", timeout=60000)
-            await page.wait_for_selector("text=FIT2094", timeout=30000)
+            
+            # Generalize this: wait for any content to appear rather than just FIT2094
+            # We wait for the H3 "Learning outcomes" to be present
+            await page.wait_for_selector("text=Learning outcomes", timeout=30000)
 
-            # Expand all sections
+            # Click 'Expand all'
             expand_button = page.get_by_role("button", name="Expand all")
             if await expand_button.count() > 0:
-                print("Clicking 'Expand all'...")
                 await expand_button.first.click(force=True)
                 await asyncio.sleep(2)
 
@@ -40,29 +43,31 @@ async def scrape_monash_unit(url):
                 
                 if header_container:
                     # Get all div siblings after the header
-                    outcome_elements = header_container.find_next_siblings('div')
+                    all_siblings = header_container.find_next_siblings('div')
                     
-                    # 1. We skip the first element because it's the intro sentence (div[2])
-                    # 2. We enumerate from 1 for our own display
-                    actual_outcomes = outcome_elements[1:] 
+                    found_outcomes = []
 
-                    count = 1
-                    for div in actual_outcomes:
-                        text = div.get_text(strip=True)
+                    for div in all_siblings:
+                        raw_text = div.get_text(strip=True)
                         
-                        # Clean up UI noise: remove "keyboard_arrow_down"
-                        # Also remove the leading number (1., 2., etc.) if it's already in the text
-                        clean_text = text.replace("keyboard_arrow_down", "").strip()
-                        
-                        # Only print if there is actual content left
-                        if clean_text and clean_text not in ["Expand all", "Collapse all"]:
-                            # If the text starts with "1.", "2." etc, we can just print it directly
-                            print(f"{clean_text}")
-                            count += 1
+                        # 1. Clean UI noise immediately
+                        clean_text = raw_text.replace("keyboard_arrow_down", "").strip()
+
+                        # 2. Pattern Matching: Check if text starts with an integer (e.g., "1.", "1 ", "10.")
+                        # re.match(r'^\d+') checks if the string starts with one or more digits
+                        if re.match(r'^\d+', clean_text):
+                            found_outcomes.append(clean_text)
+                    
+                    # Output the findings
+                    if found_outcomes:
+                        for outcome in found_outcomes:
+                            print(outcome)
+                    else:
+                        print("No learning outcomes starting with a number were found.")
                 else:
-                    print("Could not navigate the container structure.")
+                    print("Structure error: Could not find container.")
             else:
-                print("Could not find the 'Learning outcomes' heading.")
+                print("Could not find 'Learning outcomes' section.")
 
             print("="*50)
 
@@ -71,5 +76,5 @@ async def scrape_monash_unit(url):
             await browser.close()
 
 if __name__ == "__main__":
-    target_url = "https://handbook.monash.edu/2026/units/FIT2094?year=2026"
+    target_url = "https://handbook.monash.edu/2026/units/FIT2099?year=2026"
     asyncio.run(scrape_monash_unit(target_url))
