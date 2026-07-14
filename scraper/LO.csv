@@ -1,0 +1,21 @@
+--- MONASH HANDBOOK SCRAPE (2026) ---
+
+FIT2099
+1.Iteratively apply object-oriented design principles to design small to medium-size software systems, using standard software engineering notations, namely UML class diagrams and UML interaction diagrams.
+2.Describe the quality of object-oriented software designs, both in terms of meeting user requirements and the effective application of object-oriented design concepts and principles.
+3.Apply object-oriented programming constructs, such as abstraction, information hiding, inheritance, and polymorphism, to implement object-oriented designs using a programming language (namely, Java).
+4.Apply effective programming strategies to refactor and debug object-oriented implementations systematically and efficiently by using available programming language tools.
+5.Apply principles of software engineering practice to create object-oriented systems with peers using tools including integrated development environments (IDEs), UML drawing tools, and version control systems.
+
+FIT3155
+1.Analyse efficient data structures and effective algorithmic paradigms;
+2.Design and implement efficient algorithms and data structures for use on large data sets;
+3.Apply advanced algorithms and data structures to tackle complex computational problems;
+4.Prove the correctness of programs and reason about their space and time complexities.
+
+FIT2004
+1.Analyse general problem solving strategies and algorithmic paradigms, and apply them to solving new problems;
+2.Prove correctness of programs, analyse their space and time complexities;
+3.Compare and contrast various abstract data types and use them appropriately;
+4.Develop and implement algorithms to solve computational problems.
+
