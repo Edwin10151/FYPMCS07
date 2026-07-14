@@ -1,10 +1,15 @@
 
-Environment: Python 3.14.6
+## Environment
+Python 3.14.6
 
-Requirement:
+## Requirement
 - beautifulsoup4==4.15.0
-- greenlet==3.5.3
 - playwright==1.61.0
-- pyee==13.0.1
 - soupsieve==2.8.4
-- typing_extensions==4.16.0
+- urllib3==2.7.0
+
+## unit_codes.csv
+Placeholder for unit codes that needed to be scrapped
+
+## LO.csv
+Scrapped learning outcomes
