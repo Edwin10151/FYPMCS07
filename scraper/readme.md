@@ -1,0 +1,10 @@
+
+Environment: Python 3.14.6
+
+Requirement:
+- beautifulsoup4==4.15.0
+- greenlet==3.5.3
+- playwright==1.61.0
+- pyee==13.0.1
+- soupsieve==2.8.4
+- typing_extensions==4.16.0
