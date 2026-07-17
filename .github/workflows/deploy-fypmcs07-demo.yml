@@ -1,0 +1,39 @@
+name: Deploy FYP MCS07 demo
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fypmcs07-demo-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy static dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.FYP_DEPLOY_SSH_KEY }}" > ~/.ssh/fypmcs07_demo_deploy
+          chmod 600 ~/.ssh/fypmcs07_demo_deploy
+          ssh-keyscan -H "${{ secrets.FYP_DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy on DigitalOcean Droplet
+        shell: bash
+        run: |
+          ssh \
+            -i ~/.ssh/fypmcs07_demo_deploy \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.FYP_DEPLOY_USER }}@${{ secrets.FYP_DEPLOY_HOST }}" \
+            "deploy"
