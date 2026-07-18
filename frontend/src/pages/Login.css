@@ -1,0 +1,232 @@
+/* ── Monash blue palette ── */
+:root {
+  --monash-dark:   #00456a;
+  --monash-navy:   #004b75;
+  --monash-mid:    #0073b2;
+  --monash-bright: #007dc1;
+}
+
+/* Background */
+.login-bg {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 24px;
+  background: var(--monash-navy);
+  background-image:
+    radial-gradient(circle at 80% 10%, rgba(0,125,193,0.30), transparent 50%),
+    radial-gradient(circle at 10% 90%, rgba(0,69,106,0.50), transparent 55%);
+}
+
+/* Card */
+.login-card {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 24px 64px -12px rgba(0,43,75,0.40);
+  overflow: hidden;
+}
+
+/* Monash branding header */
+.monash-header {
+  background: #fff;
+  padding: 28px 40px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-bottom: 1px solid #e5eaf0;
+}
+
+.monash-logo {
+  height: 60px;
+  width: auto;
+  object-fit: contain;
+  object-position: center;
+}
+
+.monash-divider {
+  width: 1px;
+  height: 32px;
+  background: #c8d4de;
+}
+
+.app-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--monash-navy);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+/* Form area */
+.signin {
+  padding: 32px 40px 36px;
+}
+
+.signin .eye {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--monash-mid);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.signin h2 {
+  font-family: 'Newsreader', serif;
+  font-weight: 500;
+  font-size: 28px;
+  color: var(--monash-dark);
+  margin: 0 0 8px;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.signin .deck {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0 0 24px;
+  line-height: 1.55;
+}
+
+/* Divider */
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 20px 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* Form */
+.signin form { display: flex; flex-direction: column; gap: 14px; }
+
+.between {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px;
+}
+.between .link { color: var(--monash-mid); font-weight: 500; }
+.between .link:hover { color: var(--monash-dark); }
+
+.remember-check { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 12px; }
+.remember-check .remember-box {
+  width: 14px; height: 14px;
+  border: 1.5px solid #9ab0c0;
+  border-radius: 3px;
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 700;
+  flex-shrink: 0;
+  color: transparent;
+}
+.remember-check .remember-box.on {
+  background: var(--monash-navy);
+  border-color: var(--monash-navy);
+  color: white;
+}
+
+/* Sign-in button */
+.signin .primary {
+  width: 100%;
+  height: 46px;
+  border-radius: 8px;
+  border: none;
+  background: var(--monash-navy);
+  background-image: linear-gradient(135deg, var(--monash-mid), var(--monash-dark));
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+  display: block;
+  transition: opacity .12s, box-shadow .12s;
+}
+.signin .primary:hover {
+  opacity: 0.92;
+  box-shadow: 0 4px 16px rgba(0,75,117,0.35);
+}
+
+/* Role hint */
+.role-hint {
+  background: #f0f7fd;
+  border: 1px solid #c3ddf0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 20px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.role-hint .h { color: var(--monash-navy); font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+.role-hint .roles { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.role-hint .roles .r {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  padding: 2px 8px;
+  background: rgba(0,75,117,0.08);
+  color: var(--monash-navy);
+  border-radius: 4px;
+  border: 1px solid rgba(0,75,117,0.15);
+}
+
+/* Footer */
+.form-foot {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.form-foot a { color: var(--monash-mid); text-decoration: underline; text-underline-offset: 2px; }
+
+.form-foot-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.form-foot-links a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Password-step verify avatar */
+.verify-avatar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.verify-avatar .lock-ic {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #eaf4fb;
+  border: 1px solid #c3ddf0;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+}
+
+/* Email chip shown on password step */
+.email-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0 0 22px;
+}
+.email-chip .person-ic {
+  font-size: 15px;
+  color: var(--ink-3);
+}
