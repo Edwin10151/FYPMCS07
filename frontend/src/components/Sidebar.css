@@ -1,0 +1,12 @@
+/* Sidebar nav icon pseudo-element shapes */
+.side nav a .ic.i-home::after  { content:''; position:absolute; inset:3px; border:1.5px solid currentColor; border-bottom:none; border-radius:1px 1px 0 0; }
+.side nav a .ic.i-units        { border-radius:50%; }
+.side nav a .ic.i-map::after   { content:''; position:absolute; inset:2px 5px; border-left:1.5px solid currentColor; }
+.side nav a .ic.i-ass::after   { content:''; position:absolute; left:2px; right:2px; top:3px; height:1.5px; background:currentColor; box-shadow:0 3px 0 currentColor, 0 6px 0 currentColor; }
+.side nav a .ic.i-up::after    { content:''; position:absolute; left:4px; right:4px; top:6px; height:1.5px; background:currentColor; }
+.side nav a .ic.i-up::before   { content:''; position:absolute; left:50%; top:2px; width:1.5px; height:6px; background:currentColor; transform:translateX(-50%); }
+.side nav a .ic.i-rep          { border-radius:50% 6px 6px 6px; }
+.side nav a .ic.i-users        { border-radius:50%; }
+.side nav a .ic.i-users::after { content:''; position:absolute; left:4px; right:-2px; top:-1px; width:8px; height:8px; border:1.5px solid currentColor; border-radius:50%; background:var(--navy); }
+.side nav a .ic.i-sync         { border-radius:50%; border-style:dashed; }
+.side nav a .ic.i-set::after   { content:''; position:absolute; inset:4px; border:1.5px solid currentColor; border-radius:50%; }
