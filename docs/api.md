@@ -70,7 +70,7 @@ GET /api/assessments?offering_id=1
 ## CSV Upload
 
 ```text
-POST /api/uploads/validate
+POST /api/uploads/validate?offering_id=1
 ```
 
 `multipart/form-data` with a `file` field.
@@ -97,4 +97,3 @@ GET /api/admin/users
 ```
 
 Requires Management role.
-

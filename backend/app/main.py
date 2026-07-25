@@ -7,7 +7,14 @@ from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 
-from app.auth import create_access_token, get_current_user, require_permission, verify_password
+from app.auth import (
+    create_access_token,
+    ensure_offering_access,
+    get_current_user,
+    require_offering_access,
+    require_permission,
+    verify_password,
+)
 from app.config import get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.seed import seed_demo_data
@@ -81,8 +88,7 @@ def me(user: Annotated[dict, Depends(get_current_user)]):
 
 @app.get("/api/offerings")
 def offerings(user: Annotated[dict, Depends(get_current_user)]):
-    rows = fetch_all(
-        """
+    query = """
         SELECT
             o.offering_id,
             u.unit_code,
@@ -97,14 +103,23 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
         JOIN unit u ON u.unit_id = o.unit_id
         JOIN program p ON p.program_id = o.program_id
         JOIN semester s ON s.semester_id = o.semester_id
-        ORDER BY s.year DESC, s.period, u.unit_code
-        """
-    )
+    """
+    if user["role_name"] == "coordinator":
+        query += " WHERE o.coordinator_id = %s"
+        params = (user["user_id"],)
+    elif user["role_name"] == "lecturer":
+        query += " WHERE EXISTS (SELECT 1 FROM offering_lecturer ol WHERE ol.offering_id = o.offering_id AND ol.lecturer_id = %s)"
+        params = (user["user_id"],)
+    elif user["role_name"] == "management":
+        params = None
+    else:
+        raise HTTPException(status_code=403, detail="Unknown role")
+    rows = fetch_all(query + " ORDER BY s.year DESC, s.period, u.unit_code", params)
     return {"offerings": rows}
 
 
 @app.get("/api/dashboard")
-def dashboard(user: Annotated[dict, Depends(get_current_user)], offering_id: int = 1):
+def dashboard(user: Annotated[dict, Depends(require_offering_access())], offering_id: int = 1):
     offering = fetch_one(
         """
         SELECT o.offering_id, u.unit_code, u.unit_name, p.program_name, s.year, s.period
@@ -172,7 +187,7 @@ def dashboard(user: Annotated[dict, Depends(get_current_user)], offering_id: int
 
 
 @app.get("/api/mappings")
-def mappings(user: Annotated[dict, Depends(get_current_user)], offering_id: int = 1):
+def mappings(user: Annotated[dict, Depends(require_offering_access())], offering_id: int = 1):
     ulos = fetch_all(
         "SELECT offering_ulo_id, ulo_code, description FROM offering_ulo WHERE offering_id = %s ORDER BY ulo_code",
         (offering_id,),
@@ -204,6 +219,7 @@ def save_mappings(
     payload: MappingUpdate,
     user: Annotated[dict, Depends(require_permission(20))],
 ):
+    ensure_offering_access(user, payload.offering_id, min_permission_level=20)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -223,7 +239,7 @@ def save_mappings(
 
 
 @app.get("/api/assessments")
-def assessments(user: Annotated[dict, Depends(get_current_user)], offering_id: int = 1):
+def assessments(user: Annotated[dict, Depends(require_offering_access())], offering_id: int = 1):
     rows = fetch_all(
         """
         SELECT
@@ -248,7 +264,8 @@ def assessments(user: Annotated[dict, Depends(get_current_user)], offering_id: i
 
 @app.post("/api/uploads/validate")
 async def validate_upload(
-    user: Annotated[dict, Depends(require_permission(10))],
+    user: Annotated[dict, Depends(require_offering_access())],
+    offering_id: int,
     file: UploadFile = File(...),
 ):
     content = (await file.read()).decode("utf-8-sig")
@@ -280,7 +297,7 @@ async def validate_upload(
 
 @app.post("/api/reports/summary")
 def generate_summary(
-    user: Annotated[dict, Depends(require_permission(20))],
+    user: Annotated[dict, Depends(require_offering_access(20))],
     offering_id: int = 1,
 ):
     dashboard_payload = dashboard(user=user, offering_id=offering_id)
@@ -307,4 +324,3 @@ def admin_users(user: Annotated[dict, Depends(require_permission(30))]):
         """
     )
     return {"users": rows}
-

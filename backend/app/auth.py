@@ -88,3 +88,37 @@ def require_permission(min_permission_level: int):
         return user
 
     return dependency
+
+
+def ensure_offering_access(user: dict, offering_id: int, min_permission_level: int = 10) -> dict:
+    if user["permission_level"] < min_permission_level:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+    if user["role_name"] == "management":
+        return user
+
+    if user["role_name"] == "coordinator":
+        access = fetch_one(
+            "SELECT 1 FROM unit_offering WHERE offering_id = %s AND coordinator_id = %s",
+            (offering_id, user["user_id"]),
+        )
+    elif user["role_name"] == "lecturer":
+        access = fetch_one(
+            "SELECT 1 FROM offering_lecturer WHERE offering_id = %s AND lecturer_id = %s",
+            (offering_id, user["user_id"]),
+        )
+    else:
+        access = None
+
+    if not access:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this offering")
+    return user
+
+
+def require_offering_access(min_permission_level: int = 10):
+    def dependency(
+        user: Annotated[dict, Depends(get_current_user)],
+        offering_id: int = 1,
+    ) -> dict:
+        return ensure_offering_access(user, offering_id, min_permission_level)
+
+    return dependency
