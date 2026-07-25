@@ -19,7 +19,8 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://mcs07:mcs07-dev-password@db:5432/mcs07}
@@ -46,4 +47,3 @@ services:
 
 volumes:
   postgres_data:
-

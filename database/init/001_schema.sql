@@ -108,9 +108,10 @@ CREATE TABLE assessment (
     assessment_id    SERIAL PRIMARY KEY,
     offering_id      INT           NOT NULL REFERENCES unit_offering(offering_id) ON DELETE CASCADE,
     assessment_name  VARCHAR(150)  NOT NULL,
-    weight           DECIMAL(5,2)  NOT NULL CHECK (weight > 0 AND weight <= 100),
+    weight           DECIMAL(5,2)  NOT NULL CHECK (weight >= 0 AND weight <= 100),
     max_mark         DECIMAL(6,2)  NOT NULL DEFAULT 100 CHECK (max_mark > 0),
     assessment_order INT,
+    is_hurdle        BOOLEAN       NOT NULL DEFAULT FALSE,
     source           VARCHAR(30)   NOT NULL DEFAULT 'manual'
         CHECK (source IN ('handbook', 'manual', 'copied_previous')),
     confirmed_by     INT           REFERENCES app_user(user_id),
@@ -334,6 +335,22 @@ CREATE TABLE ai_report (
 CREATE UNIQUE INDEX uq_final_ai_report_offering
     ON ai_report(offering_id)
     WHERE is_finalized;
+
+-- Imported Handbook content is always reviewed before it changes an offering.
+CREATE TABLE handbook_import_snapshot (
+    handbook_import_id SERIAL PRIMARY KEY,
+    offering_id        INT          NOT NULL REFERENCES unit_offering(offering_id) ON DELETE CASCADE,
+    source_url         VARCHAR(500) NOT NULL,
+    handbook_version   VARCHAR(100),
+    payload            JSONB        NOT NULL,
+    status             VARCHAR(20)  NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft', 'confirmed')),
+    imported_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    confirmed_by       INT          REFERENCES app_user(user_id),
+    confirmed_at       TIMESTAMP
+);
+
+CREATE INDEX idx_handbook_import_offering ON handbook_import_snapshot(offering_id, imported_at DESC);
 
 -- INDEXES
 CREATE INDEX idx_unit_offering_semester      ON unit_offering(semester_id);

@@ -67,6 +67,34 @@ Save body:
 GET /api/assessments?offering_id=1
 ```
 
+`is_hurdle: true` marks a zero-weight competency requirement. It is displayed
+separately and is not part of weighted attainment calculations.
+
+## Handbook Import
+
+```text
+POST /api/offerings/{offering_id}/handbook-import
+GET /api/offerings/{offering_id}/handbook-import
+POST /api/offerings/{offering_id}/handbook-import/confirm
+```
+
+Only Management and the assigned Unit Coordinator may import or confirm. The
+backend fetches the public Monash Handbook record using the offering's saved
+unit code and year; the frontend never sends an arbitrary URL.
+
+The first endpoint stores a reviewable draft. Confirm it with:
+
+```json
+{
+  "handbook_import_id": 1
+}
+```
+
+Confirmation updates Handbook-sourced ULOs and assessments while preserving
+manual ULOs and ULO-to-PLO decisions. It is blocked once grades exist, so a
+later correction must be recorded and recalculated rather than silently
+changing historical results.
+
 ## CSV Upload
 
 ```text

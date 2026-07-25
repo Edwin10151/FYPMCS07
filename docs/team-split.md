@@ -19,6 +19,9 @@ Works against:
 - `GET /api/mappings`
 - `PUT /api/mappings`
 - `GET /api/assessments`
+- `POST /api/offerings/{offering_id}/handbook-import`
+- `GET /api/offerings/{offering_id}/handbook-import`
+- `POST /api/offerings/{offering_id}/handbook-import/confirm`
 - `POST /api/uploads/validate`
 - `POST /api/reports/summary`
 - `GET /api/admin/users`
@@ -41,7 +44,7 @@ Owns:
 Owns:
 
 - PostgreSQL schema in `database/init/`
-- Migrations later, preferably Alembic
+- Incremental migrations in `database/migrations/`, applied when the backend starts
 - Seed data for demo units, staff, students, assessments, mappings, and grades
 - Query performance and constraints
 - Backup/restore scripts for demo data
@@ -71,4 +74,3 @@ git push origin main
 ```
 
 Every push to `main` auto-deploys to DigitalOcean.
-
