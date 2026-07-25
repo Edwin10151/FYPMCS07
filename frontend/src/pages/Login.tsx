@@ -1,30 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
-import { saveSession, type Session } from "../api";
+import { errorMessage, login, saveSession } from "../api";
 import "./Login.css";
-
-// The app is currently running against dummy/mock data only (no backend
-// integration yet) — any email/password combination signs you in as one of
-// the demo users below so the full UI can be previewed end-to-end.
-const DEMO_USERS: Record<string, { full_name: string; role_name: string; permission_level: number }> = {
-  "elise.chen@monash.edu": { full_name: "Dr. Elise Chen", role_name: "coordinator", permission_level: 20 },
-  "aaron.lim@monash.edu": { full_name: "Aaron Lim", role_name: "lecturer", permission_level: 10 },
-  "maya.rao@monash.edu": { full_name: "Maya Rao", role_name: "management", permission_level: 30 },
-};
-
-function mockSession(email: string): Session {
-  const demo = DEMO_USERS[email.trim().toLowerCase()] ?? {
-    full_name: email.split("@")[0] || "Dev User",
-    role_name: "coordinator",
-    permission_level: 20,
-  };
-  return {
-    access_token: "dev-bypass-token",
-    token_type: "bearer",
-    user: { user_id: 0, email, ...demo },
-  };
-}
 
 export default function Login() {
   const [step, setStep] = useState<"email" | "password">("email");
@@ -32,6 +10,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const handleNext = (e: React.FormEvent) => {
@@ -41,12 +20,19 @@ export default function Login() {
     }
   };
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const session = mockSession(email);
-    saveSession(session, remember);
-    navigate("/units");
+    setError("");
+    try {
+      const session = await login(email.trim(), password);
+      saveSession(session, remember);
+      navigate("/units");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -62,7 +48,7 @@ export default function Login() {
             <>
               <div className="eye">Sign in</div>
               <h2>Welcome back.</h2>
-              <p className="deck">Sign in with your Monash email address</p>
+              <p className="deck">Sign in with your staff email address</p>
 
               <form onSubmit={handleNext}>
                 <label className="field">
@@ -119,8 +105,11 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoFocus
+                    required
                   />
                 </label>
+
+                {error && <p className="login-error" role="alert">{error}</p>}
 
                 <div className="between">
                   <a href="#" className="link">
