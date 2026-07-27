@@ -198,7 +198,7 @@ def extract_lo_mapping(soup):
         if raw_mapping:
             numbers = re.findall(r"\d+", raw_mapping)
             if numbers:
-                mapped_los = [f"ULO{n}" for n in numbers]
+                mapped_los = [n for n in numbers]
             else:
                 mapped_los = [raw_mapping]
 
