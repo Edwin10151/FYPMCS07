@@ -12,7 +12,6 @@ This repo now has a development/testing full-stack skeleton for the MCS07 dashbo
 ## Run Locally
 
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
@@ -28,6 +27,21 @@ Backend checks:
 http://localhost:8000/api/health
 http://localhost:8000/api/db-health
 ```
+
+For frontend work with live reload, start only the API services in Docker, then
+run Vite locally:
+
+```bash
+docker compose up --build db backend
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173/`. Vite proxies `/api` to the local backend, so
+the normal demo login works without DigitalOcean or Google login. PostgreSQL is
+available only inside Docker; use `docker compose exec db psql -U mcs07 -d mcs07`
+when database access is needed.
 
 ## Demo Accounts
 
@@ -58,4 +72,3 @@ POST /api/reports/summary
 ```
 
 Right now the backend returns a mock summary. Later, keep the same endpoint and change the backend implementation to call a local LLM runtime through `LOCAL_LLM_URL`.
-
