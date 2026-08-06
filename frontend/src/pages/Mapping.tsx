@@ -103,7 +103,7 @@ export default function Mapping() {
               <span className="sep">›</span>
               <Link to="/dashboard">{unitCode}</Link>
               <span className="sep">›</span>
-              <Link to="/dashboard">Mapping</Link>
+              <Link to="/mapping">Mapping</Link>
             </div>
           )}
           <div className="top-actions">

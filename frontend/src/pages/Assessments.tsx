@@ -147,7 +147,7 @@ export default function Assessments() {
             <span className="sep">›</span>
             <Link to="/dashboard">{unitCode}</Link>
             <span className="sep">›</span>
-            <Link to="/dashboard">Assessments</Link>
+            <Link to="/assessments">Assessments</Link>
           </div>
           <div className="top-actions">
             <button className="btn" onClick={() => navigate("/upload")}>
