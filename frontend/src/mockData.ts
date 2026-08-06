@@ -131,6 +131,17 @@ export const UPLOAD_STATUS: Record<string, { state: string; label: string; detai
   A2: { state: "draft", label: "Draft saved", detail: "3 rows awaiting review" },
 };
 
+/** Demo enrolment list used by the grade-upload reconcile step. */
+export const MOCK_COHORT: Array<{ studentId: string; firstName: string; lastName: string }> = [
+  { studentId: "33520917", firstName: "Yuan", lastName: "Chuah" },
+  { studentId: "34428313", firstName: "Wen", lastName: "Lim" },
+  { studentId: "35029722", firstName: "Edwin", lastName: "Ting" },
+  { studentId: "35101423", firstName: "Sharmanne", lastName: "Yeoh" },
+  { studentId: "31880011", firstName: "Alex", lastName: "Tan" },
+  { studentId: "31880022", firstName: "Priya", lastName: "Nair" },
+  { studentId: "31910033", firstName: "Jordan", lastName: "Lee" },
+];
+
 export const RECON_ROWS = [
   { cls: "warn", icon: "!", iconCls: "warn", name: "Aaron J. Pereira", email: "aaron.pereira@student.monash.edu", csvRow: "row 47 · student_id 31882104", detected: "104", computed: "cap to 100", reason: "Mark exceeds max", reasonCls: "w", action: "Cap at 100 →" },
   { cls: "warn", icon: "!", iconCls: "warn", name: "Mei Lin Chua", email: "mei.chua@student.monash.edu", csvRow: "row 112 · student_id 31903456", detected: "102", computed: "cap to 100", reason: "Mark exceeds max", reasonCls: "w", action: "Cap at 100 →" },
@@ -226,3 +237,125 @@ export const MAPPING_INIT: Record<string, "on" | "sug" | "removed"> = {
   "PLO 6,LO 4": "on",
   "PLO 7,LO 2": "removed",
 };
+
+/* ============================================================
+   Administration — academic periods, unit offerings, staff
+   records and enrolment batches. These back the faculty-admin
+   screens (semester setup, periods, units, enrolments, staff).
+   ============================================================ */
+
+export type PeriodStatus = "active" | "planning" | "archived";
+
+export type AcademicPeriod = {
+  id: string;
+  year: number;
+  period: string;
+  label: string;
+  status: PeriodStatus;
+  teachingStart: string;
+  teachingEnd: string;
+  unitCount: number;
+  studentCount: number;
+  staffCount: number;
+};
+
+// Teaching periods offered by the faculty — drives the "Add period" form.
+export const TEACHING_PERIODS = ["Semester 1", "Semester 2", "Summer Semester A", "Summer Semester B", "Winter Semester"];
+
+// "Semester 1" → "S1", "Summer Semester A" → "SSA" — keeps generated period
+// labels ("2026 S1") consistent with how they're written across the app.
+export function periodShortCode(period: string) {
+  if (/^Semester (\d)/i.test(period)) return `S${period.match(/^Semester (\d)/i)![1]}`;
+  return period
+    .split(/\s+/)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+export const ACADEMIC_PERIODS: AcademicPeriod[] = [
+  { id: "2026-S2", year: 2026, period: "Semester 2", label: "2026 S2", status: "planning", teachingStart: "2026-07-20", teachingEnd: "2026-10-23", unitCount: 6, studentCount: 0, staffCount: 5 },
+  { id: "2026-S1", year: 2026, period: "Semester 1", label: "2026 S1", status: "active", teachingStart: "2026-03-02", teachingEnd: "2026-06-05", unitCount: 18, studentCount: 1284, staffCount: 32 },
+  { id: "2025-S2", year: 2025, period: "Semester 2", label: "2025 S2", status: "archived", teachingStart: "2025-07-21", teachingEnd: "2025-10-24", unitCount: 17, studentCount: 1196, staffCount: 30 },
+  { id: "2025-S1", year: 2025, period: "Semester 1", label: "2025 S1", status: "archived", teachingStart: "2025-03-03", teachingEnd: "2025-06-06", unitCount: 16, studentCount: 1142, staffCount: 28 },
+];
+
+export type StaffRole = "coordinator" | "lecturer" | "tutor" | "admin";
+export type StaffStatus = "active" | "pending" | "inactive";
+
+export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
+  coordinator: "Unit coordinator",
+  lecturer: "Lecturer",
+  tutor: "Tutor",
+  admin: "Faculty admin",
+};
+
+export type StaffRecord = {
+  staffId: string;
+  name: string;
+  email: string;
+  role: StaffRole;
+  status: StaffStatus;
+  addedOn: string;
+};
+
+export const STAFF_RECORDS: StaffRecord[] = [
+  { staffId: "1002456", name: "A/Prof. Sara Rashid", email: "sara.rashid@monash.edu", role: "admin", status: "active", addedOn: "2023-01-16" },
+  { staffId: "1004821", name: "Dr. Elise Chen", email: "elise.chen@monash.edu", role: "coordinator", status: "active", addedOn: "2023-02-06" },
+  { staffId: "1007733", name: "Dr. James Truong", email: "james.truong@monash.edu", role: "lecturer", status: "active", addedOn: "2024-01-22" },
+  { staffId: "1008190", name: "Dr. Mariam Obi", email: "mariam.obi@monash.edu", role: "coordinator", status: "active", addedOn: "2024-02-12" },
+  { staffId: "1009044", name: "Daniel Rodríguez", email: "daniel.rodriguez@monash.edu", role: "lecturer", status: "active", addedOn: "2024-07-15" },
+  { staffId: "1011276", name: "Dr. Will Nakamura", email: "will.nakamura@monash.edu", role: "lecturer", status: "pending", addedOn: "2026-05-04" },
+  { staffId: "1011302", name: "Dr. Anna Lindqvist", email: "anna.lindqvist@monash.edu", role: "lecturer", status: "inactive", addedOn: "2024-02-19" },
+  { staffId: "1011488", name: "Yi Ling Tan", email: "yiling.tan@monash.edu", role: "tutor", status: "active", addedOn: "2026-02-24" },
+];
+
+export type UnitStatus = "active" | "draft" | "discontinued";
+
+export type UnitStaffLink = { staffId: string; role: StaffRole };
+
+export type UnitOffering = {
+  rowKey: string;
+  code: string;
+  name: string;
+  periodId: string;
+  creditPoints: number;
+  studentCount: number;
+  status: UnitStatus;
+  // Set when a unit code has been superseded (e.g. FIT3161 → FIT3162), so the
+  // lineage stays visible instead of the old offering silently disappearing.
+  replacedBy: string | null;
+  handbookSynced: boolean;
+  staff: UnitStaffLink[];
+};
+
+export const UNIT_OFFERINGS: UnitOffering[] = [
+  { rowKey: "u1", code: "FIT2004", name: "Algorithms and Data Structures", periodId: "2026-S1", creditPoints: 6, studentCount: 287, status: "active", replacedBy: null, handbookSynced: true, staff: [{ staffId: "1004821", role: "coordinator" }, { staffId: "1007733", role: "lecturer" }, { staffId: "1011488", role: "tutor" }] },
+  { rowKey: "u2", code: "FIT3155", name: "Advanced Data Structures & Algorithms", periodId: "2026-S1", creditPoints: 6, studentCount: 142, status: "active", replacedBy: null, handbookSynced: true, staff: [{ staffId: "1004821", role: "coordinator" }] },
+  { rowKey: "u3", code: "FIT2086", name: "Modelling for Data Analysis", periodId: "2026-S1", creditPoints: 6, studentCount: 210, status: "active", replacedBy: null, handbookSynced: true, staff: [{ staffId: "1008190", role: "coordinator" }, { staffId: "1007733", role: "lecturer" }] },
+  { rowKey: "u4", code: "FIT3161", name: "Computer Science Project 1", periodId: "2026-S1", creditPoints: 6, studentCount: 96, status: "discontinued", replacedBy: "FIT3164", handbookSynced: true, staff: [{ staffId: "1008190", role: "coordinator" }] },
+  { rowKey: "u5", code: "FIT1045", name: "Introduction to Programming", periodId: "2026-S1", creditPoints: 6, studentCount: 305, status: "active", replacedBy: null, handbookSynced: false, staff: [{ staffId: "1009044", role: "lecturer" }] },
+  { rowKey: "u6", code: "FIT3164", name: "Computer Science Project 2", periodId: "2026-S2", creditPoints: 12, studentCount: 0, status: "draft", replacedBy: null, handbookSynced: false, staff: [] },
+  { rowKey: "u7", code: "FIT2099", name: "Object Oriented Design and Implementation", periodId: "2026-S2", creditPoints: 6, studentCount: 0, status: "draft", replacedBy: null, handbookSynced: false, staff: [{ staffId: "1011276", role: "lecturer" }] },
+  { rowKey: "u8", code: "FIT2004", name: "Algorithms and Data Structures", periodId: "2025-S2", creditPoints: 6, studentCount: 264, status: "active", replacedBy: null, handbookSynced: true, staff: [{ staffId: "1004821", role: "coordinator" }] },
+];
+
+export type BatchStatus = "committed" | "needs_review";
+
+export type EnrolmentBatch = {
+  batchId: string;
+  periodId: string;
+  unitCode: string;
+  fileName: string;
+  studentCount: number;
+  issues: number;
+  uploadedBy: string;
+  uploadedAt: string;
+  status: BatchStatus;
+};
+
+export const ENROLMENT_BATCHES: EnrolmentBatch[] = [
+  { batchId: "B-2026-0041", periodId: "2026-S1", unitCode: "FIT2004", fileName: "FIT2004_S1-2026_enrolments.csv", studentCount: 287, issues: 0, uploadedBy: "A/Prof. Sara Rashid", uploadedAt: "2026-03-02 09:14", status: "committed" },
+  { batchId: "B-2026-0040", periodId: "2026-S1", unitCode: "FIT3155", fileName: "FIT3155_S1-2026_enrolments.csv", studentCount: 142, issues: 0, uploadedBy: "A/Prof. Sara Rashid", uploadedAt: "2026-03-02 09:02", status: "committed" },
+  { batchId: "B-2026-0039", periodId: "2026-S1", unitCode: "FIT2086", fileName: "FIT2086_S1-2026_enrolments.csv", studentCount: 210, issues: 4, uploadedBy: "A/Prof. Sara Rashid", uploadedAt: "2026-03-01 16:47", status: "needs_review" },
+  { batchId: "B-2025-0112", periodId: "2025-S2", unitCode: "FIT2004", fileName: "FIT2004_S2-2025_enrolments.csv", studentCount: 264, issues: 0, uploadedBy: "A/Prof. Sara Rashid", uploadedAt: "2025-07-21 08:35", status: "committed" },
+];

@@ -1,10 +1,5 @@
-/* Header tabs */
-.h-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; margin-top: 6px; }
-.h-tabs .tab { padding: 10px 4px; margin-right: 22px; font-size: 13.5px; font-weight: 500; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-.h-tabs .tab.on { color: var(--navy); border-bottom-color: var(--navy); }
-.h-tabs .tab .ct { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: var(--paper); color: var(--ink-2); padding: 1px 6px; border-radius: 999px; font-weight: 600; }
-.h-tabs .tab.on .ct { background: var(--navy); color: white; }
-.h-tabs .tab.right-tab { margin-left: auto; margin-right: 0; }
+/* Section tabs (.h-tabs) and role chips live in components/AdminNav.css,
+   which every admin screen loads. */
 
 /* Role legend */
 .role-legend { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 22px; }
@@ -16,13 +11,6 @@
 .rl-card ul li { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 .rl-card ul li::before { content: '✓'; color: var(--ok); font-weight: 700; font-size: 10px; }
 .rl-card ul li.no::before { content: '—'; color: var(--ink-4); }
-
-/* Role chips */
-.role-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; background: var(--navy-tint); color: var(--navy); border: 1px solid #DBE3F0; }
-.role-chip.lec   { background: var(--ok-bg);   color: var(--ok);   border-color: var(--ok-bg-2); }
-.role-chip.admin { background: var(--warn-bg);  color: var(--warn); border-color: #F1D9B5; }
-.role-chip.ext   { background: var(--paper);    color: var(--ink-2); }
-.role-chip .icn  { width: 12px; height: 12px; border-radius: 3px; background: currentColor; opacity: 0.4; }
 
 /* Filter row */
 .filter-row { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; }

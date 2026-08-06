@@ -1,14 +1,11 @@
-import { useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { ADMIN_USERS, ROLE_CARDS } from "../mockData";
 import "./Admin.css";
 
-const TABS = ["People", "Roles & permissions", "Pending invitations", "Audit log", "Faculty settings"];
-
 export default function Admin() {
   const session = useSession();
-  const [activeTab, setActiveTab] = useState(0);
 
   if (!session) return null;
 
@@ -41,16 +38,7 @@ export default function Admin() {
             </div>
           </div>
 
-          <div className="h-tabs">
-            {TABS.map((t, i) => (
-              <div key={t} className={`tab${activeTab === i ? " on" : ""}${i === TABS.length - 1 ? " right-tab" : ""}`} onClick={() => setActiveTab(i)}>
-                {t}
-                {t === "People" && <span className="ct">38</span>}
-                {t === "Roles & permissions" && <span className="ct">4</span>}
-                {t === "Pending invitations" && <span className="ct">3</span>}
-              </div>
-            ))}
-          </div>
+          <AdminNav counts={{ "/admin": ADMIN_USERS.length }} />
 
           <div className="role-legend">
             {ROLE_CARDS.map((r) => (

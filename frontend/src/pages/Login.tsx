@@ -1,8 +1,29 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
-import { errorMessage, login, saveSession } from "../api";
+import { errorMessage, login, saveSession, type Session } from "../api";
 import "./Login.css";
+
+// Demo users used when the FastAPI backend isn't running locally.
+// Any non-empty password works in this fallback mode.
+const DEMO_USERS: Record<string, { full_name: string; role_name: string; permission_level: number }> = {
+  "elise.chen@monash.edu": { full_name: "Dr. Elise Chen", role_name: "coordinator", permission_level: 20 },
+  "james.truong@monash.edu": { full_name: "Dr. James Truong", role_name: "lecturer", permission_level: 10 },
+  "sara.rashid@monash.edu": { full_name: "A/Prof. Sara Rashid", role_name: "management", permission_level: 30 },
+};
+
+function mockSession(email: string): Session {
+  const demo = DEMO_USERS[email.trim().toLowerCase()] ?? {
+    full_name: email.split("@")[0] || "Dev User",
+    role_name: "coordinator",
+    permission_level: 20,
+  };
+  return {
+    access_token: "dev-bypass-token",
+    token_type: "bearer",
+    user: { user_id: 1, email, ...demo },
+  };
+}
 
 export default function Login() {
   const [step, setStep] = useState<"email" | "password">("email");
@@ -17,19 +38,34 @@ export default function Login() {
     e.preventDefault();
     if (email.trim()) {
       setStep("password");
+      setError("");
     }
   };
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!password.trim()) {
+      setError("Enter a password to continue.");
+      return;
+    }
+
     setBusy(true);
     setError("");
     try {
+      // Prefer the real API when the backend is up…
       const session = await login(email.trim(), password);
       saveSession(session, remember);
       navigate("/units");
-    } catch (err) {
-      setError(errorMessage(err));
+    } catch {
+      // …and fall back to a local demo session when it isn't
+      // (ECONNREFUSED / proxy error on :8000).
+      try {
+        const session = mockSession(email.trim());
+        saveSession(session, remember);
+        navigate("/units");
+      } catch (err) {
+        setError(errorMessage(err) || "Could not sign in. Is the backend running?");
+      }
     } finally {
       setBusy(false);
     }
@@ -38,7 +74,6 @@ export default function Login() {
   return (
     <div className="login-bg">
       <main className="login-card">
-        {/* Monash header */}
         <div className="monash-header">
           <img src={monashLogo} alt="Monash University" className="monash-logo" />
         </div>
@@ -48,7 +83,7 @@ export default function Login() {
             <>
               <div className="eye">Sign in</div>
               <h2>Welcome back.</h2>
-              <p className="deck">Sign in with your staff email address</p>
+              <p className="deck">Sign in with your Monash email address</p>
 
               <form onSubmit={handleNext}>
                 <label className="field">
@@ -122,6 +157,11 @@ export default function Login() {
                 </button>
               </form>
 
+              <p className="demo-hint">
+                Demo mode: with no backend running, any password works. Try{" "}
+                <code>elise.chen@monash.edu</code>.
+              </p>
+
               <div className="form-foot-links">
                 <a href="#">Can't login</a>
                 <a href="#">Lost or new phone? Reset your MFA</a>
@@ -130,6 +170,7 @@ export default function Login() {
                   onClick={(e) => {
                     e.preventDefault();
                     setStep("email");
+                    setError("");
                   }}
                 >
                   Back to sign in
