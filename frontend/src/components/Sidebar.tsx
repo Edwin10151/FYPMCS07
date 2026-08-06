@@ -4,7 +4,6 @@ import "./Sidebar.css";
 
 const NAV_MAIN = [
   { to: "/dashboard", label: "Dashboard", ic: "i-home" },
-  { to: "/units", label: "Units", ic: "i-units" },
   { to: "/mapping", label: "LO ↔ PLO mapping", ic: "i-map" },
   { to: "/assessments", label: "Assessments", ic: "i-ass" },
   { to: "/upload", label: "Grade upload", ic: "i-up" },

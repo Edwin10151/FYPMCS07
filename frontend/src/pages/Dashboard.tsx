@@ -4,12 +4,14 @@ import Sidebar from "../components/Sidebar";
 import { useSession } from "../useSession";
 import { AI_SUMMARY_DEMO, DASHBOARD_ASSESSMENTS, DIST, LOS, TREND } from "../mockData";
 import "./Dashboard.css";
+import { getSelectedUnit } from "../api";
 
 export default function Dashboard() {
   const session = useSession();
   const [summary, setSummary] = useState("");
   const [showBanner, setShowBanner] = useState(true);
-  const unitCode = "FIT2004";
+  const selectedUnit = getSelectedUnit();
+  const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
   if (!session) return null;
 

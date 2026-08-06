@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useSession } from "../useSession";
 import {
@@ -99,8 +99,11 @@ export default function Mapping() {
             </div>
           ) : (
             <div className="crumbs">
-              Mapping <span className="sep">›</span> <strong>{unitCode}</strong> <span className="sep">›</span> Bachelor of IT{" "}
-              <span className="sep">›</span> Semester 1 2026
+              <Link to="/units">Home</Link>
+              <span className="sep">›</span>
+              <Link to="/dashboard">{unitCode}</Link>
+              <span className="sep">›</span>
+              <Link to="/dashboard">Mapping</Link>
             </div>
           )}
           <div className="top-actions">
