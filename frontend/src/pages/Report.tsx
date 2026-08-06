@@ -39,7 +39,7 @@ export default function Report() {
             <span className="sep">›</span>
             <Link to="/dashboard">{unitCode}</Link>
             <span className="sep">›</span>
-            <Link to="/report">Reports</Link>
+            <Link to="/reports">Reports</Link>
           </div>
           <div className="top-actions">
             <div className="report-top-note">Editable placeholder</div>
