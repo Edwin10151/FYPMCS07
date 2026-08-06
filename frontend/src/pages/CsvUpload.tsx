@@ -3,9 +3,19 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useSession } from "../useSession";
 import { formatFileSize, parseCsv } from "../csv";
+import {
+  buildCommittedGrades,
+  clearCommittedGrades,
+  formatCommittedAt,
+  loadCommittedGrades,
+  saveCommittedGrades,
+  type CommittedGrades,
+} from "../gradeUploadStore";
 import { ASSESSMENTS, MOCK_COHORT } from "../mockData";
 import "./CsvUpload.css";
 
+const UNIT_CODE = "FIT2004";
+const UNIT_NAME = "Algorithms and Data Structures";
 const STEPS = ["Upload file", "Map columns", "Reconcile records", "Confirm & commit"];
 
 type ReconBucket = "matched" | "oor" | "unmatched" | "missing";
@@ -234,6 +244,8 @@ const RECON_CARDS: Array<{
 export default function CsvUpload() {
   const navigate = useNavigate();
   const session = useSession();
+  const [committed, setCommitted] = useState<CommittedGrades | null>(() => loadCommittedGrades(UNIT_CODE));
+  const [forceNewUpload, setForceNewUpload] = useState(false);
   const [step, setStep] = useState(0);
   const [reconBucket, setReconBucket] = useState<ReconBucket>("matched");
   const [file, setFile] = useState<UploadedFile | null>(null);
@@ -242,6 +254,17 @@ export default function CsvUpload() {
   const [dragOver, setDragOver] = useState(false);
 
   if (!session) return null;
+
+  const showCommittedView = !!committed && !forceNewUpload;
+
+  const startNewUpload = () => {
+    setForceNewUpload(true);
+    setFile(null);
+    setMapping(emptyMapping(TARGET_FIELDS));
+    setMaxMarks(emptyMaxMarks());
+    setStep(0);
+    setReconBucket("matched");
+  };
 
   const displayLabel = (headerKey: string) => {
     if (!file || !headerKey) return headerKey;
@@ -358,6 +381,122 @@ export default function CsvUpload() {
   const selectedRecon = reconcile ? reconcile[reconBucket] : [];
   const commitReady = reconcile ? reconcile.matched.length + reconcile.oor.length : 0;
 
+  const commitGrades = () => {
+    if (!file || !reconcile) return;
+    const includeStudentIds = new Set([
+      ...reconcile.matched.map((r) => r.studentId),
+      ...reconcile.oor.map((r) => r.studentId),
+    ]);
+    const snapshot = buildCommittedGrades({
+      unitCode: UNIT_CODE,
+      fileName: file.name,
+      committedBy: session.user.full_name,
+      headers: file.headers,
+      rows: file.rows,
+      mapping,
+      maxMarks,
+      includeStudentIds,
+    });
+    saveCommittedGrades(UNIT_CODE, snapshot);
+    setCommitted(snapshot);
+    setForceNewUpload(false);
+    setFile(null);
+    setStep(0);
+  };
+
+  if (showCommittedView && committed) {
+    return (
+      <div className="app">
+        <Sidebar user={session.user} />
+        <main className="main">
+          <div className="topbar">
+            <div className="crumbs">
+              Grade upload <span className="sep">›</span> <strong>{UNIT_CODE}</strong> <span className="sep">›</span>{" "}
+              Uploaded grades
+            </div>
+            <div className="top-actions">
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  clearCommittedGrades(UNIT_CODE);
+                  setCommitted(null);
+                  startNewUpload();
+                }}
+              >
+                Clear upload
+              </button>
+              <button className="btn primary" onClick={startNewUpload}>
+                Upload new CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="content">
+            <div className="unit-banner">
+              <div>
+                <h1 style={{ fontSize: 26 }}>Uploaded grades</h1>
+                <div className="sub">
+                  <span className="code">{UNIT_CODE}</span> {UNIT_NAME} &nbsp;·&nbsp;{" "}
+                  <strong>{committed.rowCount}</strong> student
+                  {committed.rowCount === 1 ? "" : "s"} committed
+                </div>
+              </div>
+              <span className="pill ok">
+                <span className="dot" />
+                Committed
+              </span>
+            </div>
+
+            <div className="file-card">
+              <div className="icn">CSV</div>
+              <div>
+                <div className="nm">{committed.fileName}</div>
+                <div className="sub">
+                  Committed {formatCommittedAt(committed.committedAt)} by {committed.committedBy} ·{" "}
+                  {committed.assessmentIds
+                    .map((id) => `${id} /${committed.maxMarks[id] ?? "?"}`)
+                    .join(" · ")}
+                </div>
+              </div>
+            </div>
+
+            <div className="grades-tbl-card">
+              <table className="grades-tbl">
+                <thead>
+                  <tr>
+                    <th>Student ID</th>
+                    <th>First name</th>
+                    <th>Last name</th>
+                    {committed.assessmentIds.map((id) => (
+                      <th key={id}>
+                        {id}
+                        <span className="grades-th-max"> /{committed.maxMarks[id] ?? "?"}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {committed.rows.map((row) => (
+                    <tr key={row.studentId}>
+                      <td className="id">{row.studentId}</td>
+                      <td>{row.firstName || "—"}</td>
+                      <td>{row.lastName || "—"}</td>
+                      {committed.assessmentIds.map((id) => (
+                        <td key={id} className="num">
+                          {row.marks[id] == null ? "—" : row.marks[id]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <Sidebar user={session.user} />
@@ -367,8 +506,19 @@ export default function CsvUpload() {
             Grade upload <span className="sep">›</span> <strong>FIT2004</strong> <span className="sep">›</span> CSV upload
           </div>
           <div className="top-actions">
-            <button className="btn ghost" onClick={() => navigate("/assessments")}>
-              Cancel upload
+            <button
+              className="btn ghost"
+              onClick={() => {
+                if (committed && forceNewUpload) {
+                  setForceNewUpload(false);
+                  setFile(null);
+                  setStep(0);
+                  return;
+                }
+                navigate("/assessments");
+              }}
+            >
+              {committed && forceNewUpload ? "Back to grades" : "Cancel upload"}
             </button>
             {step > 0 && (
               <button className="btn" onClick={() => setStep((s) => Math.max(0, s - 1))}>
@@ -735,12 +885,7 @@ export default function CsvUpload() {
                         <button className="btn" onClick={() => setStep(2)}>
                           Back to reconcile
                         </button>
-                        <button
-                          className="btn primary"
-                          onClick={() => {
-                            navigate("/dashboard");
-                          }}
-                        >
+                        <button className="btn primary" onClick={commitGrades}>
                           {allGood ? "Confirm & commit" : "Commit anyway"}
                         </button>
                       </div>
