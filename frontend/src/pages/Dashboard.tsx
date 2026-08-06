@@ -8,6 +8,8 @@ import "./Dashboard.css";
 export default function Dashboard() {
   const session = useSession();
   const [summary, setSummary] = useState("");
+  const [showBanner, setShowBanner] = useState(true);
+  const unitCode = "FIT2004";
 
   if (!session) return null;
 
@@ -18,13 +20,13 @@ export default function Dashboard() {
         {/* Topbar */}
         <div className="topbar">
           <div className="crumbs">
-            Units <span className="sep">›</span> FIT <span className="sep">›</span> <strong>FIT2004</strong>{" "}
-            <span className="sep">›</span> Semester 1 2026
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">Dashboard</Link>
           </div>
           <div className="top-actions">
-            <div className="search">
-              ⌕ Search units, students, LOs… <span className="kbd">⌘K</span>
-            </div>
             <button className="btn ghost">Export CSV</button>
             <button className="btn">Print report</button>
             <button className="btn primary" onClick={() => setSummary(AI_SUMMARY_DEMO)}>
@@ -35,19 +37,20 @@ export default function Dashboard() {
         </div>
 
         <div className="content">
-          {/* Banner */}
-          <div className="banner">
-            <div className="ico">i</div>
-            <div className="body">
-              <strong>Handbook synced to v2026.1 on 04 May 2026.</strong> Unit details and learning outcomes match the current
-              Monash Handbook entry for FIT2004. <Link to="/mapping">Review LO ↔ PLO mapping ›</Link>
+          {showBanner && (
+            <div className="banner">
+              <div className="ico">i</div>
+              <div className="body">
+                <strong>Handbook synced to v2026.1 on 04 May 2026.</strong> Unit details and learning outcomes match the current
+                Monash Handbook entry for FIT2004. <Link to="/mapping">Review LO ↔ PLO mapping ›</Link>
+              </div>
+              <div className="actions">
+                <button className="btn ghost" style={{ height: 28, fontSize: 11.5 }} onClick={() => setShowBanner(false)}>
+                  Dismiss
+                </button>
+              </div>
             </div>
-            <div className="actions">
-              <button className="btn ghost" style={{ height: 28, fontSize: 11.5 }}>
-                Dismiss
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Unit banner */}
           <div className="unit-banner">
@@ -62,7 +65,6 @@ export default function Dashboard() {
             </div>
             <div className="sem-switch">
               <span className="arrow">‹</span>
-              <span className="v">Semester 1, 2026</span>
               <span className="arrow">›</span>
             </div>
           </div>

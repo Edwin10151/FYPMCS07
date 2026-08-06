@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { avatarClass, initials, roleLabel, type SessionUser } from "../api";
 import "./Sidebar.css";
 
@@ -20,16 +20,16 @@ const NAV_ADMIN = [
 export default function Sidebar({ user }: { user: SessionUser }) {
   return (
     <aside className="side">
-      <div className="brand">
-        <div className="mark">M</div>
-        <div className="name">
-          Curriculum
-          <br />
-          Analytics
-          <span className="sub">Faculty of IT</span>
-        </div>
+      <Link to="/units" className="brand">
+      <div className="mark">M</div>
+      <div className="name">
+        Curriculum
+        <br />
+        Analytics
+        <span className="sub">Faculty of IT</span>
       </div>
-
+      </Link>
+      
       <div className="sec">Workspace</div>
       <nav>
         {NAV_MAIN.map(({ to, label, ic }) => (
