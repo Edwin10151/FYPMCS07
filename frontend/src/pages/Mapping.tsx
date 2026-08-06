@@ -2,41 +2,16 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useSession } from "../useSession";
+import {
+  formatMappingConfirmedAt,
+  loadMappingConfirmation,
+  saveMappingConfirmation,
+  type MappingConfirmation,
+} from "../mappingConfirm";
 import { HANDBOOK_DIFF, MAPPING_INIT, PLOS, ULO_TEXT, ULOS } from "../mockData";
 import "./Mapping.css";
 
 type CellState = "on" | "sug" | "removed" | null;
-
-const CONFIRM_STORAGE_PREFIX = "mapping-confirmed:";
-
-type ConfirmationRecord = { at: string; by: string };
-
-function loadConfirmation(unitCode: string): ConfirmationRecord | null {
-  try {
-    const raw = localStorage.getItem(`${CONFIRM_STORAGE_PREFIX}${unitCode}`);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveConfirmation(unitCode: string, record: ConfirmationRecord) {
-  try {
-    localStorage.setItem(`${CONFIRM_STORAGE_PREFIX}${unitCode}`, JSON.stringify(record));
-  } catch {
-    // ignore — audit trail is a nice-to-have, not a hard requirement
-  }
-}
-
-function formatConfirmedAt(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 function RemovedIcon({ className }: { className?: string }) {
   return (
@@ -56,18 +31,19 @@ export default function Mapping() {
   const navigate = useNavigate();
   const session = useSession();
 
-  const isOnboarding = (location.state as { from?: string } | null)?.from === "unit-select";
+  const fromUnitSelect = (location.state as { from?: string } | null)?.from === "unit-select";
   const unitCode = (location.state as { unitCode?: string } | null)?.unitCode || "FIT2004";
   const unitName = (location.state as { unitName?: string } | null)?.unitName || "Algorithms and Data Structures";
   const pendingCount = Object.values(cells).filter((v) => v === "sug").length;
   const removedCount = Object.values(cells).filter((v) => v === "removed").length;
 
-  const [confirmation, setConfirmation] = useState<ConfirmationRecord | null>(null);
-  const alreadyConfirmed = isOnboarding && !!confirmation && pendingCount === 0;
+  const [confirmation, setConfirmation] = useState<MappingConfirmation | null>(() => loadMappingConfirmation(unitCode));
+  // Force mapping (no sidebar) only until this unit has been confirmed once.
+  const isOnboarding = fromUnitSelect && !confirmation;
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
-    setConfirmation(loadConfirmation(unitCode));
+    setConfirmation(loadMappingConfirmation(unitCode));
   }, [unitCode]);
 
   if (!session) return null;
@@ -75,7 +51,7 @@ export default function Mapping() {
   const confirmAndContinue = () => {
     if (pendingCount > 0) return;
     const record = { at: new Date().toISOString(), by: session.user.full_name };
-    saveConfirmation(unitCode, record);
+    saveMappingConfirmation(unitCode, record);
     setConfirmation(record);
     navigate("/dashboard");
   };
@@ -141,25 +117,7 @@ export default function Mapping() {
         </div>
 
         <div className="content">
-          {isOnboarding && alreadyConfirmed && confirmation && (
-            <div className="onboard-banner onboard-banner-repeat">
-              <div className="onboard-icon repeat">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-              </div>
-              <div className="onboard-body">
-                <strong>Already confirmed —</strong> you confirmed {unitCode}'s LO ↔ PLO mapping on{" "}
-                <strong>{formatConfirmedAt(confirmation.at)}</strong> ({confirmation.by}). Nothing needs review since then.
-                <div className="onboard-audit">Confirm again to continue, or open the matrix below to make changes first.</div>
-              </div>
-              <button className="btn primary onboard-cta" onClick={confirmAndContinue}>
-                Confirm &amp; continue →
-              </button>
-            </div>
-          )}
-          {isOnboarding && !alreadyConfirmed && (
+          {isOnboarding && (
             <div className="onboard-banner">
               <div className="onboard-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -172,12 +130,6 @@ export default function Mapping() {
                 {pendingCount > 0
                   ? ` ${pendingCount} suggested link${pendingCount > 1 ? "s" : ""} still need${pendingCount > 1 ? "" : "s"} your review below.`
                   : " All links are confirmed — you're ready to continue."}
-                {confirmation && pendingCount > 0 && (
-                  <div className="onboard-audit">
-                    You last confirmed this mapping on {formatConfirmedAt(confirmation.at)} — new suggested links have appeared
-                    since then.
-                  </div>
-                )}
               </div>
               <button className="btn primary onboard-cta" disabled={pendingCount > 0} onClick={confirmAndContinue}>
                 Confirm mapping &amp; continue →
@@ -195,7 +147,7 @@ export default function Mapping() {
               <div className="audit-log">
                 {confirmation ? (
                   <>
-                    Last confirmed <strong>{formatConfirmedAt(confirmation.at)}</strong> by {confirmation.by}
+                    Last confirmed <strong>{formatMappingConfirmedAt(confirmation.at)}</strong> by {confirmation.by}
                   </>
                 ) : (
                   "Not yet confirmed for Semester 1 2026"

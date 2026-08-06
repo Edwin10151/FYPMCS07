@@ -12,8 +12,10 @@ const NAV_MAIN = [
 ];
 
 const NAV_ADMIN = [
-  { to: "/admin", label: "Users & roles", ic: "i-users" },
-  { to: "/dashboard", label: "Handbook sync", ic: "i-sync" },
+  // Semester setup is the admin hub — periods, units, staff assignment,
+  // enrolments and unit-code edits all hang off that checklist.
+  { to: "/admin/setup", label: "Semester setup", ic: "i-sync" },
+  { to: "/admin", label: "People & roles", ic: "i-users", end: true },
   { to: "/dashboard", label: "Settings", ic: "i-set" },
 ];
 
@@ -42,8 +44,8 @@ export default function Sidebar({ user }: { user: SessionUser }) {
 
       <div className="sec">Administration</div>
       <nav>
-        {NAV_ADMIN.map(({ to, label, ic }) => (
-          <NavLink key={label} to={to} className={({ isActive }) => (isActive ? "active" : "")}>
+        {NAV_ADMIN.map(({ to, label, ic, end }) => (
+          <NavLink key={label} to={to} end={end} className={({ isActive }) => (isActive ? "active" : "")}>
             <span className={`ic ${ic}`} />
             {label}
           </NavLink>

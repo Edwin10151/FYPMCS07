@@ -228,6 +228,9 @@ button { font-family: inherit; }
 .btn.danger { color: var(--risk); border-color: var(--risk-bg); background: white; }
 .btn.danger:hover { background: var(--risk-bg); }
 .btn.lg { height: 40px; padding: 0 18px; font-size: 13.5px; border-radius: 8px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled:hover { background: var(--card); }
+.btn.primary:disabled:hover { background: var(--navy); }
 
 .input {
   height: 36px;

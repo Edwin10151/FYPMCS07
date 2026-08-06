@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
 import { clearSession, initials } from "../api";
+import { loadMappingConfirmation } from "../mappingConfirm";
 import { useSession } from "../useSession";
 import { UNITS, type MockUnit } from "../mockData";
 import "./UnitSelect.css";
@@ -18,8 +19,16 @@ export default function UnitSelect() {
     return null;
   }
 
-  const openUnit = (unit: MockUnit) =>
-    navigate("/mapping", { state: { from: "unit-select", unitCode: unit.code, unitName: unit.name } });
+  const openUnit = (unit: MockUnit) => {
+    const alreadyMapped = !!loadMappingConfirmation(unit.code);
+    if (alreadyMapped) {
+      // Mapping done before — enter the unit workspace with the normal sidebar.
+      navigate("/dashboard", { state: { unitCode: unit.code, unitName: unit.name } });
+    } else {
+      // First time for this unit — force LO ↔ PLO confirm (no sidebar).
+      navigate("/mapping", { state: { from: "unit-select", unitCode: unit.code, unitName: unit.name } });
+    }
+  };
 
   const confirmSignOut = () => {
     clearSession();
