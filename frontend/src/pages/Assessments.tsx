@@ -142,6 +142,9 @@ export default function Assessments() {
             Assessments <span className="sep">›</span> <strong>FIT2004</strong> <span className="sep">›</span> Semester 1 2026
           </div>
           <div className="top-actions">
+            <button className="btn" onClick={() => navigate("/upload")}>
+              Upload grades
+            </button>
             <button className="btn">Discard</button>
             <button className="btn primary">Save assessments</button>
           </div>
@@ -283,8 +286,8 @@ export default function Assessments() {
                     <button
                       type="button"
                       className="upload-grades-btn"
-                      title={`Upload grades for ${a.name || a.id}`}
-                      onClick={() => navigate(`/upload/${a.id}`, { state: { assessmentId: a.id, assessmentName: a.name } })}
+                      title="Upload grades CSV for this unit"
+                      onClick={() => navigate("/upload")}
                     >
                       Upload grades
                     </button>
