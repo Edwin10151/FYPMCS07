@@ -12,6 +12,7 @@ import AdminUnits from "./pages/AdminUnits";
 import AdminEnrolments from "./pages/AdminEnrolments";
 import AdminStaff from "./pages/AdminStaff";
 import { loadSession } from "./api";
+import Report from "./pages/Report";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const session = loadSession();
@@ -26,6 +27,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/units" element={<RequireAuth><UnitSelect /></RequireAuth>} />
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+      <Route path="/reports" element={<RequireAuth><Report /></RequireAuth>} />
       <Route path="/mapping" element={<RequireAuth><Mapping /></RequireAuth>} />
       <Route path="/assessments" element={<RequireAuth><Assessments /></RequireAuth>} />
       <Route path="/upload" element={<RequireAuth><CsvUpload /></RequireAuth>} />

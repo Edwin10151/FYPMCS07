@@ -7,7 +7,7 @@ const NAV_MAIN = [
   { to: "/mapping", label: "LO ↔ PLO mapping", ic: "i-map" },
   { to: "/assessments", label: "Assessments", ic: "i-ass" },
   { to: "/upload", label: "Grade upload", ic: "i-up" },
-  { to: "/dashboard", label: "Reports", ic: "i-rep" },
+  { to: "/reports", label: "Reports", ic: "i-rep" },
 ];
 
 const NAV_ADMIN = [
