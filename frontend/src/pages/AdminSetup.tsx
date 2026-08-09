@@ -5,8 +5,12 @@ import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { ACADEMIC_PERIODS, ENROLMENT_BATCHES, STAFF_RECORDS, UNIT_OFFERINGS } from "../mockData";
 import "./AdminSetup.css";
+import { getSelectedUnit } from "../api";
 
 type TaskStatus = "done" | "progress" | "todo" | "locked";
+
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   done: "Complete",
@@ -146,7 +150,11 @@ export default function AdminSetup() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Administration <span className="sep">›</span> <strong>Semester setup</strong>
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <strong>Semester Setup</strong>
           </div>
           <div className="top-actions">
             <span className="setup-period-lbl">Period</span>
