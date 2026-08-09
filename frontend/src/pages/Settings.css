@@ -1,0 +1,226 @@
+.settings-layout {
+    display: grid;
+    gap: 16px;
+  }
+  
+  .settings-panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 24px;
+  }
+  
+  .settings-hero {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 20px;
+    align-items: center;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+  }
+  
+  .settings-avatar-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .settings-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--navy-tint);
+    color: var(--navy);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  
+  .settings-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .settings-avatar-help {
+    font-size: 11px;
+    color: var(--ink-3);
+    text-align: center;
+    line-height: 1.4;
+  }
+  
+  .settings-hero-copy h4 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  
+  .settings-hero-copy p {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    line-height: 1.6;
+    max-width: 720px;
+  }
+  
+  .settings-section-title {
+    margin: 0 0 14px;
+    font-size: 12px;
+    color: var(--ink-3);
+    font-family: "JetBrains Mono", monospace;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  
+  .settings-stack {
+    display: grid;
+    gap: 14px;
+  }
+  
+  .settings-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: end;
+  }
+  
+  .settings-field {
+    display: grid;
+    gap: 7px;
+  }
+  
+  .settings-field label {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    font-weight: 500;
+  }
+  
+  .settings-static,
+  .settings-input {
+    min-height: 42px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper-2);
+    padding: 11px 13px;
+    font-size: 13px;
+    color: var(--ink);
+    box-sizing: border-box;
+  }
+  
+  .settings-static {
+    display: flex;
+    align-items: center;
+  }
+  
+  .settings-static.mono {
+    font-family: "JetBrains Mono", monospace;
+    letter-spacing: 0.06em;
+  }
+  
+  .settings-input {
+    width: 100%;
+    outline: none;
+    font-family: inherit;
+  }
+  
+  .settings-input:focus {
+    background: white;
+    border-color: var(--navy-3);
+    box-shadow: 0 0 0 3px rgba(45, 90, 158, 0.1);
+  }
+  
+  .settings-readonly-note {
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: -2px;
+  }
+  
+  .settings-password-block {
+    display: grid;
+    gap: 14px;
+    padding-top: 4px;
+  }
+  
+  .settings-password-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  
+  .settings-error {
+    margin: -2px 0 0;
+    color: var(--risk);
+    font-size: 11.5px;
+  }
+  
+  .settings-success {
+    margin: -2px 0 0;
+    color: var(--ok);
+    font-size: 11.5px;
+  }
+  
+  .settings-logout {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+  
+  .settings-logout .btn {
+  min-width: unset;
+  width: auto;
+  padding: 0 12px;
+}
+  
+  .settings-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: var(--navy-tint);
+    border: 1px solid #dbe3f0;
+    color: var(--navy);
+    font-size: 11px;
+    font-family: "JetBrains Mono", monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  
+  .settings-top-note {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: white;
+    color: var(--ink-3);
+    font-size: 11.5px;
+    display: inline-flex;
+    align-items: center;
+  }
+  
+  @media (max-width: 900px) {
+    .settings-hero {
+      grid-template-columns: 1fr;
+      justify-items: start;
+    }
+  
+    .settings-row {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+  
+    .settings-password-actions,
+    .settings-logout {
+      justify-content: flex-start;
+    }
+  }

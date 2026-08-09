@@ -11,10 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Node",
-<<<<<<< HEAD
-=======
     "ignoreDeprecations": "6.0",
->>>>>>> 1f5767ce04b4126b23ed9cdb6865b0b57cf98dd4
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,

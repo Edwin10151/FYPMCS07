@@ -13,6 +13,7 @@ import AdminEnrolments from "./pages/AdminEnrolments";
 import AdminStaff from "./pages/AdminStaff";
 import { loadSession } from "./api";
 import Report from "./pages/Report";
+import Settings from "./pages/Settings";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const session = loadSession();
@@ -41,6 +42,7 @@ export default function App() {
       <Route path="/admin/units" element={<RequireAuth><AdminUnits /></RequireAuth>} />
       <Route path="/admin/enrolments" element={<RequireAuth><AdminEnrolments /></RequireAuth>} />
       <Route path="/admin/staff" element={<RequireAuth><AdminStaff /></RequireAuth>} />
+      <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

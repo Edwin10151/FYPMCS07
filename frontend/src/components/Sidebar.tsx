@@ -15,7 +15,7 @@ const NAV_ADMIN = [
   // enrolments and unit-code edits all hang off that checklist.
   { to: "/admin/setup", label: "Semester setup", ic: "i-sync" },
   { to: "/admin", label: "People & roles", ic: "i-users", end: true },
-  { to: "/dashboard", label: "Settings", ic: "i-set" },
+  { to: "/settings", label: "Settings", ic: "i-set" },
 ];
 
 export default function Sidebar({ user }: { user: SessionUser }) {
