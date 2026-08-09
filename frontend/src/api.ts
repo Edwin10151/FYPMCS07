@@ -221,3 +221,8 @@ export function roleLabel(roleName: string) {
   if (roleName === "management") return "Management";
   return roleName;
 }
+
+export function getSelectedUnit() {
+  const raw = sessionStorage.getItem("mcs07.selectedUnit");
+  return raw ? JSON.parse(raw) : null;
+}

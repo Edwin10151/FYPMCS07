@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useSession } from "../useSession";
 import { formatFileSize, parseCsv } from "../csv";
@@ -13,6 +13,10 @@ import {
 } from "../gradeUploadStore";
 import { ASSESSMENTS, MOCK_COHORT } from "../mockData";
 import "./CsvUpload.css";
+import { getSelectedUnit } from "../api";
+
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const UNIT_CODE = "FIT2004";
 const UNIT_NAME = "Algorithms and Data Structures";
@@ -411,8 +415,11 @@ export default function CsvUpload() {
         <main className="main">
           <div className="topbar">
             <div className="crumbs">
-              Grade upload <span className="sep">›</span> <strong>{UNIT_CODE}</strong> <span className="sep">›</span>{" "}
-              Uploaded grades
+              <Link to="/units">Home</Link>
+              <span className="sep">›</span>
+              <Link to="/dashboard">{unitCode}</Link>
+              <span className="sep">›</span>
+              <Link to="/upload">Upload</Link>
             </div>
             <div className="top-actions">
               <button
@@ -503,7 +510,11 @@ export default function CsvUpload() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Grade upload <span className="sep">›</span> <strong>FIT2004</strong> <span className="sep">›</span> CSV upload
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/upload">Upload</Link>
           </div>
           <div className="top-actions">
             <button

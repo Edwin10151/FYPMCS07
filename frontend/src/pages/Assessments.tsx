@@ -1,9 +1,13 @@
 import { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useSession } from "../useSession";
 import { ASSESSMENTS, ULO_SHORT, ULOS, type MockAssessment } from "../mockData";
 import "./Assessments.css";
+import { getSelectedUnit } from "../api";
+
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const ROW_COLORS = ["#2D5A9E", "#163E76", "#0B2E5C", "#E0A33E", "#6B4FA0", "#1F7A5C", "#A8321C", "#8A5A2E"];
 const LO_CHIP_LABELS = ULOS.map((lo) => lo.replace(/\s+/g, ""));
@@ -139,7 +143,11 @@ export default function Assessments() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Assessments <span className="sep">›</span> <strong>FIT2004</strong> <span className="sep">›</span> Semester 1 2026
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/assessments">Assessments</Link>
           </div>
           <div className="top-actions">
             <button className="btn" onClick={() => navigate("/upload")}>
