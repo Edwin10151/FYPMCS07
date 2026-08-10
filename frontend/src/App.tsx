@@ -12,7 +12,6 @@ import AdminUnits from "./pages/AdminUnits";
 import AdminEnrolments from "./pages/AdminEnrolments";
 import AdminStaff from "./pages/AdminStaff";
 import { loadSession } from "./api";
-import Report from "./pages/Report";
 import Settings from "./pages/Settings";
 import ChangePassword from "./pages/ChangePassword";
 
@@ -39,7 +38,6 @@ export default function App() {
       <Route path="/change-password" element={<RequireAuth allowPasswordChange><ChangePassword /></RequireAuth>} />
       <Route path="/units" element={<RequireAuth><UnitSelect /></RequireAuth>} />
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-      <Route path="/reports" element={<RequireAuth><Report /></RequireAuth>} />
       <Route path="/mapping" element={<RequireAuth><Mapping /></RequireAuth>} />
       <Route path="/assessments" element={<RequireAuth><Assessments /></RequireAuth>} />
       <Route path="/upload" element={<RequireAuth><CsvUpload /></RequireAuth>} />

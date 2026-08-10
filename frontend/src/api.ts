@@ -57,7 +57,7 @@ export type DashboardPayload = {
     year: number;
     period: string;
   };
-  stats: { student_count: number; lo_count: number; at_risk_count: number };
+  stats: { student_count: number; lo_count: number; at_risk_count: number; student_at_risk_count: number };
   learning_outcomes: LearningOutcome[];
   assessments: DashboardAssessment[];
   report: { report_id: number; ai_summary: string; coordinator_comment: string; is_finalized: boolean } | null;
@@ -109,17 +109,73 @@ export type AdminUser = {
   permission_level: number;
 };
 
-export type UploadIssue = { row: number; severity: "info" | "warning" | "error"; message: string };
-
-export type UploadResult = {
-  filename: string;
-  columns: string[];
-  row_count: number;
-  issues: UploadIssue[];
-  status: "valid" | "needs_review";
+export type AdminPeriod = {
+  semester_id: number;
+  year: number;
+  period: "S1" | "S2";
+  start_date: string | null;
+  end_date: string | null;
+  status: "planning" | "active" | "archived";
+  offering_count: number;
+  student_count: number;
+  staff_count: number;
 };
 
-export type ReportSummary = { provider: string; summary: string; note: string };
+export type AdminOffering = {
+  offering_id: number;
+  semester_id: number;
+  program_id: number;
+  unit_id: number;
+  coordinator_id: number;
+  coordinator_name: string;
+  lecturer_ids: number[];
+  status: "draft" | "active" | "discontinued";
+  handbook_url: string | null;
+  last_scraped_at: string | null;
+  unit_code: string;
+  unit_name: string;
+  replacement_unit_code: string | null;
+  program_code: string;
+  program_name: string;
+  year: number;
+  period: string;
+  student_count: number;
+  committed_grade_upload_count: number;
+};
+
+export type AdminContext = {
+  periods: AdminPeriod[];
+  offerings: AdminOffering[];
+  staff: Array<Pick<AdminUser, "user_id" | "staff_id" | "full_name" | "email" | "is_active" | "must_change_password" | "role_name" | "permission_level">>;
+  programs: Array<{ program_id: number; program_code: string; program_name: string }>;
+  enrollment_batches: Array<{
+    enrollment_upload_batch_id: number;
+    offering_id: number;
+    original_filename: string;
+    row_count: number;
+    accepted_count: number;
+    issue_count: number;
+    status: "committed" | "needs_review";
+    uploaded_at: string;
+    unit_code: string;
+    year: number;
+    period: string;
+    uploaded_by_name: string;
+  }>;
+};
+
+export type UploadIssue = { row: number; severity: "info" | "warning" | "error"; message: string };
+
+export type CsvInspection = { filename: string; headers: string[]; row_count: number };
+
+export type GradePreview = {
+  upload_batch_id: number;
+  filename: string;
+  row_count: number;
+  matched_count: number;
+  issues: Array<{ row: number | null; severity: "warning" | "error"; message: string }>;
+  status: "valid" | "needs_review";
+};
 
 class ApiError extends Error {
   status: number;
@@ -198,6 +254,45 @@ export function getAdminUsers(token: string) {
   return apiFetch<{ users: AdminUser[] }>("/admin/users", token);
 }
 
+export function getAdminContext(token: string) {
+  return apiFetch<AdminContext>("/admin/context", token);
+}
+
+export function createAdminPeriod(
+  token: string,
+  payload: { year: number; period: "S1" | "S2"; start_date: string | null; end_date: string | null; status: "planning" | "active" | "archived" },
+) {
+  return apiFetch<{ semester_id: number; status: string }>("/admin/periods", token, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateAdminPeriod(
+  token: string,
+  semesterId: number,
+  payload: { start_date: string | null; end_date: string | null; status: "planning" | "active" | "archived" },
+) {
+  return apiFetch<{ status: string }>(`/admin/periods/${semesterId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export type OfferingInput = {
+  semester_id: number;
+  program_id: number;
+  unit_code: string;
+  unit_name: string;
+  coordinator_id: number;
+  lecturer_ids: number[];
+  status: "draft" | "active" | "discontinued";
+  replacement_unit_code?: string | null;
+  replacement_unit_name?: string | null;
+};
+
+export function createAdminOffering(token: string, payload: OfferingInput) {
+  return apiFetch<{ offering_id: number; status: string }>("/admin/offerings", token, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateAdminOffering(token: string, offeringId: number, payload: Omit<OfferingInput, "semester_id" | "program_id">) {
+  return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
 export function createAdminUser(
   token: string,
   payload: { staff_id: string; full_name: string; email: string; role_name: "management" | "coordinator" | "lecturer" },
@@ -225,14 +320,54 @@ export function setAdminUserActive(token: string, userId: number, isActive: bool
   });
 }
 
-export function validateUpload(token: string, file: File) {
-  const body = new FormData();
-  body.append("file", file);
-  return apiFetch<UploadResult>("/uploads/validate", token, { method: "POST", body });
+export function setAdminUserRole(token: string, userId: number, roleName: "management" | "coordinator" | "lecturer") {
+  return apiFetch<{ status: string }>(`/admin/users/${userId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ role_name: roleName }),
+  });
 }
 
-export function generateSummary(token: string, offeringId: number) {
-  return apiFetch<ReportSummary>(`/reports/summary?offering_id=${offeringId}`, token, { method: "POST" });
+function uploadForm(token: string, path: string, fields: Record<string, string>, file: File) {
+  const body = new FormData();
+  Object.entries(fields).forEach(([name, value]) => body.append(name, value));
+  body.append("file", file);
+  return apiFetch(path, token, { method: "POST", body });
+}
+
+export function inspectEnrolmentUpload(token: string, file: File) {
+  return uploadForm(token, "/admin/enrolments/inspect", {}, file) as Promise<CsvInspection>;
+}
+
+export function previewEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File) {
+  return uploadForm(token, "/admin/enrolments/preview", {
+    offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+  }, file) as Promise<{ filename: string; row_count: number; accepted_count: number; issues: UploadIssue[]; status: "valid" | "needs_review" }>;
+}
+
+export function commitEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File) {
+  return uploadForm(token, "/admin/enrolments/commit", {
+    offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+  }, file) as Promise<{ status: string; batch_id: number; accepted_count: number }>;
+}
+
+export function inspectGradeUpload(token: string, offeringId: number, file: File) {
+  return uploadForm(token, "/grade-uploads/inspect", { offering_id: String(offeringId) }, file) as Promise<CsvInspection>;
+}
+
+export function previewGradeUpload(
+  token: string,
+  offeringId: number,
+  studentCodeColumn: string,
+  assessmentColumns: Array<{ assessment_id: number; csv_column: string; max_mark: number }>,
+  file: File,
+) {
+  return uploadForm(token, "/grade-uploads/preview", {
+    offering_id: String(offeringId), student_code_column: studentCodeColumn, assessment_columns: JSON.stringify(assessmentColumns),
+  }, file) as Promise<GradePreview>;
+}
+
+export function commitGradeUpload(token: string, uploadBatchId: number) {
+  return apiFetch<{ status: string; grades_saved: number; attainment_records: number }>(`/grade-uploads/${uploadBatchId}/commit`, token, { method: "POST" });
 }
 
 export function isForbidden(error: unknown) {
@@ -292,9 +427,4 @@ export function roleLabel(roleName: string) {
   if (roleName === "lecturer") return "Lecturer";
   if (roleName === "management") return "Management";
   return roleName;
-}
-
-export function getSelectedUnit() {
-  const raw = sessionStorage.getItem("mcs07.selectedUnit");
-  return raw ? JSON.parse(raw) : null;
 }

@@ -3,10 +3,11 @@ import csv
 import io
 import json
 import re
+from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 
@@ -26,6 +27,7 @@ from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
 from app.seed import seed_demo_data
 from app.services.calculation import split_weight
+from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
 
 
@@ -65,8 +67,9 @@ class AdminUserCreate(BaseModel):
     role_name: str
 
 
-class AdminUserStatusUpdate(BaseModel):
-    is_active: bool
+class AdminUserUpdate(BaseModel):
+    is_active: bool | None = None
+    role_name: str | None = None
 
 
 class AdminUserBulkCreate(BaseModel):
@@ -80,6 +83,40 @@ class MappingUpdate(BaseModel):
 
 class HandbookImportConfirmation(BaseModel):
     handbook_import_id: int
+
+
+class AdminSemesterCreate(BaseModel):
+    year: int
+    period: str
+    start_date: date | None = None
+    end_date: date | None = None
+    status: str = "planning"
+
+
+class AdminSemesterUpdate(BaseModel):
+    start_date: date | None = None
+    end_date: date | None = None
+    status: str
+
+
+class AdminOfferingCreate(BaseModel):
+    semester_id: int
+    program_id: int
+    unit_code: str
+    unit_name: str
+    coordinator_id: int
+    lecturer_ids: list[int] = []
+    status: str = "draft"
+
+
+class AdminOfferingUpdate(BaseModel):
+    unit_code: str
+    unit_name: str
+    coordinator_id: int
+    lecturer_ids: list[int] = []
+    status: str
+    replacement_unit_code: str | None = None
+    replacement_unit_name: str | None = None
 
 
 @app.get("/api/health")
@@ -453,6 +490,18 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
         "student_count": fetch_one("SELECT COUNT(*) AS count FROM enrollment WHERE offering_id = %s", (offering_id,))["count"],
         "lo_count": len(los),
         "at_risk_count": sum(1 for item in los if item["pass_rate_pct"] < 70),
+        "student_at_risk_count": fetch_one(
+            """
+            SELECT COUNT(*) AS count FROM (
+                SELECT enrollment_id
+                FROM student_ulo_attainment
+                WHERE offering_id = %s
+                GROUP BY enrollment_id
+                HAVING AVG(attainment_pct) < 50
+            ) at_risk_students
+            """,
+            (offering_id,),
+        )["count"],
     }
     return {"offering": offering, "stats": stats, "learning_outcomes": los, "assessments": assessments, "report": report}
 
@@ -532,57 +581,6 @@ def assessments(user: Annotated[dict, Depends(require_offering_access())], offer
         (offering_id,),
     )
     return {"assessments": rows}
-
-
-@app.post("/api/uploads/validate")
-async def validate_upload(
-    user: Annotated[dict, Depends(require_offering_access())],
-    offering_id: int,
-    file: UploadFile = File(...),
-):
-    content = (await file.read()).decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(content))
-    rows = list(reader)
-    issues = []
-    for index, row in enumerate(rows, start=2):
-        mark_value = row.get("mark") or row.get("raw_mark") or row.get("score")
-        student_code = row.get("student_code") or row.get("student_id")
-        if not student_code:
-            issues.append({"row": index, "severity": "error", "message": "Missing student identifier"})
-        if mark_value:
-            try:
-                mark = float(mark_value)
-                if mark < 0:
-                    issues.append({"row": index, "severity": "error", "message": "Mark cannot be negative"})
-                if mark > 100:
-                    issues.append({"row": index, "severity": "warning", "message": "Mark exceeds 100 and needs review"})
-            except ValueError:
-                issues.append({"row": index, "severity": "error", "message": "Mark is not numeric"})
-    return {
-        "filename": file.filename,
-        "columns": reader.fieldnames or [],
-        "row_count": len(rows),
-        "issues": issues,
-        "status": "valid" if not any(item["severity"] == "error" for item in issues) else "needs_review",
-    }
-
-
-@app.post("/api/reports/summary")
-def generate_summary(
-    user: Annotated[dict, Depends(require_offering_access(20))],
-    offering_id: int = 1,
-):
-    dashboard_payload = dashboard(user=user, offering_id=offering_id)
-    weakest = min(dashboard_payload["learning_outcomes"], key=lambda item: item["pass_rate_pct"])
-    summary = (
-        f"{weakest['ulo_code']} is the main risk area with a pass rate of "
-        f"{weakest['pass_rate_pct']}%. Review assessment coverage and consider targeted support before final reporting."
-    )
-    return {
-        "provider": get_settings().llm_provider,
-        "summary": summary,
-        "note": "Mock summary for development. Replace provider with local LLM service later.",
-    }
 
 
 @app.get("/api/admin/users")
@@ -675,14 +673,845 @@ def create_admin_users(
 @app.patch("/api/admin/users/{user_id}")
 def update_admin_user_status(
     user_id: int,
-    payload: AdminUserStatusUpdate,
+    payload: AdminUserUpdate,
     user: Annotated[dict, Depends(require_permission(30))],
 ):
-    if user_id == user["user_id"] and not payload.is_active:
+    if payload.is_active is None and payload.role_name is None:
+        raise HTTPException(status_code=422, detail="Provide an account status or role change")
+    if user_id == user["user_id"] and payload.is_active is False:
         raise HTTPException(status_code=409, detail="You cannot deactivate your own account")
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE app_user SET is_active = %s WHERE user_id = %s RETURNING user_id", (payload.is_active, user_id))
+            cur.execute("SELECT role_id FROM app_user WHERE user_id = %s FOR UPDATE", (user_id,))
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail="Staff account not found")
+            updates: list[str] = []
+            values: list = []
+            if payload.is_active is not None:
+                updates.append("is_active = %s")
+                values.append(payload.is_active)
+            if payload.role_name is not None:
+                role_name = payload.role_name.strip().lower()
+                cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
+                role = cur.fetchone()
+                if not role:
+                    raise HTTPException(status_code=422, detail="Role must be management, coordinator, or lecturer")
+                if user_id == user["user_id"] and role_name != "management":
+                    raise HTTPException(status_code=409, detail="You cannot remove your own Management role")
+                if role_name != "coordinator":
+                    cur.execute("SELECT 1 FROM unit_offering WHERE coordinator_id = %s LIMIT 1", (user_id,))
+                    if cur.fetchone():
+                        raise HTTPException(status_code=409, detail="Reassign this person's coordinator offerings before changing their role")
+                if role_name not in {"coordinator", "lecturer"}:
+                    cur.execute("SELECT 1 FROM offering_lecturer WHERE lecturer_id = %s LIMIT 1", (user_id,))
+                    if cur.fetchone():
+                        raise HTTPException(status_code=409, detail="Remove this person's lecturer assignments before changing their role")
+                updates.append("role_id = %s")
+                values.append(role["role_id"])
+            values.append(user_id)
+            cur.execute(f"UPDATE app_user SET {', '.join(updates)} WHERE user_id = %s", values)
     return {"status": "updated"}
+
+
+_SEMESTER_STATUSES = {"planning", "active", "archived"}
+_OFFERING_STATUSES = {"draft", "active", "discontinued"}
+_STUDENT_CODE_PATTERN = re.compile(r"^\d{8,9}$")
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+_MAX_UPLOAD_ROWS = 20_000
+_MAX_RAW_MARK = Decimal("9999.99")
+
+
+def _normalise_headers(raw_headers: list[str]) -> list[str]:
+    """Keep duplicate Moodle headings usable by giving later copies a suffix."""
+    seen: dict[str, int] = {}
+    headers: list[str] = []
+    for index, raw_header in enumerate(raw_headers, start=1):
+        base = raw_header.strip() or f"Column {index}"
+        seen[base] = seen.get(base, 0) + 1
+        headers.append(base if seen[base] == 1 else f"{base} [{seen[base]}]")
+    return headers
+
+
+async def _read_csv_upload(file: UploadFile) -> tuple[str, list[str], list[tuple[int, dict[str, str]]]]:
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=422, detail="Upload a Moodle CSV file")
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="CSV files must be 10 MB or smaller")
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=422, detail="CSV must use UTF-8 encoding") from exc
+
+    reader = csv.reader(io.StringIO(text, newline=""))
+    try:
+        raw_headers = next(reader)
+    except StopIteration as exc:
+        raise HTTPException(status_code=422, detail="CSV has no header row") from exc
+    headers = _normalise_headers(raw_headers)
+    if not any(header.strip() for header in raw_headers):
+        raise HTTPException(status_code=422, detail="CSV has no usable header row")
+
+    rows: list[tuple[int, dict[str, str]]] = []
+    for row_number, values in enumerate(reader, start=2):
+        if not any(cell.strip() for cell in values):
+            continue
+        if len(rows) >= _MAX_UPLOAD_ROWS:
+            raise HTTPException(status_code=413, detail="CSV has too many rows")
+        padded = values[: len(headers)] + [""] * max(0, len(headers) - len(values))
+        rows.append((row_number, dict(zip(headers, padded, strict=True))))
+    return file.filename, headers, rows
+
+
+def _require_columns(headers: list[str], *columns: str) -> None:
+    missing = [column for column in columns if column not in headers]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Selected CSV column was not found: {', '.join(missing)}")
+
+
+def _admin_context_payload() -> dict:
+    periods = fetch_all(
+        """
+        SELECT s.semester_id, s.year, s.period, s.start_date, s.end_date, s.status,
+               (SELECT COUNT(*) FROM unit_offering o WHERE o.semester_id = s.semester_id) AS offering_count,
+               (SELECT COUNT(*) FROM enrollment e JOIN unit_offering o ON o.offering_id = e.offering_id
+                WHERE o.semester_id = s.semester_id) AS student_count,
+               (SELECT COUNT(DISTINCT staff_id) FROM (
+                    SELECT o.coordinator_id AS staff_id FROM unit_offering o WHERE o.semester_id = s.semester_id
+                    UNION ALL
+                    SELECT ol.lecturer_id FROM offering_lecturer ol
+                    JOIN unit_offering o ON o.offering_id = ol.offering_id
+                    WHERE o.semester_id = s.semester_id
+                ) assignments) AS staff_count
+        FROM semester s
+        ORDER BY s.year DESC, s.period DESC
+        """
+    )
+    offerings_rows = fetch_all(
+        """
+        SELECT o.offering_id, o.semester_id, o.program_id, o.unit_id, o.coordinator_id, o.status,
+               o.handbook_url, o.last_scraped_at,
+               u.unit_code, u.unit_name, replacement.unit_code AS replacement_unit_code,
+               p.program_code, p.program_name, s.year, s.period,
+               coordinator.full_name AS coordinator_name,
+               ARRAY(SELECT ol.lecturer_id FROM offering_lecturer ol
+                     WHERE ol.offering_id = o.offering_id ORDER BY ol.lecturer_id) AS lecturer_ids,
+               (SELECT COUNT(*) FROM enrollment e WHERE e.offering_id = o.offering_id) AS student_count,
+               (SELECT COUNT(*) FROM grade_upload_batch b
+                WHERE b.offering_id = o.offering_id AND b.status = 'committed') AS committed_grade_upload_count
+        FROM unit_offering o
+        JOIN unit u ON u.unit_id = o.unit_id
+        JOIN program p ON p.program_id = o.program_id
+        JOIN semester s ON s.semester_id = o.semester_id
+        JOIN app_user coordinator ON coordinator.user_id = o.coordinator_id
+        LEFT JOIN unit replacement ON replacement.unit_id = o.replaced_by_unit_id
+        ORDER BY s.year DESC, s.period DESC, u.unit_code
+        """
+    )
+    staff = fetch_all(
+        """
+        SELECT u.user_id, u.staff_id, u.full_name, u.email, u.is_active, u.must_change_password,
+               r.role_name, r.permission_level
+        FROM app_user u
+        JOIN role r ON r.role_id = u.role_id
+        ORDER BY u.full_name
+        """
+    )
+    programs = fetch_all("SELECT program_id, program_code, program_name FROM program ORDER BY program_code")
+    enrollment_batches = fetch_all(
+        """
+        SELECT b.enrollment_upload_batch_id, b.offering_id, b.original_filename, b.row_count,
+               b.accepted_count, b.issue_count, b.status, b.uploaded_at,
+               u.unit_code, s.year, s.period, uploader.full_name AS uploaded_by_name
+        FROM enrollment_upload_batch b
+        JOIN unit_offering o ON o.offering_id = b.offering_id
+        JOIN unit u ON u.unit_id = o.unit_id
+        JOIN semester s ON s.semester_id = o.semester_id
+        JOIN app_user uploader ON uploader.user_id = b.uploaded_by
+        ORDER BY b.uploaded_at DESC
+        LIMIT 50
+        """
+    )
+    return {
+        "periods": periods,
+        "offerings": offerings_rows,
+        "staff": staff,
+        "programs": programs,
+        "enrollment_batches": enrollment_batches,
+    }
+
+
+def _validate_period(payload: AdminSemesterCreate | AdminSemesterUpdate) -> None:
+    if payload.status not in _SEMESTER_STATUSES:
+        raise HTTPException(status_code=422, detail="Status must be planning, active, or archived")
+    if payload.start_date and payload.end_date and payload.start_date > payload.end_date:
+        raise HTTPException(status_code=422, detail="Teaching end date must be after the start date")
+
+
+def _validate_offering_status(status: str) -> None:
+    if status not in _OFFERING_STATUSES:
+        raise HTTPException(status_code=422, detail="Offering status must be draft, active, or discontinued")
+
+
+def _validate_offering_staff(cur, coordinator_id: int, lecturer_ids: list[int]) -> list[int]:
+    staff_ids = [coordinator_id, *lecturer_ids]
+    rows = []
+    if staff_ids:
+        cur.execute(
+            """
+            SELECT u.user_id, u.is_active, r.role_name
+            FROM app_user u JOIN role r ON r.role_id = u.role_id
+            WHERE u.user_id = ANY(%s)
+            """,
+            (list(set(staff_ids)),),
+        )
+        rows = cur.fetchall()
+    staff_by_id = {row["user_id"]: row for row in rows}
+    coordinator = staff_by_id.get(coordinator_id)
+    if not coordinator or not coordinator["is_active"] or coordinator["role_name"] != "coordinator":
+        raise HTTPException(status_code=422, detail="Coordinator must be an active coordinator account")
+    cleaned_lecturers = list(dict.fromkeys(lecturer_id for lecturer_id in lecturer_ids if lecturer_id != coordinator_id))
+    for lecturer_id in cleaned_lecturers:
+        lecturer = staff_by_id.get(lecturer_id)
+        if not lecturer or not lecturer["is_active"] or lecturer["role_name"] not in {"coordinator", "lecturer"}:
+            raise HTTPException(status_code=422, detail="Lecturers must be active coordinator or lecturer accounts")
+    return cleaned_lecturers
+
+
+def _save_offering_staff(cur, offering_id: int, coordinator_id: int, lecturer_ids: list[int]) -> None:
+    cur.execute("UPDATE unit_offering SET coordinator_id = %s WHERE offering_id = %s", (coordinator_id, offering_id))
+    cur.execute("DELETE FROM offering_lecturer WHERE offering_id = %s", (offering_id,))
+    for lecturer_id in lecturer_ids:
+        cur.execute(
+            "INSERT INTO offering_lecturer (offering_id, lecturer_id) VALUES (%s, %s)",
+            (offering_id, lecturer_id),
+        )
+
+
+@app.get("/api/admin/context")
+def admin_context(user: Annotated[dict, Depends(require_permission(30))]):
+    return _admin_context_payload()
+
+
+@app.post("/api/admin/periods", status_code=201)
+def create_admin_period(
+    payload: AdminSemesterCreate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    _validate_period(payload)
+    period = payload.period.strip().upper()
+    if period not in {"S1", "S2"}:
+        raise HTTPException(status_code=422, detail="Period must be S1 or S2")
+    if not 2020 <= payload.year <= 2100:
+        raise HTTPException(status_code=422, detail="Year must be between 2020 and 2100")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM semester WHERE year = %s AND period = %s", (payload.year, period))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail=f"{payload.year} {period} already exists")
+            if payload.status == "active":
+                cur.execute("UPDATE semester SET status = 'archived' WHERE status = 'active'")
+            cur.execute(
+                """
+                INSERT INTO semester (year, period, start_date, end_date, status)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING semester_id
+                """,
+                (payload.year, period, payload.start_date, payload.end_date, payload.status),
+            )
+            semester_id = cur.fetchone()["semester_id"]
+    return {"semester_id": semester_id, "status": "created"}
+
+
+@app.patch("/api/admin/periods/{semester_id}")
+def update_admin_period(
+    semester_id: int,
+    payload: AdminSemesterUpdate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    _validate_period(payload)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Academic period not found")
+            if payload.status == "active":
+                cur.execute("UPDATE semester SET status = 'archived' WHERE status = 'active' AND semester_id <> %s", (semester_id,))
+            cur.execute(
+                """
+                UPDATE semester
+                SET start_date = %s, end_date = %s, status = %s
+                WHERE semester_id = %s
+                """,
+                (payload.start_date, payload.end_date, payload.status, semester_id),
+            )
+    return {"status": "updated"}
+
+
+@app.post("/api/admin/offerings", status_code=201)
+def create_admin_offering(
+    payload: AdminOfferingCreate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    _validate_offering_status(payload.status)
+    unit_code = payload.unit_code.strip().upper()
+    unit_name = payload.unit_name.strip()
+    if not re.fullmatch(r"[A-Z]{3}\d{4}", unit_code) or len(unit_name) < 3:
+        raise HTTPException(status_code=422, detail="Use a valid unit code and unit name")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            lecturer_ids = _validate_offering_staff(cur, payload.coordinator_id, payload.lecturer_ids)
+            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (payload.semester_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=422, detail="Academic period not found")
+            cur.execute("SELECT 1 FROM program WHERE program_id = %s", (payload.program_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=422, detail="Program not found")
+            cur.execute(
+                """
+                INSERT INTO unit (unit_code, unit_name)
+                VALUES (%s, %s)
+                ON CONFLICT (unit_code) DO UPDATE SET unit_name = EXCLUDED.unit_name
+                RETURNING unit_id
+                """,
+                (unit_code, unit_name),
+            )
+            unit_id = cur.fetchone()["unit_id"]
+            cur.execute(
+                """
+                SELECT 1 FROM unit_offering
+                WHERE unit_id = %s AND program_id = %s AND semester_id = %s
+                """,
+                (unit_id, payload.program_id, payload.semester_id),
+            )
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="This unit offering already exists for the selected period")
+            cur.execute(
+                """
+                INSERT INTO unit_offering (unit_id, program_id, semester_id, coordinator_id, status)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING offering_id
+                """,
+                (unit_id, payload.program_id, payload.semester_id, payload.coordinator_id, payload.status),
+            )
+            offering_id = cur.fetchone()["offering_id"]
+            _save_offering_staff(cur, offering_id, payload.coordinator_id, lecturer_ids)
+    return {"offering_id": offering_id, "status": "created"}
+
+
+@app.patch("/api/admin/offerings/{offering_id}")
+def update_admin_offering(
+    offering_id: int,
+    payload: AdminOfferingUpdate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    _validate_offering_status(payload.status)
+    unit_code = payload.unit_code.strip().upper()
+    unit_name = payload.unit_name.strip()
+    if not re.fullmatch(r"[A-Z]{3}\d{4}", unit_code) or len(unit_name) < 3:
+        raise HTTPException(status_code=422, detail="Use a valid unit code and unit name")
+    replacement_code = (payload.replacement_unit_code or "").strip().upper()
+    replacement_name = (payload.replacement_unit_name or "").strip()
+    if replacement_code and not re.fullmatch(r"[A-Z]{3}\d{4}", replacement_code):
+        raise HTTPException(status_code=422, detail="Replacement unit code must look like FIT3161")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            lecturer_ids = _validate_offering_staff(cur, payload.coordinator_id, payload.lecturer_ids)
+            cur.execute("SELECT unit_id FROM unit_offering WHERE offering_id = %s FOR UPDATE", (offering_id,))
+            offering = cur.fetchone()
+            if not offering:
+                raise HTTPException(status_code=404, detail="Unit offering not found")
+            cur.execute("SELECT unit_id FROM unit WHERE unit_code = %s AND unit_id <> %s", (unit_code, offering["unit_id"]))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Another unit already uses this unit code")
+            replacement_unit_id = None
+            if replacement_code:
+                cur.execute("SELECT unit_id FROM unit WHERE unit_code = %s", (replacement_code,))
+                replacement = cur.fetchone()
+                if replacement:
+                    replacement_unit_id = replacement["unit_id"]
+                elif replacement_name:
+                    cur.execute(
+                        "INSERT INTO unit (unit_code, unit_name) VALUES (%s, %s) RETURNING unit_id",
+                        (replacement_code, replacement_name),
+                    )
+                    replacement_unit_id = cur.fetchone()["unit_id"]
+                else:
+                    raise HTTPException(status_code=422, detail="Enter the replacement unit name when adding a new replacement code")
+            cur.execute(
+                "UPDATE unit SET unit_code = %s, unit_name = %s WHERE unit_id = %s",
+                (unit_code, unit_name, offering["unit_id"]),
+            )
+            cur.execute(
+                "UPDATE unit_offering SET status = %s, replaced_by_unit_id = %s WHERE offering_id = %s",
+                (payload.status, replacement_unit_id, offering_id),
+            )
+            _save_offering_staff(cur, offering_id, payload.coordinator_id, lecturer_ids)
+    return {"status": "updated"}
+
+
+def _validate_enrolment_rows(
+    rows: list[tuple[int, dict[str, str]]],
+    student_code_column: str,
+    full_name_column: str,
+) -> tuple[list[dict], int]:
+    issues: list[dict] = []
+    accepted_count = 0
+    seen_codes: set[str] = set()
+    for row_number, row in rows:
+        student_code = row[student_code_column].strip().replace(" ", "")
+        full_name = row[full_name_column].strip()
+        if not student_code:
+            issues.append({"row": row_number, "severity": "error", "message": "Missing student ID"})
+        elif not _STUDENT_CODE_PATTERN.fullmatch(student_code):
+            issues.append({"row": row_number, "severity": "error", "message": "Student ID must have 8 or 9 digits"})
+        elif student_code in seen_codes:
+            issues.append({"row": row_number, "severity": "error", "message": "Duplicate student ID in this file"})
+        elif len(full_name) < 3:
+            issues.append({"row": row_number, "severity": "error", "message": "Missing student name"})
+        elif len(full_name) > 150:
+            issues.append({"row": row_number, "severity": "error", "message": "Student name is too long"})
+        else:
+            accepted_count += 1
+        seen_codes.add(student_code)
+    return issues, accepted_count
+
+
+@app.post("/api/admin/enrolments/inspect")
+async def inspect_enrolment_upload(
+    user: Annotated[dict, Depends(require_permission(30))],
+    file: UploadFile = File(...),
+):
+    filename, headers, rows = await _read_csv_upload(file)
+    return {"filename": filename, "headers": headers, "row_count": len(rows)}
+
+
+@app.post("/api/admin/enrolments/preview")
+async def preview_enrolment_upload(
+    user: Annotated[dict, Depends(require_permission(30))],
+    offering_id: int = Form(...),
+    student_code_column: str = Form(...),
+    full_name_column: str = Form(...),
+    file: UploadFile = File(...),
+):
+    if not fetch_one("SELECT 1 FROM unit_offering WHERE offering_id = %s", (offering_id,)):
+        raise HTTPException(status_code=404, detail="Unit offering not found")
+    filename, headers, rows = await _read_csv_upload(file)
+    _require_columns(headers, student_code_column, full_name_column)
+    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column)
+    return {
+        "filename": filename,
+        "row_count": len(rows),
+        "accepted_count": accepted_count,
+        "issues": issues,
+        "status": "valid" if not issues else "needs_review",
+    }
+
+
+@app.post("/api/admin/enrolments/commit")
+async def commit_enrolment_upload(
+    user: Annotated[dict, Depends(require_permission(30))],
+    offering_id: int = Form(...),
+    student_code_column: str = Form(...),
+    full_name_column: str = Form(...),
+    file: UploadFile = File(...),
+):
+    filename, headers, rows = await _read_csv_upload(file)
+    _require_columns(headers, student_code_column, full_name_column)
+    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column)
+    if any(issue["severity"] == "error" for issue in issues):
+        raise HTTPException(status_code=422, detail="Fix all student-list errors before committing")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT program_id FROM unit_offering WHERE offering_id = %s FOR UPDATE",
+                (offering_id,),
+            )
+            offering = cur.fetchone()
+            if not offering:
+                raise HTTPException(status_code=404, detail="Unit offering not found")
+            for _, row in rows:
+                student_code = row[student_code_column].strip().replace(" ", "")
+                full_name = row[full_name_column].strip()
+                cur.execute(
+                    """
+                    INSERT INTO student (student_code, full_name, program_id)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (student_code) DO UPDATE SET full_name = EXCLUDED.full_name
+                    RETURNING student_id
+                    """,
+                    (student_code, full_name, offering["program_id"]),
+                )
+                student_id = cur.fetchone()["student_id"]
+                cur.execute(
+                    "INSERT INTO enrollment (student_id, offering_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (student_id, offering_id),
+                )
+            cur.execute(
+                """
+                INSERT INTO enrollment_upload_batch (
+                    offering_id, uploaded_by, original_filename, row_count, accepted_count, issue_count, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, 'committed')
+                RETURNING enrollment_upload_batch_id
+                """,
+                (offering_id, user["user_id"], filename, len(rows), accepted_count, len(issues)),
+            )
+            batch_id = cur.fetchone()["enrollment_upload_batch_id"]
+    return {"status": "committed", "batch_id": batch_id, "accepted_count": accepted_count}
+
+
+def _grade_column_mappings(raw_mapping: str, headers: list[str], assessment_by_id: dict[int, dict]) -> list[dict]:
+    try:
+        parsed = json.loads(raw_mapping)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Grade column mapping is invalid") from exc
+    if not isinstance(parsed, list) or not parsed:
+        raise HTTPException(status_code=422, detail="Map at least one assessment column")
+    mappings: list[dict] = []
+    used_columns: set[str] = set()
+    used_assessments: set[int] = set()
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=422, detail="Grade column mapping is invalid")
+        try:
+            assessment_id = int(item["assessment_id"])
+            csv_column = str(item["csv_column"])
+            max_mark = Decimal(str(item["max_mark"]))
+        except (KeyError, ValueError, ArithmeticError) as exc:
+            raise HTTPException(status_code=422, detail="Each grade column needs an assessment and maximum mark") from exc
+        if assessment_id not in assessment_by_id:
+            raise HTTPException(status_code=422, detail="Selected assessment does not belong to this offering")
+        if csv_column not in headers:
+            raise HTTPException(status_code=422, detail=f"Selected CSV column was not found: {csv_column}")
+        if max_mark <= 0 or max_mark > _MAX_RAW_MARK:
+            raise HTTPException(status_code=422, detail="Maximum mark must be between 0 and 9999.99")
+        if csv_column in used_columns or assessment_id in used_assessments:
+            raise HTTPException(status_code=422, detail="Each assessment and CSV column can only be mapped once")
+        used_columns.add(csv_column)
+        used_assessments.add(assessment_id)
+        mappings.append({"assessment_id": assessment_id, "csv_column": csv_column, "max_mark": max_mark})
+    return mappings
+
+
+def _load_offering_assessments(cur, offering_id: int) -> dict[int, dict]:
+    cur.execute(
+        """
+        SELECT assessment_id, assessment_name, weight
+        FROM assessment WHERE offering_id = %s ORDER BY assessment_order
+        """,
+        (offering_id,),
+    )
+    return {row["assessment_id"]: row for row in cur.fetchall()}
+
+
+@app.post("/api/grade-uploads/inspect")
+async def inspect_grade_upload(
+    user: Annotated[dict, Depends(require_permission(10))],
+    offering_id: int = Form(...),
+    file: UploadFile = File(...),
+):
+    ensure_offering_access(user, offering_id, min_permission_level=10)
+    filename, headers, rows = await _read_csv_upload(file)
+    return {"filename": filename, "headers": headers, "row_count": len(rows), "offering_id": offering_id}
+
+
+@app.post("/api/grade-uploads/preview")
+async def preview_grade_upload(
+    user: Annotated[dict, Depends(require_permission(10))],
+    offering_id: int = Form(...),
+    student_code_column: str = Form(...),
+    assessment_columns: str = Form(...),
+    file: UploadFile = File(...),
+):
+    ensure_offering_access(user, offering_id, min_permission_level=10)
+    filename, headers, rows = await _read_csv_upload(file)
+    _require_columns(headers, student_code_column)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            assessment_by_id = _load_offering_assessments(cur, offering_id)
+            if not assessment_by_id:
+                raise HTTPException(status_code=422, detail="Confirm the assessment setup before importing grades")
+            mappings = _grade_column_mappings(assessment_columns, headers, assessment_by_id)
+            cur.execute(
+                """
+                SELECT e.enrollment_id, s.student_id, s.student_code, s.full_name
+                FROM enrollment e JOIN student s ON s.student_id = e.student_id
+                WHERE e.offering_id = %s
+                """,
+                (offering_id,),
+            )
+            enrolled_by_code = {row["student_code"]: row for row in cur.fetchall()}
+            cur.execute(
+                """
+                INSERT INTO grade_upload_batch (offering_id, uploaded_by, original_filename, status)
+                VALUES (%s, %s, %s, 'draft')
+                RETURNING upload_batch_id
+                """,
+                (offering_id, user["user_id"], filename),
+            )
+            batch_id = cur.fetchone()["upload_batch_id"]
+            cur.execute(
+                """
+                INSERT INTO grade_upload_column_mapping (upload_batch_id, csv_column_name, system_field)
+                VALUES (%s, %s, 'student_code')
+                """,
+                (batch_id, student_code_column),
+            )
+            for mapping in mappings:
+                cur.execute(
+                    """
+                    INSERT INTO grade_upload_column_mapping (
+                        upload_batch_id, csv_column_name, system_field, assessment_id, max_mark
+                    ) VALUES (%s, %s, 'raw_mark', %s, %s)
+                    """,
+                    (batch_id, mapping["csv_column"], mapping["assessment_id"], mapping["max_mark"]),
+                )
+
+            issues: list[dict] = []
+            seen_codes: set[str] = set()
+            matched_count = 0
+            for row_number, row in rows:
+                student_code = row[student_code_column].strip().replace(" ", "")
+                row_issues: list[tuple[str, str, str]] = []
+                cells: list[tuple[int, Decimal, Decimal]] = []
+                if not student_code:
+                    row_issues.append(("missing_student_id", "error", "Missing student ID"))
+                elif student_code in seen_codes:
+                    row_issues.append(("duplicate_student_id", "error", "Duplicate student ID in this file"))
+                elif student_code not in enrolled_by_code:
+                    row_issues.append(("unmatched_student", "error", "Student ID is not enrolled in this offering"))
+                else:
+                    for mapping in mappings:
+                        try:
+                            mark = parse_mark(row[mapping["csv_column"]])
+                        except ValueError:
+                            row_issues.append(
+                                ("invalid_mark", "error", f"{mapping['csv_column']} is not a numeric mark")
+                            )
+                            continue
+                        if mark is None:
+                            continue
+                        if mark > _MAX_RAW_MARK:
+                            row_issues.append(
+                                ("mark_out_of_range", "error", f"{mapping['csv_column']} is larger than the supported mark range")
+                            )
+                            continue
+                        try:
+                            weighted_score(mark, mapping["max_mark"], assessment_by_id[mapping["assessment_id"]]["weight"])
+                        except ValueError:
+                            row_issues.append(
+                                ("mark_out_of_range", "error", f"{mapping['csv_column']} must be between 0 and {mapping['max_mark']}")
+                            )
+                            continue
+                        cells.append((mapping["assessment_id"], mark, mapping["max_mark"]))
+                    if not cells and not row_issues:
+                        row_issues.append(("no_marks", "warning", "No grade values were found for the mapped assessment columns"))
+                if student_code:
+                    seen_codes.add(student_code)
+                severity = "error" if any(issue[1] == "error" for issue in row_issues) else "warning" if row_issues else "valid"
+                matched_student_id = enrolled_by_code.get(student_code, {}).get("student_id")
+                cur.execute(
+                    """
+                    INSERT INTO grade_upload_row (upload_batch_id, row_number, student_code_raw, matched_student_id, status)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING upload_row_id
+                    """,
+                    (batch_id, row_number, student_code or None, matched_student_id, severity),
+                )
+                upload_row_id = cur.fetchone()["upload_row_id"]
+                for issue_type, issue_severity, message in row_issues:
+                    cur.execute(
+                        """
+                        INSERT INTO grade_upload_issue (upload_batch_id, upload_row_id, issue_type, severity, message)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (batch_id, upload_row_id, issue_type, issue_severity, message),
+                    )
+                    issues.append({"row": row_number, "severity": issue_severity, "message": message})
+                if severity != "error":
+                    for assessment_id, raw_mark, max_mark in cells:
+                        cur.execute(
+                            """
+                            INSERT INTO grade_upload_cell (upload_row_id, assessment_id, raw_mark, max_mark)
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (upload_row_id, assessment_id, raw_mark, max_mark),
+                        )
+                    if student_code in enrolled_by_code:
+                        matched_count += 1
+
+            for student_code, enrolled in enrolled_by_code.items():
+                if student_code not in seen_codes:
+                    message = f"Enrolled student {student_code} is absent from this CSV"
+                    cur.execute(
+                        """
+                        INSERT INTO grade_upload_issue (upload_batch_id, issue_type, severity, message)
+                        VALUES (%s, 'missing_enrolled_student', 'warning', %s)
+                        """,
+                        (batch_id, message),
+                    )
+                    issues.append({"row": None, "severity": "warning", "message": message})
+            has_errors = any(issue["severity"] == "error" for issue in issues)
+            cur.execute(
+                "UPDATE grade_upload_batch SET status = %s WHERE upload_batch_id = %s",
+                ("rejected" if has_errors else "validated", batch_id),
+            )
+    return {
+        "upload_batch_id": batch_id,
+        "filename": filename,
+        "row_count": len(rows),
+        "matched_count": matched_count,
+        "issues": issues,
+        "status": "needs_review" if has_errors else "valid",
+    }
+
+
+def _recalculate_attainment(cur, offering_id: int) -> int:
+    cur.execute("DELETE FROM student_ulo_attainment WHERE offering_id = %s", (offering_id,))
+    cur.execute("DELETE FROM cohort_ulo_attainment WHERE offering_id = %s", (offering_id,))
+    cur.execute(
+        """
+        WITH calculated AS (
+            SELECT
+                e.enrollment_id,
+                au.offering_ulo_id,
+                SUM(au.allocated_weight) AS total_available_weight,
+                SUM(COALESCE((sg.raw_mark / NULLIF(sg.max_mark, 0)) * au.allocated_weight, 0)) AS achieved_weight
+            FROM enrollment e
+            JOIN assessment_ulo au ON au.offering_id = e.offering_id
+            LEFT JOIN student_grade sg ON sg.enrollment_id = e.enrollment_id
+                AND sg.assessment_id = au.assessment_id
+            WHERE e.offering_id = %s AND au.allocated_weight > 0
+            GROUP BY e.enrollment_id, au.offering_ulo_id
+        )
+        INSERT INTO student_ulo_attainment (
+            offering_id, enrollment_id, offering_ulo_id, total_available_weight,
+            achieved_weight, attainment_pct, is_achieved, calculated_at
+        )
+        SELECT %s, enrollment_id, offering_ulo_id, total_available_weight, achieved_weight,
+               ROUND((achieved_weight / NULLIF(total_available_weight, 0)) * 100, 2),
+               (achieved_weight / NULLIF(total_available_weight, 0)) * 100 >= 50,
+               CURRENT_TIMESTAMP
+        FROM calculated
+        WHERE total_available_weight > 0
+        """,
+        (offering_id, offering_id),
+    )
+    attainment_count = cur.rowcount
+    cur.execute(
+        """
+        SELECT COUNT(*) AS enrolled_count FROM enrollment WHERE offering_id = %s
+        """,
+        (offering_id,),
+    )
+    enrolled_count = cur.fetchone()["enrolled_count"]
+    cur.execute(
+        """
+        INSERT INTO cohort_ulo_attainment (
+            offering_id, offering_ulo_id, enrolled_count, achieved_count,
+            average_attainment_pct, pass_rate_pct, calculated_at
+        )
+        SELECT
+            %s,
+            ou.offering_ulo_id,
+            %s,
+            COUNT(sua.attainment_id) FILTER (WHERE sua.is_achieved),
+            COALESCE(ROUND(AVG(sua.attainment_pct), 2), 0),
+            CASE WHEN %s = 0 THEN 0
+                 ELSE ROUND((COUNT(sua.attainment_id) FILTER (WHERE sua.is_achieved))::numeric / %s * 100, 2)
+            END,
+            CURRENT_TIMESTAMP
+        FROM offering_ulo ou
+        LEFT JOIN student_ulo_attainment sua ON sua.offering_ulo_id = ou.offering_ulo_id
+            AND sua.offering_id = %s
+        WHERE ou.offering_id = %s
+        GROUP BY ou.offering_ulo_id
+        """,
+        (offering_id, enrolled_count, enrolled_count, enrolled_count, offering_id, offering_id),
+    )
+    return attainment_count
+
+
+@app.post("/api/grade-uploads/{upload_batch_id}/commit")
+def commit_grade_upload(
+    upload_batch_id: int,
+    user: Annotated[dict, Depends(require_permission(10))],
+):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT upload_batch_id, offering_id, status
+                FROM grade_upload_batch WHERE upload_batch_id = %s FOR UPDATE
+                """,
+                (upload_batch_id,),
+            )
+            batch = cur.fetchone()
+            if not batch:
+                raise HTTPException(status_code=404, detail="Grade upload preview not found")
+            ensure_offering_access(user, batch["offering_id"], min_permission_level=10)
+            if batch["status"] != "validated":
+                raise HTTPException(status_code=409, detail="This grade upload has errors and cannot be committed")
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count FROM grade_upload_issue
+                WHERE upload_batch_id = %s AND severity = 'error'
+                """,
+                (upload_batch_id,),
+            )
+            if cur.fetchone()["count"]:
+                raise HTTPException(status_code=409, detail="Resolve upload errors before committing")
+            cur.execute(
+                """
+                SELECT e.enrollment_id, c.assessment_id, c.raw_mark, c.max_mark, a.weight, r.upload_row_id
+                FROM grade_upload_cell c
+                JOIN grade_upload_row r ON r.upload_row_id = c.upload_row_id
+                JOIN enrollment e ON e.student_id = r.matched_student_id AND e.offering_id = %s
+                JOIN assessment a ON a.assessment_id = c.assessment_id AND a.offering_id = %s
+                WHERE r.upload_batch_id = %s AND r.status IN ('valid', 'warning') AND c.status = 'valid'
+                """,
+                (batch["offering_id"], batch["offering_id"], upload_batch_id),
+            )
+            grade_rows = cur.fetchall()
+            for grade in grade_rows:
+                score = weighted_score(grade["raw_mark"], grade["max_mark"], grade["weight"])
+                cur.execute(
+                    """
+                    INSERT INTO student_grade (
+                        offering_id, enrollment_id, assessment_id, upload_batch_id, source_row_id,
+                        raw_mark, max_mark, weighted_score
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (enrollment_id, assessment_id) DO UPDATE SET
+                        upload_batch_id = EXCLUDED.upload_batch_id,
+                        source_row_id = EXCLUDED.source_row_id,
+                        raw_mark = EXCLUDED.raw_mark,
+                        max_mark = EXCLUDED.max_mark,
+                        weighted_score = EXCLUDED.weighted_score,
+                        uploaded_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        batch["offering_id"], grade["enrollment_id"], grade["assessment_id"], upload_batch_id,
+                        grade["upload_row_id"], grade["raw_mark"], grade["max_mark"], score,
+                    ),
+                )
+            cur.execute(
+                """
+                UPDATE grade_upload_row SET status = 'committed'
+                WHERE upload_batch_id = %s AND status IN ('valid', 'warning')
+                """,
+                (upload_batch_id,),
+            )
+            attainment_count = _recalculate_attainment(cur, batch["offering_id"])
+            cur.execute(
+                """
+                UPDATE grade_upload_batch
+                SET status = 'committed', committed_at = CURRENT_TIMESTAMP
+                WHERE upload_batch_id = %s
+                """,
+                (upload_batch_id,),
+            )
+    return {
+        "status": "committed",
+        "grades_saved": len(grade_rows),
+        "attainment_records": attainment_count,
+    }

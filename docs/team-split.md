@@ -8,9 +8,9 @@ Owns:
 
 - React app in `frontend/`
 - Login flow and role-aware navigation
-- Dashboard, mapping, assessments, CSV upload, admin, report views
+- Dashboard, mapping, assessments, grade import, and administration views
 - API client functions and loading/error states
-- UI integration with seeded/demo data
+- UI integration with database-backed development data
 
 Works against:
 
@@ -22,9 +22,10 @@ Works against:
 - `POST /api/offerings/{offering_id}/handbook-import`
 - `GET /api/offerings/{offering_id}/handbook-import`
 - `POST /api/offerings/{offering_id}/handbook-import/confirm`
-- `POST /api/uploads/validate`
-- `POST /api/reports/summary`
-- `GET /api/admin/users`
+- `/api/grade-uploads/*`
+- `/api/admin/context`, `/api/admin/periods`, and `/api/admin/offerings`
+- `/api/admin/enrolments/*`
+- `/api/admin/users`
 
 ## Backend
 
@@ -34,9 +35,8 @@ Owns:
 - Auth and role checks
 - API endpoint behaviour
 - Handbook scraper integration
-- CSV validation and reconciliation
-- LO calculation service
-- Report summary endpoint
+- CSV inspection, validation, reconciliation, and commit rules
+- ULO calculation service
 - PDF export endpoint later
 
 ## Database
@@ -57,7 +57,7 @@ Do not let frontend and database depend on each other directly.
 Frontend -> Backend API -> PostgreSQL
 ```
 
-The future local LLM should also sit behind the backend:
+The later local LLM should also sit behind the backend:
 
 ```text
 Frontend -> Backend API -> Local LLM

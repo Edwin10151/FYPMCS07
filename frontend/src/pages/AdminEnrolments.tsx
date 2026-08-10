@@ -1,417 +1,71 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { commitEnrolmentUpload, errorMessage, inspectEnrolmentUpload, previewEnrolmentUpload, type CsvInspection, type UploadIssue } from "../api";
 import Sidebar from "../components/Sidebar";
 import AdminNav from "../components/AdminNav";
-import { useSession } from "../useSession";
-import { findColumn, formatFileSize, parseCsv } from "../csv";
-import { ACADEMIC_PERIODS, ENROLMENT_BATCHES, UNIT_OFFERINGS, type EnrolmentBatch } from "../mockData";
-import { Link } from "react-router-dom";
+import { formatFileSize } from "../csv";
+import { useAdminContext } from "../useAdminContext";
 
-type RowIssue = "" | "Missing student ID" | "Invalid ID format" | "Missing name" | "Duplicate in file";
-
-type StagedRow = { studentId: string; name: string; issue: RowIssue };
-
-type Staged = {
-  fileName: string;
-  fileSize: number;
-  headers: string[];
-  rows: StagedRow[];
-  missingColumns: string[];
-};
-
-// Monash student IDs are 8 digits; anything else needs a human to look at it.
-const ID_PATTERN = /^\d{8,9}$/;
-
-function validate(rows: StagedRow[]) {
-  const seen = new Set<string>();
-  return rows.map((row) => {
-    let issue: RowIssue = "";
-    if (!row.studentId) issue = "Missing student ID";
-    else if (!ID_PATTERN.test(row.studentId)) issue = "Invalid ID format";
-    else if (seen.has(row.studentId)) issue = "Duplicate in file";
-    else if (!row.name) issue = "Missing name";
-    if (row.studentId) seen.add(row.studentId);
-    return { ...row, issue };
-  });
+function guessHeader(headers: string[], candidates: string[]) {
+  const normalised = headers.map((header) => header.toLowerCase().replace(/[^a-z0-9]+/g, "_"));
+  const index = normalised.findIndex((header) => candidates.includes(header));
+  return index >= 0 ? headers[index] : "";
 }
 
-let nextBatchNumber = 42;
-
 export default function AdminEnrolments() {
-  const session = useSession();
-  const [periodId, setPeriodId] = useState(ACADEMIC_PERIODS.find((p) => p.status === "planning")?.id ?? ACADEMIC_PERIODS[0].id);
-  const [unitCode, setUnitCode] = useState("");
-  const [staged, setStaged] = useState<Staged | null>(null);
-  const [batches, setBatches] = useState<EnrolmentBatch[]>(ENROLMENT_BATCHES);
-  const [filterPeriod, setFilterPeriod] = useState("all");
+  const { session, data, error, loading, reload } = useAdminContext();
+  const [offeringId, setOfferingId] = useState<number | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [inspection, setInspection] = useState<CsvInspection | null>(null);
+  const [studentColumn, setStudentColumn] = useState("");
+  const [nameColumn, setNameColumn] = useState("");
+  const [preview, setPreview] = useState<{ row_count: number; accepted_count: number; issues: UploadIssue[]; status: "valid" | "needs_review" } | null>(null);
   const [flash, setFlash] = useState("");
+  const [working, setWorking] = useState(false);
 
-  const periodUnits = useMemo(() => UNIT_OFFERINGS.filter((u) => u.periodId === periodId && u.status !== "discontinued"), [periodId]);
-  const visibleBatches = batches.filter((b) => filterPeriod === "all" || b.periodId === filterPeriod);
-
+  useEffect(() => {
+    if (!data || offeringId) return;
+    setOfferingId(data.offerings.find((offering) => offering.status !== "discontinued")?.offering_id ?? null);
+  }, [data, offeringId]);
   if (!session) return null;
-
-  const period = ACADEMIC_PERIODS.find((p) => p.id === periodId);
-
-  const readFile = async (file: File) => {
-    const text = await file.text();
-    const { headers, rows } = parseCsv(text);
-
-    const idCol = findColumn(headers, ["student_id", "studentid", "id", "student_number"]);
-    const nameCol = findColumn(headers, ["name", "full_name", "student_name"]);
-    const firstCol = findColumn(headers, ["first_name", "given_name", "given_names"]);
-    const lastCol = findColumn(headers, ["last_name", "surname", "family_name"]);
-
-    const missingColumns: string[] = [];
-    if (idCol === -1) missingColumns.push("student_id");
-    if (nameCol === -1 && (firstCol === -1 || lastCol === -1)) missingColumns.push("name (or first_name + last_name)");
-
-    const parsed: StagedRow[] = rows.map((cells) => ({
-      studentId: idCol === -1 ? "" : (cells[idCol] ?? "").replace(/\s+/g, ""),
-      name:
-        nameCol !== -1
-          ? (cells[nameCol] ?? "").trim()
-          : [firstCol !== -1 ? cells[firstCol] : "", lastCol !== -1 ? cells[lastCol] : ""].filter(Boolean).join(" ").trim(),
-      issue: "",
-    }));
-
-    setStaged({ fileName: file.name, fileSize: file.size, headers, rows: validate(parsed), missingColumns });
+  const selectedOffering = data?.offerings.find((offering) => offering.offering_id === offeringId) ?? null;
+  const errorCount = preview?.issues.filter((issue) => issue.severity === "error").length ?? 0;
+  const warningCount = preview?.issues.filter((issue) => issue.severity === "warning").length ?? 0;
+  const chooseFile = async (selected: File) => {
+    setWorking(true); setFlash(""); setPreview(null);
+    try {
+      const result = await inspectEnrolmentUpload(session.access_token, selected);
+      setFile(selected); setInspection(result);
+      setStudentColumn(guessHeader(result.headers, ["student_id", "studentid", "id", "id_number", "student_number"]));
+      setNameColumn(guessHeader(result.headers, ["full_name", "student_name", "name"]));
+    } catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
+  };
+  const previewUpload = async () => {
+    if (!file || !offeringId || !studentColumn || !nameColumn) return;
+    setWorking(true); setFlash("");
+    try { setPreview(await previewEnrolmentUpload(session.access_token, offeringId, studentColumn, nameColumn, file)); }
+    catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
+  };
+  const commit = async () => {
+    if (!file || !offeringId || !studentColumn || !nameColumn) return;
+    setWorking(true); setFlash("");
+    try {
+      const result = await commitEnrolmentUpload(session.access_token, offeringId, studentColumn, nameColumn, file);
+      setFlash(`${result.accepted_count} students registered for ${selectedOffering?.unit_code}.`);
+      setFile(null); setInspection(null); setPreview(null); await reload();
+    } catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
   };
 
-  const clean = staged ? staged.rows.filter((r) => !r.issue) : [];
-  const problems = staged ? staged.rows.filter((r) => r.issue) : [];
-  const duplicates = problems.filter((r) => r.issue === "Duplicate in file").length;
-  const invalidIds = problems.filter((r) => r.issue === "Invalid ID format" || r.issue === "Missing student ID").length;
-  const missingNames = problems.filter((r) => r.issue === "Missing name").length;
-
-  const commit = () => {
-    if (!staged) return;
-    const batch: EnrolmentBatch = {
-      batchId: `B-${new Date().getFullYear()}-${String(nextBatchNumber++).padStart(4, "0")}`,
-      periodId,
-      unitCode: unitCode || "All units",
-      fileName: staged.fileName,
-      studentCount: clean.length,
-      issues: problems.length,
-      uploadedBy: session.user.full_name,
-      uploadedAt: new Date().toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-      status: problems.length > 0 ? "needs_review" : "committed",
-    };
-    setBatches((prev) => [batch, ...prev]);
-    setFlash(
-      `${clean.length} students registered into ${period?.label ?? periodId}${unitCode ? ` · ${unitCode}` : ""}` +
-        (problems.length ? ` — ${problems.length} rows skipped and flagged for review.` : ".")
-    );
-    setStaged(null);
-  };
-
-  return (
-    <div className="app">
-      <Sidebar user={session.user} />
-      <main className="main">
-        <div className="topbar">
-          <div className="crumbs">
-            <Link to="/units">Home</Link>
-            <span className="sep">›</span>
-            <Link to="/dashboard">{unitCode}</Link>
-            <span className="sep">›</span>
-            <Link to="/admin/setup">Semester setup</Link>
-            <span className="sep">›</span>
-            <strong>Student Enrolments</strong>
-          </div>
-          <div className="top-actions">
-            <button className="btn ghost">Download template</button>
-            <button className="btn">Batch history</button>
-          </div>
-        </div>
-
-        <div className="content">
-          <div className="unit-banner">
-            <div>
-              <h1 style={{ fontSize: 26 }}>Student Enrolments</h1>
-              <div className="sub">
-                Faculty of IT &nbsp;·&nbsp; Upload the student list (ID + name) for each teaching period. Grade uploads can only
-                match students who are registered here.
-              </div>
-            </div>
-          </div>
-
-          <AdminNav counts={{ "/admin/enrolments": batches.length }} />
-
-          {flash && (
-            <div className="adm-flash">
-              ✓ {flash}
-              <span className="x" onClick={() => setFlash("")}>
-                ✕
-              </span>
-            </div>
-          )}
-
-          {/* Who is registered, per period */}
-          <div className="adm-stats">
-            {ACADEMIC_PERIODS.slice(0, 4).map((p) => (
-              <div key={p.id} className={`adm-stat${p.status === "active" ? " ok" : p.status === "planning" ? " warn" : ""}`}>
-                <div className="lbl">
-                  <span className="b" />
-                  {p.label} registered
-                </div>
-                <div className="v">
-                  {p.studentCount.toLocaleString()} <span className="u">students</span>
-                </div>
-                <div className="sub">
-                  {p.unitCount} units ·{" "}
-                  {p.status === "active" ? "currently teaching" : p.status === "planning" ? "awaiting enrolment upload" : "archived"}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Upload */}
-          <div className="adm-card">
-            <div className="adm-card-head">
-              <div>
-                <h4>Upload a student list</h4>
-                <div className="h-sub">
-                  CSV with a <code>student_id</code> column plus either <code>name</code> or <code>first_name</code> +{" "}
-                  <code>last_name</code>. Rows are validated in the browser before anything is committed.
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <select className="adm-select" value={periodId} onChange={(e) => { setPeriodId(e.target.value); setUnitCode(""); }}>
-                  {ACADEMIC_PERIODS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <select className="adm-select" value={unitCode} onChange={(e) => setUnitCode(e.target.value)}>
-                  <option value="">All units in period</option>
-                  {periodUnits.map((u) => (
-                    <option key={u.rowKey} value={u.code}>
-                      {u.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {!staged ? (
-              <div style={{ padding: 20 }}>
-                <label className="adm-drop">
-                  <div className="icn">CSV</div>
-                  <div className="t">Choose a student list for {period?.label ?? periodId}</div>
-                  <div className="s">
-                    e.g. <code>FIT2004_S1-2026_enrolments.csv</code> — student ID and name per row.
-                    <br />
-                    Existing students are matched by ID; new IDs are created.
-                  </div>
-                  <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
-                </label>
-              </div>
-            ) : (
-              <>
-                <div className="adm-file-card">
-                  <div className="icn">CSV</div>
-                  <div>
-                    <div className="nm">{staged.fileName}</div>
-                    <div className="sub">
-                      {staged.rows.length} rows · {staged.headers.length} columns · {formatFileSize(staged.fileSize)} ·{" "}
-                      {period?.label ?? periodId}
-                      {unitCode ? ` · ${unitCode}` : " · all units"}
-                    </div>
-                  </div>
-                  <button className="btn" onClick={() => setStaged(null)}>
-                    Replace file
-                  </button>
-                </div>
-
-                {staged.missingColumns.length > 0 && (
-                  <div style={{ padding: "16px 20px 0" }}>
-                    <div className="banner warn">
-                      <div className="ico">!</div>
-                      <div className="body">
-                        <strong>Missing required column{staged.missingColumns.length > 1 ? "s" : ""}</strong>
-                        Could not find {staged.missingColumns.join(" and ")} in the header row. Detected columns:{" "}
-                        {staged.headers.join(", ") || "none"}.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ padding: "16px 20px" }}>
-                  <div className="adm-stats" style={{ marginBottom: 16 }}>
-                    <div className="adm-stat ok">
-                      <div className="lbl">
-                        <span className="b" />
-                        Ready to register
-                      </div>
-                      <div className="v">
-                        {clean.length} <span className="u">/ {staged.rows.length}</span>
-                      </div>
-                      <div className="sub">Valid ID and name</div>
-                    </div>
-                    <div className="adm-stat risk">
-                      <div className="lbl">
-                        <span className="b" />
-                        Invalid IDs
-                      </div>
-                      <div className="v">{invalidIds}</div>
-                      <div className="sub">Blank or not an 8-digit student ID</div>
-                    </div>
-                    <div className="adm-stat warn">
-                      <div className="lbl">
-                        <span className="b" />
-                        Duplicates in file
-                      </div>
-                      <div className="v">{duplicates}</div>
-                      <div className="sub">Same student listed more than once</div>
-                    </div>
-                    <div className="adm-stat warn">
-                      <div className="lbl">
-                        <span className="b" />
-                        Missing names
-                      </div>
-                      <div className="v">{missingNames}</div>
-                      <div className="sub">ID present but no student name</div>
-                    </div>
-                  </div>
-
-                  <table className="adm-tbl" style={{ border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden" }}>
-                    <thead>
-                      <tr>
-                        <th style={{ width: 60 }}>Row</th>
-                        <th>Student ID</th>
-                        <th>Name</th>
-                        <th style={{ textAlign: "right" }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Problem rows first — those are what staff need to act on. */}
-                      {[...staged.rows.map((r, i) => ({ r, i })).filter((x) => x.r.issue), ...staged.rows.map((r, i) => ({ r, i })).filter((x) => !x.r.issue)]
-                        .slice(0, 10)
-                        .map(({ r, i }) => (
-                          <tr key={i} className={r.issue ? (r.issue === "Duplicate in file" || r.issue === "Missing name" ? "row-warn" : "row-err") : ""}>
-                            <td className="mono">{i + 2}</td>
-                            <td className="mono">{r.studentId || "—"}</td>
-                            <td>{r.name || <span className="muted">—</span>}</td>
-                            <td style={{ textAlign: "right" }}>
-                              {r.issue ? (
-                                <span className={`adm-row-status ${r.issue === "Duplicate in file" || r.issue === "Missing name" ? "warn" : "err"}`}>
-                                  {r.issue}
-                                </span>
-                              ) : (
-                                <span className="adm-row-status ok">✓ Ready</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      {staged.rows.length > 10 && (
-                        <tr>
-                          <td colSpan={4} className="adm-empty" style={{ padding: "14px 20px" }}>
-                            Showing 10 of {staged.rows.length} rows — problem rows listed first.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </div>
-
-          {staged && (
-            <div className="adm-commit">
-              <div>
-                <div className="hd">
-                  Register {clean.length} student{clean.length === 1 ? "" : "s"} into {period?.label ?? periodId}
-                </div>
-                <div className="sb">
-                  {unitCode ? `${unitCode} · ` : "All units in period · "}
-                  {problems.length
-                    ? `${problems.length} rows will be skipped and kept in the batch record for review`
-                    : "No issues found in this file"}
-                </div>
-              </div>
-              <div className="actions">
-                <button className="btn" onClick={() => setStaged(null)}>
-                  Discard
-                </button>
-                <button className="btn primary" disabled={clean.length === 0} onClick={commit}>
-                  Commit enrolment batch
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Batch history */}
-          <div className="adm-card">
-            <div className="adm-card-head">
-              <div>
-                <h4>Enrolment batches</h4>
-                <div className="h-sub">Every upload is kept as a batch so you can see who was registered, when, and by whom.</div>
-              </div>
-              <select className="adm-select" value={filterPeriod} onChange={(e) => setFilterPeriod(e.target.value)}>
-                <option value="all">All periods</option>
-                {ACADEMIC_PERIODS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <table className="adm-tbl">
-              <thead>
-                <tr>
-                  <th>Batch</th>
-                  <th>Period</th>
-                  <th>Unit</th>
-                  <th>File</th>
-                  <th className="num">Students</th>
-                  <th className="num">Issues</th>
-                  <th>Uploaded</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleBatches.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="adm-empty">
-                      No enrolment batches for this period yet.
-                    </td>
-                  </tr>
-                )}
-                {visibleBatches.map((b) => (
-                  <tr key={b.batchId}>
-                    <td className="mono">{b.batchId}</td>
-                    <td>
-                      <span className="adm-code plain">{ACADEMIC_PERIODS.find((p) => p.id === b.periodId)?.label ?? b.periodId}</span>
-                    </td>
-                    <td>{b.unitCode === "All units" ? <span className="muted">All units</span> : <span className="adm-code">{b.unitCode}</span>}</td>
-                    <td className="mono" style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {b.fileName}
-                    </td>
-                    <td className="num">{b.studentCount}</td>
-                    <td className="num" style={{ color: b.issues ? "var(--warn)" : "var(--ink-3)" }}>
-                      {b.issues || "—"}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 12 }}>{b.uploadedBy}</div>
-                      <div className="mono" style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2 }}>
-                        {b.uploadedAt}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`adm-status ${b.status}`}>
-                        <span className="d" />
-                        {b.status === "committed" ? "Committed" : "Needs review"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </main>
+  return <div className="app"><Sidebar user={session.user} /><main className="main">
+    <div className="topbar"><div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester setup</Link><span className="sep">›</span><strong>Student enrolments</strong></div></div>
+    <div className="content"><div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Student enrolments</h1><div className="sub">Upload student ID and name for one unit offering. Grade imports only match against the enrolments stored here.</div></div></div>
+      <AdminNav counts={{ "/admin/enrolments": data?.enrollment_batches.length ?? 0 }} />
+      {(flash || error || loading) && <div className="adm-flash">{flash || error || "Loading enrolment records..."}<span className="x" onClick={() => setFlash("")}>✕</span></div>}
+      <div className="adm-stats"><div className="adm-stat navy"><div className="lbl"><span className="b" />Offerings</div><div className="v">{data?.offerings.filter((offering) => offering.status !== "discontinued").length ?? 0}</div><div className="sub">Available for student lists</div></div><div className="adm-stat ok"><div className="lbl"><span className="b" />Registered students</div><div className="v">{data?.offerings.reduce((sum, offering) => sum + offering.student_count, 0) ?? 0}</div><div className="sub">Across all stored offerings</div></div><div className="adm-stat"><div className="lbl"><span className="b" />Committed files</div><div className="v">{data?.enrollment_batches.length ?? 0}</div><div className="sub">Retained as import history</div></div><div className="adm-stat warn"><div className="lbl"><span className="b" />Selected offering</div><div className="v">{selectedOffering?.student_count ?? 0}</div><div className="sub">{selectedOffering?.unit_code ?? "Choose an offering"}</div></div></div>
+      <div className="adm-card"><div className="adm-card-head"><div><h4>Upload student list</h4><div className="h-sub">Use a UTF-8 CSV. First inspect the headers, map Student ID and full name, then validate before committing.</div></div><select className="adm-select" value={offeringId ?? ""} onChange={(event) => { setOfferingId(Number(event.target.value)); setFile(null); setInspection(null); setPreview(null); }}>{data?.offerings.filter((offering) => offering.status !== "discontinued").map((offering) => <option key={offering.offering_id} value={offering.offering_id}>{offering.year} {offering.period} · {offering.unit_code}</option>)}</select></div>
+        {!file ? <div style={{ padding: 20 }}><label className="adm-drop"><div className="icn">CSV</div><div className="t">Choose a student list for {selectedOffering?.unit_code ?? "the selected offering"}</div><div className="s">The file is checked by the server. Required data: one student ID column and one full-name column.</div><input type="file" accept=".csv,text/csv" onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} /></label></div> : <><div className="adm-file-card"><div className="icn">CSV</div><div><div className="nm">{file.name}</div><div className="sub">{inspection?.row_count ?? 0} rows · {inspection?.headers.length ?? 0} columns · {formatFileSize(file.size)}</div></div><button className="btn" onClick={() => { setFile(null); setInspection(null); setPreview(null); }}>Replace file</button></div><div style={{ padding: 20 }}><div className="adm-form-2"><label className="adm-field"><span className="lbl">Student ID column</span><select value={studentColumn} onChange={(event) => { setStudentColumn(event.target.value); setPreview(null); }}><option value="">Choose column</option>{inspection?.headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label><label className="adm-field"><span className="lbl">Full name column</span><select value={nameColumn} onChange={(event) => { setNameColumn(event.target.value); setPreview(null); }}><option value="">Choose column</option>{inspection?.headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label></div><div className="adm-modal-actions"><button className="btn primary" disabled={working || !studentColumn || !nameColumn} onClick={() => void previewUpload()}>{working ? "Checking..." : "Validate student list"}</button></div></div></>}
+      </div>
+      {preview && <><div className="adm-stats"><div className="adm-stat ok"><div className="lbl"><span className="b" />Ready to register</div><div className="v">{preview.accepted_count}</div><div className="sub">Valid student records</div></div><div className="adm-stat risk"><div className="lbl"><span className="b" />Errors</div><div className="v">{errorCount}</div><div className="sub">Must be fixed before commit</div></div><div className="adm-stat warn"><div className="lbl"><span className="b" />Warnings</div><div className="v">{warningCount}</div><div className="sub">Review if present</div></div><div className="adm-stat"><div className="lbl"><span className="b" />Rows checked</div><div className="v">{preview.row_count}</div><div className="sub">Source file total</div></div></div><div className="adm-card"><div className="adm-card-head"><div><h4>Validation results</h4><div className="h-sub">The server will run the same checks again when you commit.</div></div></div>{preview.issues.length ? <table className="adm-tbl"><thead><tr><th>Row</th><th>Severity</th><th>Issue</th></tr></thead><tbody>{preview.issues.slice(0, 25).map((issue, index) => <tr key={`${issue.row}-${index}`} className={issue.severity === "error" ? "row-err" : "row-warn"}><td className="mono">{issue.row ?? "—"}</td><td><span className={`adm-row-status ${issue.severity === "error" ? "err" : "warn"}`}>{issue.severity}</span></td><td>{issue.message}</td></tr>)}</tbody></table> : <div className="adm-empty">All rows are ready to register.</div>}</div><div className="adm-commit"><div><div className="hd">Commit student enrolments</div><div className="sb">This creates or updates the student records and links them to {selectedOffering?.unit_code}.</div></div><div className="actions"><button className="btn" onClick={() => setPreview(null)}>Adjust mapping</button><button className="btn primary" disabled={working || errorCount > 0} onClick={() => void commit()}>{working ? "Committing..." : "Commit enrolments"}</button></div></div></>}
     </div>
-  );
+  </main></div>;
 }
