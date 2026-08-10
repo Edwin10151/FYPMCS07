@@ -33,3 +33,48 @@ def test_normalise_handbook_content_keeps_hurdles_outside_weighted_calculation()
 def test_normalise_handbook_content_rejects_missing_learning_outcomes():
     with pytest.raises(HandbookImportError, match="no learning outcomes"):
         normalise_page_content({"unit_code": "FIT2004", "title": "Algorithms"})
+
+
+def test_normalise_handbook_content_keeps_only_selected_semester_and_location():
+    payload = normalise_page_content(
+        {
+            "unit_code": "FIT3161",
+            "title": "Computer Science Project 1",
+            "unit_learning_outcomes": [{"number": "1", "description": "Plan a project."}],
+            "assessments": [
+                {
+                    "name": "S1 proposal",
+                    "weight": "45",
+                    "learning_outcomes": "1",
+                    "offerings_formatted": "First semester, Malaysia (Day) - Clayton",
+                },
+                {
+                    "name": "S2 presentation",
+                    "weight": "30",
+                    "learning_outcomes": "1",
+                    "offerings_formatted": "Second semester, Malaysia (Day) - Clayton",
+                },
+            ],
+        },
+        period="S1",
+        location="Malaysia",
+    )
+
+    assert [assessment["name"] for assessment in payload["assessments"]] == ["S1 proposal"]
+    assert payload["offering_scope"] == {"period": "S1", "location": "Malaysia"}
+
+
+def test_normalise_handbook_content_excludes_unscoped_assessments_when_scope_is_selected():
+    payload = normalise_page_content(
+        {
+            "unit_code": "FIT3161",
+            "title": "Computer Science Project 1",
+            "unit_learning_outcomes": [{"number": "1", "description": "Plan a project."}],
+            "assessments": [{"name": "Unscoped task", "weight": "20", "learning_outcomes": "1"}],
+        },
+        period="S1",
+        location="Malaysia",
+    )
+
+    assert payload["assessments"] == []
+    assert "Unscoped task" in payload["warnings"][0]

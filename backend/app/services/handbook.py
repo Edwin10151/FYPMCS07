@@ -15,6 +15,12 @@ class HandbookImportError(RuntimeError):
     pass
 
 
+PERIOD_LABELS = {
+    "S1": "First semester",
+    "S2": "Second semester",
+}
+
+
 def _plain_text(value: object) -> str:
     return BeautifulSoup(str(value or ""), "html.parser").get_text(" ", strip=True)
 
@@ -39,9 +45,30 @@ def _weight(value: object) -> Decimal:
     return weight.quantize(Decimal("0.01"))
 
 
-def normalise_page_content(page_content: object) -> dict:
+def _matches_offering(raw_assessment: dict, period: str, location: str) -> bool:
+    """Keep assessments that apply to the selected Handbook teaching offering."""
+    if raw_assessment.get("offerings_formatted") is None:
+        return False
+    offering_text = _plain_text(raw_assessment.get("offerings_formatted"))
+    if "Applies to all offerings" in offering_text:
+        return True
+
+    period_label = PERIOD_LABELS.get(period.upper())
+    if not period_label:
+        raise HandbookImportError(f"Unsupported teaching period: {period}")
+    return f"{period_label}, {location}" in offering_text
+
+
+def normalise_page_content(
+    page_content: object,
+    *,
+    period: str | None = None,
+    location: str | None = None,
+) -> dict:
     if not isinstance(page_content, dict):
         raise HandbookImportError("Handbook page content is missing")
+    if period and location and period.upper() not in PERIOD_LABELS:
+        raise HandbookImportError(f"Unsupported teaching period: {period}")
 
     unit_code = str(page_content.get("unit_code") or "").strip().upper()
     title = _plain_text(page_content.get("title"))
@@ -65,8 +92,13 @@ def normalise_page_content(page_content: object) -> dict:
         raise HandbookImportError("Handbook unit has no learning outcomes")
 
     assessments = []
+    unscoped_assessments = []
     for raw_assessment in page_content.get("assessments") or []:
         if not isinstance(raw_assessment, dict):
+            continue
+        if period and location and not _matches_offering(raw_assessment, period, location):
+            if raw_assessment.get("offerings_formatted") is None:
+                unscoped_assessments.append(_plain_text(raw_assessment.get("name") or raw_assessment.get("assessment_name")) or "Unnamed assessment")
             continue
         name = _plain_text(raw_assessment.get("name") or raw_assessment.get("assessment_name"))
         if not name:
@@ -84,16 +116,30 @@ def normalise_page_content(page_content: object) -> dict:
             }
         )
 
-    return {
+    payload = {
         "unit_code": unit_code,
         "title": title,
         "handbook_version": str(page_content.get("version_name") or page_content.get("version") or "") or None,
         "learning_outcomes": learning_outcomes,
         "assessments": assessments,
     }
+    if period and location:
+        payload["offering_scope"] = {"period": period.upper(), "location": location}
+        if unscoped_assessments:
+            payload["warnings"] = [
+                "Some Handbook assessments were excluded because they do not publish an offering label: "
+                f"{', '.join(unscoped_assessments)}. Add or confirm them manually."
+            ]
+    return payload
 
 
-def fetch_handbook(unit_code: str, year: int) -> dict:
+def fetch_handbook(
+    unit_code: str,
+    year: int,
+    *,
+    period: str | None = None,
+    location: str | None = None,
+) -> dict:
     unit_code = unit_code.strip().upper()
     if not UNIT_CODE_PATTERN.fullmatch(unit_code) or not 2000 <= year <= 2100:
         raise HandbookImportError("Invalid unit code or year")
@@ -112,7 +158,7 @@ def fetch_handbook(unit_code: str, year: int) -> dict:
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
         raise HandbookImportError("Handbook page data is invalid") from exc
 
-    payload = normalise_page_content(page_content)
+    payload = normalise_page_content(page_content, period=period, location=location)
     if payload["unit_code"] != unit_code:
         raise HandbookImportError("Handbook returned a different unit")
     return {"source_url": source_url, "payload": payload}

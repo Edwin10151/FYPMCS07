@@ -25,6 +25,7 @@ export type Offering = {
   program_name: string;
   year: number;
   period: string;
+  can_edit: boolean;
   handbook_url: string | null;
   last_scraped_at: string | null;
 };
@@ -73,9 +74,27 @@ export type Assessment = {
   assessment_name: string;
   weight: string;
   max_mark: string;
+  is_hurdle: boolean;
   source: string;
   covers: string[];
   allocated_weights: string[];
+};
+
+export type HandbookDraft = {
+  handbook_import_id: number;
+  source_url: string;
+  handbook_version: string | null;
+  status: "draft" | "confirmed";
+  imported_at: string;
+  confirmed_at: string | null;
+  payload: {
+    unit_code: string;
+    title: string;
+    learning_outcomes: Array<{ code: string; description: string }>;
+    assessments: Array<{ name: string; weight: string; is_hurdle: boolean; ulo_codes: string[] }>;
+    offering_scope?: { period: string; location: string };
+    warnings?: string[];
+  };
 };
 
 export type AdminUser = {
@@ -158,6 +177,21 @@ export function saveMappings(token: string, offeringId: number, mappings: Array<
 
 export function getAssessments(token: string, offeringId: number) {
   return apiFetch<{ assessments: Assessment[] }>(`/assessments?offering_id=${offeringId}`, token);
+}
+
+export function createHandbookImport(token: string, offeringId: number) {
+  return apiFetch<{ import: HandbookDraft }>(`/offerings/${offeringId}/handbook-import`, token, { method: "POST" });
+}
+
+export function getLatestHandbookImport(token: string, offeringId: number) {
+  return apiFetch<{ import: HandbookDraft | null }>(`/offerings/${offeringId}/handbook-import`, token);
+}
+
+export function confirmHandbookImport(token: string, offeringId: number, handbookImportId: number) {
+  return apiFetch<{ status: string }>(`/offerings/${offeringId}/handbook-import/confirm`, token, {
+    method: "POST",
+    body: JSON.stringify({ handbook_import_id: handbookImportId }),
+  });
 }
 
 export function getAdminUsers(token: string) {

@@ -85,8 +85,9 @@ POST /api/offerings/{offering_id}/handbook-import/confirm
 ```
 
 Only Management and the assigned Unit Coordinator may import or confirm. The
-backend fetches the public Monash Handbook record using the offering's saved
-unit code and year; the frontend never sends an arbitrary URL.
+backend uses the offering's saved unit code, year, Malaysia location, and
+selected S1/S2 period. Assessment rows from another semester are excluded
+before a draft is stored; the frontend never sends an arbitrary URL.
 
 The first endpoint stores a reviewable draft. Confirm it with:
 

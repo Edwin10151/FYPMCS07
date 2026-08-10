@@ -1,32 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
-import { clearSession, initials } from "../api";
-import { loadMappingConfirmation } from "../mappingConfirm";
+import { clearSession, errorMessage, getMappings, getOfferings, initials, roleLabel, setCurrentOfferingId, type Offering } from "../api";
 import { useSession } from "../useSession";
-import { UNITS, type MockUnit } from "../mockData";
 import "./UnitSelect.css";
 
 export default function UnitSelect() {
   const navigate = useNavigate();
   const session = useSession();
-  const currentUnits = UNITS.filter((u) => u.current);
-  const pastUnits = UNITS.filter((u) => !u.current);
+  const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [showSignOut, setShowSignOut] = useState(false);
 
-  if (!session) {
-    navigate("/login", { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (!session) return;
+    getOfferings(session.access_token)
+      .then(({ offerings: rows }) => setOfferings(rows))
+      .catch((err) => setError(errorMessage(err)))
+      .finally(() => setLoading(false));
+  }, [session]);
 
-  const openUnit = (unit: MockUnit) => {
-    const alreadyMapped = !!loadMappingConfirmation(unit.code);
-    if (alreadyMapped) {
-      // Mapping done before — enter the unit workspace with the normal sidebar.
-      navigate("/dashboard", { state: { unitCode: unit.code, unitName: unit.name } });
-    } else {
-      // First time for this unit — force LO ↔ PLO confirm (no sidebar).
-      navigate("/mapping", { state: { from: "unit-select", unitCode: unit.code, unitName: unit.name } });
+  if (!session) return null;
+
+  const openOffering = async (offering: Offering) => {
+    setCurrentOfferingId(offering.offering_id);
+    try {
+      const mapping = await getMappings(session.access_token, offering.offering_id);
+      const mappedUloIds = new Set(mapping.mappings.map((item) => item.offering_ulo_id));
+      const needsMapping = mapping.ulos.length === 0 || mapping.ulos.some((ulo) => !mappedUloIds.has(ulo.offering_ulo_id));
+      navigate(needsMapping ? "/mapping" : "/dashboard", { state: { offeringId: offering.offering_id } });
+    } catch (err) {
+      setError(errorMessage(err));
     }
   };
 
@@ -37,7 +42,6 @@ export default function UnitSelect() {
 
   return (
     <div className="us-page">
-      {/* Header */}
       <header className="us-header">
         <div className="us-header-left">
           <img src={monashLogo} alt="Monash University" className="us-logo" />
@@ -52,66 +56,41 @@ export default function UnitSelect() {
               <div className="us-user-email">{session.user.email}</div>
             </div>
           </div>
-          <button className="us-signout" onClick={() => setShowSignOut(true)}>
-            Sign out
-          </button>
+          <button className="us-signout" onClick={() => setShowSignOut(true)}>Sign out</button>
         </div>
       </header>
 
-      {/* Content */}
       <main className="us-content">
         <div className="us-intro">
           <div className="us-eye">Select a unit</div>
           <h1>Which unit would you like to work on?</h1>
-          <p>
-            You have teaching responsibilities across <strong>{UNITS.length} units</strong>.
-            <br />
-            Please select a module below to access its dashboard, LO&nbsp;↔&nbsp;PLO mappings and&nbsp;assessments.
-          </p>
+          <p>Your available unit offerings are loaded from the development database for your signed-in role.</p>
         </div>
 
-        <div className="us-section-label">
-          Current semester <span className="us-count">{currentUnits.length}</span>
-        </div>
-        <div className="us-grid">
-          {currentUnits.map((u) => (
-            <UnitCard key={u.code} unit={u} onOpen={openUnit} />
-          ))}
-        </div>
-
-        {pastUnits.length > 0 && (
+        {error && <div className="banner"><div className="ico">!</div><div className="body">{error}</div></div>}
+        {loading ? <div className="panel">Loading your unit offerings...</div> : (
           <>
-            <div className="us-section-label" style={{ marginTop: 32 }}>
-              Past semesters <span className="us-count">{pastUnits.length}</span>
-            </div>
-            <div className="us-grid">
-              {pastUnits.map((u) => (
-                <UnitCard key={u.code} unit={u} onOpen={openUnit} past />
-              ))}
-            </div>
+            <div className="us-section-label">Available offerings <span className="us-count">{offerings.length}</span></div>
+            {offerings.length === 0 ? (
+              <div className="panel">No unit offerings have been assigned to this account yet.</div>
+            ) : (
+              <div className="us-grid">
+                {offerings.map((offering) => <OfferingCard key={offering.offering_id} offering={offering} role={offering.can_edit ? roleLabel(session.user.role_name) : "Read-only access"} onOpen={openOffering} />)}
+              </div>
+            )}
           </>
         )}
       </main>
 
       {showSignOut && (
         <div className="us-modal-overlay" onClick={() => setShowSignOut(false)}>
-          <div className="us-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="us-modal-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-            </div>
+          <div className="us-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="us-modal-icon">↪</div>
             <h3>Sign out?</h3>
-            <p>You'll need to sign in again with your Monash account to access your units.</p>
+            <p>You will need to sign in again to access your assigned units.</p>
             <div className="us-modal-actions">
-              <button className="us-modal-btn cancel" onClick={() => setShowSignOut(false)}>
-                Cancel
-              </button>
-              <button className="us-modal-btn confirm" onClick={confirmSignOut}>
-                Sign out
-              </button>
+              <button className="us-modal-btn cancel" onClick={() => setShowSignOut(false)}>Cancel</button>
+              <button className="us-modal-btn confirm" onClick={confirmSignOut}>Sign out</button>
             </div>
           </div>
         </div>
@@ -120,37 +99,21 @@ export default function UnitSelect() {
   );
 }
 
-function UnitCard({ unit, onOpen, past }: { unit: MockUnit; onOpen: (unit: MockUnit) => void; past?: boolean }) {
-  const risky = unit.risk > 0;
+function OfferingCard({ offering, role, onOpen }: { offering: Offering; role: string; onOpen: (offering: Offering) => void }) {
+  const handbookStatus = offering.last_scraped_at ? "Handbook record stored" : "Handbook not imported";
   return (
-    <button className={`unit-card${past ? " past" : ""}`} onClick={() => onOpen(unit)}>
+    <button className="unit-card" onClick={() => onOpen(offering)}>
       <div className="unit-card-top">
-        <div className="unit-code-badge">{unit.code}</div>
-        <span className={`role-pill ${unit.role}`}>{unit.roleLabel}</span>
+        <div className="unit-code-badge">{offering.unit_code}</div>
+        <span className="role-pill coord">{role}</span>
       </div>
-
-      <h3>{unit.name}</h3>
-      <div className="unit-meta">
-        {unit.sem} &nbsp;·&nbsp; {unit.students} students
-      </div>
-
+      <h3>{offering.unit_name}</h3>
+      <div className="unit-meta">{offering.year} {offering.period} · {offering.program_name}</div>
       <div className="unit-stats">
-        <div className="unit-stat">
-          <span className="unit-stat-val">
-            {unit.attainment}
-            <span className="u">%</span>
-          </span>
-          <span className="unit-stat-lbl">Overall attainment</span>
-        </div>
-        <div className="unit-stat">
-          <span className={`unit-stat-val${risky ? " warn" : ""}`}>{unit.risk}</span>
-          <span className="unit-stat-lbl">LOs at risk</span>
-        </div>
+        <div className="unit-stat"><span className="unit-stat-val">{offering.period}</span><span className="unit-stat-lbl">Teaching period</span></div>
+        <div className="unit-stat"><span className="unit-stat-val">{offering.handbook_url ? "Ready" : "Setup"}</span><span className="unit-stat-lbl">{handbookStatus}</span></div>
       </div>
-
-      <div className="unit-cta">
-        {past ? "View archived workspace" : "Open unit workspace"} <span className="unit-arrow">→</span>
-      </div>
+      <div className="unit-cta">Open unit workspace <span className="unit-arrow">→</span></div>
     </button>
   );
 }

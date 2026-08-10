@@ -74,8 +74,10 @@ CREATE TABLE unit_offering (
     unit_id         INT          NOT NULL REFERENCES unit(unit_id),
     program_id      INT          NOT NULL REFERENCES program(program_id),
     semester_id     INT          NOT NULL REFERENCES semester(semester_id),
-    coordinator_id  INT          NOT NULL REFERENCES app_user(user_id),
-    handbook_url    VARCHAR(500),
+    coordinator_id     INT          NOT NULL REFERENCES app_user(user_id),
+    handbook_location  VARCHAR(50)  NOT NULL DEFAULT 'Malaysia'
+        CHECK (handbook_location = 'Malaysia'),
+    handbook_url       VARCHAR(500),
     last_scraped_at TIMESTAMP,
     created_at      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (unit_id, program_id, semester_id)

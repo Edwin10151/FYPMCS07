@@ -158,6 +158,7 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             p.program_name,
             s.year,
             s.period,
+            o.coordinator_id,
             o.handbook_url,
             o.last_scraped_at
         FROM unit_offering o
@@ -166,8 +167,14 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
         JOIN semester s ON s.semester_id = o.semester_id
     """
     if user["role_name"] == "coordinator":
-        query += " WHERE o.coordinator_id = %s"
-        params = (user["user_id"],)
+        query += """
+            WHERE o.coordinator_id = %s
+               OR EXISTS (
+                    SELECT 1 FROM offering_lecturer ol
+                    WHERE ol.offering_id = o.offering_id AND ol.lecturer_id = %s
+               )
+        """
+        params = (user["user_id"], user["user_id"])
     elif user["role_name"] == "lecturer":
         query += " WHERE EXISTS (SELECT 1 FROM offering_lecturer ol WHERE ol.offering_id = o.offering_id AND ol.lecturer_id = %s)"
         params = (user["user_id"],)
@@ -176,13 +183,16 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
     else:
         raise HTTPException(status_code=403, detail="Unknown role")
     rows = fetch_all(query + " ORDER BY s.year DESC, s.period, u.unit_code", params)
+    for row in rows:
+        row["can_edit"] = user["role_name"] == "management" or row["coordinator_id"] == user["user_id"]
+        del row["coordinator_id"]
     return {"offerings": rows}
 
 
 def _handbook_offering(offering_id: int) -> dict:
     offering = fetch_one(
         """
-        SELECT o.offering_id, o.unit_id, u.unit_code, s.year
+        SELECT o.offering_id, o.unit_id, u.unit_code, s.year, s.period, o.handbook_location
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
         JOIN semester s ON s.semester_id = o.semester_id
@@ -203,7 +213,12 @@ def create_handbook_import(
     ensure_offering_access(user, offering_id, min_permission_level=20)
     offering = _handbook_offering(offering_id)
     try:
-        imported = fetch_handbook(offering["unit_code"], offering["year"])
+        imported = fetch_handbook(
+            offering["unit_code"],
+            offering["year"],
+            period=offering["period"],
+            location=offering["handbook_location"],
+        )
     except HandbookImportError as exc:
         raise HTTPException(status_code=502, detail="Could not import the public Monash Handbook record") from exc
 
