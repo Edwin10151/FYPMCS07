@@ -67,4 +67,4 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "${{ secrets.FYP_DEPLOY_USER }}@${{ secrets.FYP_DEPLOY_HOST }}" \
-            "deploy"
+            "deploy && curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:8000/api/health && curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:8080/ >/dev/null"
