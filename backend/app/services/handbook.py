@@ -91,12 +91,27 @@ def normalise_page_content(
     if not learning_outcomes:
         raise HandbookImportError("Handbook unit has no learning outcomes")
 
+    raw_assessments = [
+        item for item in page_content.get("assessments") or [] if isinstance(item, dict)
+    ]
+    # Current Handbook pages can expose the field for every assessment but leave
+    # it empty. In that format there is no scope metadata to filter by, so keep
+    # the records as a coordinator-reviewed draft instead of silently dropping
+    # an entire assessment setup.
+    no_assessment_scope_is_published = bool(raw_assessments) and all(
+        "offerings_formatted" in item and not _plain_text(item.get("offerings_formatted"))
+        for item in raw_assessments
+    )
+
     assessments = []
     unscoped_assessments = []
-    for raw_assessment in page_content.get("assessments") or []:
-        if not isinstance(raw_assessment, dict):
-            continue
-        if period and location and not _matches_offering(raw_assessment, period, location):
+    for raw_assessment in raw_assessments:
+        if (
+            period
+            and location
+            and not no_assessment_scope_is_published
+            and not _matches_offering(raw_assessment, period, location)
+        ):
             if raw_assessment.get("offerings_formatted") is None:
                 unscoped_assessments.append(_plain_text(raw_assessment.get("name") or raw_assessment.get("assessment_name")) or "Unnamed assessment")
             continue
@@ -125,11 +140,16 @@ def normalise_page_content(
     }
     if period and location:
         payload["offering_scope"] = {"period": period.upper(), "location": location}
-        if unscoped_assessments:
+        if no_assessment_scope_is_published:
             payload["warnings"] = [
+                "The Handbook did not publish assessment offering labels. All assessment rows are "
+                "included in this draft; confirm their Malaysia semester applicability before applying it."
+            ]
+        if unscoped_assessments:
+            payload.setdefault("warnings", []).append(
                 "Some Handbook assessments were excluded because they do not publish an offering label: "
                 f"{', '.join(unscoped_assessments)}. Add or confirm them manually."
-            ]
+            )
     return payload
 
 

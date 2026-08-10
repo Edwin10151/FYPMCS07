@@ -78,3 +78,22 @@ def test_normalise_handbook_content_excludes_unscoped_assessments_when_scope_is_
 
     assert payload["assessments"] == []
     assert "Unscoped task" in payload["warnings"][0]
+
+
+def test_normalise_handbook_content_keeps_assessments_when_scope_labels_are_all_blank():
+    payload = normalise_page_content(
+        {
+            "unit_code": "FIT3161",
+            "title": "Computer Science Project 1",
+            "unit_learning_outcomes": [{"number": "1", "description": "Plan a project."}],
+            "assessments": [
+                {"name": "Proposal", "weight": "45", "learning_outcomes": "1", "offerings_formatted": ""},
+                {"name": "Reflection", "weight": "10", "learning_outcomes": "1", "offerings_formatted": ""},
+            ],
+        },
+        period="S1",
+        location="Malaysia",
+    )
+
+    assert [assessment["name"] for assessment in payload["assessments"]] == ["Proposal", "Reflection"]
+    assert "did not publish assessment offering labels" in payload["warnings"][0]
