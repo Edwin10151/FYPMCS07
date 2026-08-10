@@ -17,6 +17,7 @@ GET /api/db-health
 
 ```text
 POST /api/auth/login
+POST /api/auth/change-password
 GET /api/me
 ```
 
@@ -34,6 +35,11 @@ Authenticated requests use:
 ```text
 Authorization: Bearer <token>
 ```
+
+New staff accounts receive a generated temporary password. Its hash is stored;
+the plaintext password is returned once to Management at account creation. That
+account can only call `POST /api/auth/change-password` until the temporary
+password has been replaced with a password of at least 12 characters.
 
 ## Dashboard
 
@@ -122,6 +128,24 @@ Current provider is `mock`. Future provider should call a local LLM server throu
 
 ```text
 GET /api/admin/users
+POST /api/admin/users
+POST /api/admin/users/bulk
+PATCH /api/admin/users/{user_id}
 ```
 
 Requires Management role.
+
+Create body:
+
+```json
+{
+  "staff_id": "1234567",
+  "full_name": "Dr Example Staff",
+  "email": "example.staff@monash.edu",
+  "role_name": "coordinator"
+}
+```
+
+Valid roles are `management`, `coordinator`, and `lecturer`. The bulk endpoint
+accepts the same objects in a `users` array and creates the whole list in one
+database transaction.

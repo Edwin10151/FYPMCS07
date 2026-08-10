@@ -4,24 +4,21 @@ import monashLogo from "../assets/monash-logo-big.jpg";
 import { errorMessage, login, saveSession, type Session } from "../api";
 import "./Login.css";
 
-// Demo users used when the FastAPI backend isn't running locally.
-// Any non-empty password works in this fallback mode.
+// Browser-only accounts keep visual frontend work moving when the local API is
+// intentionally stopped. They are never available in a production build.
 const DEMO_USERS: Record<string, { full_name: string; role_name: string; permission_level: number }> = {
   "elise.chen@monash.edu": { full_name: "Dr. Elise Chen", role_name: "coordinator", permission_level: 20 },
-  "james.truong@monash.edu": { full_name: "Dr. James Truong", role_name: "lecturer", permission_level: 10 },
-  "sara.rashid@monash.edu": { full_name: "A/Prof. Sara Rashid", role_name: "management", permission_level: 30 },
+  "aaron.lim@monash.edu": { full_name: "Aaron Lim", role_name: "lecturer", permission_level: 10 },
+  "maya.rao@monash.edu": { full_name: "Maya Rao", role_name: "management", permission_level: 30 },
 };
 
 function mockSession(email: string): Session {
-  const demo = DEMO_USERS[email.trim().toLowerCase()] ?? {
-    full_name: email.split("@")[0] || "Dev User",
-    role_name: "coordinator",
-    permission_level: 20,
-  };
+  const demo = DEMO_USERS[email.trim().toLowerCase()];
+  if (!demo) throw new Error("Use one of the local development accounts.");
   return {
     access_token: "dev-bypass-token",
     token_type: "bearer",
-    user: { user_id: 1, email, ...demo },
+    user: { user_id: 1, staff_id: null, email, must_change_password: false, ...demo },
   };
 }
 
@@ -55,16 +52,20 @@ export default function Login() {
       // Prefer the real API when the backend is up…
       const session = await login(email.trim(), password);
       saveSession(session, remember);
-      navigate("/units");
-    } catch {
-      // …and fall back to a local demo session when it isn't
-      // (ECONNREFUSED / proxy error on :8000).
+      navigate(session.user.must_change_password ? "/change-password" : "/units");
+    } catch (err) {
+      // A network failure is allowed to use the restricted browser-only demo in
+      // Vite development. Invalid API credentials stay invalid everywhere.
+      if (import.meta.env.DEV && err instanceof TypeError) {
       try {
         const session = mockSession(email.trim());
         saveSession(session, remember);
         navigate("/units");
       } catch (err) {
-        setError(errorMessage(err) || "Could not sign in. Is the backend running?");
+          setError(errorMessage(err));
+        }
+      } else {
+        setError(errorMessage(err));
       }
     } finally {
       setBusy(false);
@@ -157,10 +158,11 @@ export default function Login() {
                 </button>
               </form>
 
-              <p className="demo-hint">
-                Demo mode: with no backend running, any password works. Try{" "}
-                <code>elise.chen@monash.edu</code>.
-              </p>
+              {import.meta.env.DEV && (
+                <p className="demo-hint">
+                  Local UI mode: if the API is stopped, use <code>elise.chen@monash.edu</code>.
+                </p>
+              )}
 
               <div className="form-foot-links">
                 <a href="#">Can't login</a>

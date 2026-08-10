@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import csv
 import io
 import json
+import re
 from decimal import Decimal
 from typing import Annotated
 
@@ -12,7 +13,10 @@ from pydantic import BaseModel, EmailStr
 from app.auth import (
     create_access_token,
     ensure_offering_access,
+    generate_temporary_password,
     get_current_user,
+    hash_password,
+    is_valid_password,
     require_offering_access,
     require_permission,
     verify_password,
@@ -49,6 +53,26 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class AdminUserCreate(BaseModel):
+    staff_id: str
+    full_name: str
+    email: EmailStr
+    role_name: str
+
+
+class AdminUserStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class AdminUserBulkCreate(BaseModel):
+    users: list[AdminUserCreate]
+
+
 class MappingUpdate(BaseModel):
     offering_id: int
     mappings: list[dict[str, int]]
@@ -73,22 +97,49 @@ def db_health():
 def login(payload: LoginRequest):
     user = fetch_one(
         """
-        SELECT u.user_id, u.full_name, u.email, u.password_hash, u.is_active, r.role_name, r.permission_level
+        SELECT u.user_id, u.staff_id, u.full_name, u.email, u.password_hash, u.is_active,
+               u.must_change_password, r.role_name, r.permission_level
         FROM app_user u
         JOIN role r ON r.role_id = u.role_id
         WHERE u.email = %s
         """,
-        (payload.email,),
+        (str(payload.email).lower(),),
     )
     if not user or not user["is_active"] or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    public_user = {key: user[key] for key in ["user_id", "full_name", "email", "role_name", "permission_level"]}
+    public_user = {
+        key: user[key]
+        for key in ["user_id", "staff_id", "full_name", "email", "must_change_password", "role_name", "permission_level"]
+    }
     return {
         "access_token": create_access_token(user),
         "token_type": "bearer",
         "user": public_user,
     }
+
+
+@app.post("/api/auth/change-password")
+def change_password(
+    payload: PasswordChangeRequest,
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    user_with_password = fetch_one(
+        "SELECT password_hash FROM app_user WHERE user_id = %s",
+        (user["user_id"],),
+    )
+    if not user_with_password or not verify_password(payload.current_password, user_with_password["password_hash"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if not is_valid_password(payload.new_password):
+        raise HTTPException(status_code=422, detail="New password must be at least 12 characters")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE app_user SET password_hash = %s, must_change_password = FALSE WHERE user_id = %s",
+                (hash_password(payload.new_password), user["user_id"]),
+            )
+    return {"status": "changed"}
 
 
 @app.get("/api/me")
@@ -523,10 +574,100 @@ def generate_summary(
 def admin_users(user: Annotated[dict, Depends(require_permission(30))]):
     rows = fetch_all(
         """
-        SELECT u.user_id, u.full_name, u.email, u.is_active, u.created_at, r.role_name, r.permission_level
+        SELECT u.user_id, u.staff_id, u.full_name, u.email, u.is_active, u.must_change_password,
+               u.created_at, r.role_name, r.permission_level
         FROM app_user u
         JOIN role r ON r.role_id = u.role_id
         ORDER BY r.permission_level DESC, u.full_name
         """
     )
     return {"users": rows}
+
+
+def _admin_user_values(payload: AdminUserCreate) -> tuple[str, str, str, str]:
+    staff_id = payload.staff_id.strip()
+    full_name = payload.full_name.strip()
+    email = str(payload.email).lower()
+    role_name = payload.role_name.strip().lower()
+    if not re.fullmatch(r"\d{7}", staff_id):
+        raise HTTPException(status_code=422, detail="Staff ID must be exactly seven digits")
+    if len(full_name) < 3:
+        raise HTTPException(status_code=422, detail="Full name is required")
+    if not email.endswith("@monash.edu"):
+        raise HTTPException(status_code=422, detail="Use a Monash staff email address")
+    return staff_id, full_name, email, role_name
+
+
+def _insert_admin_user(cur, values: tuple[str, str, str, str]) -> dict:
+    staff_id, full_name, email, role_name = values
+    cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
+    role = cur.fetchone()
+    if not role:
+        raise HTTPException(status_code=422, detail="Role must be management, coordinator, or lecturer")
+    cur.execute("SELECT 1 FROM app_user WHERE staff_id = %s OR email = %s", (staff_id, email))
+    if cur.fetchone():
+        raise HTTPException(status_code=409, detail="A staff account already uses that ID or email")
+
+    temporary_password = generate_temporary_password()
+    cur.execute(
+        """
+        INSERT INTO app_user (staff_id, full_name, email, password_hash, role_id, must_change_password)
+        VALUES (%s, %s, %s, %s, %s, TRUE)
+        RETURNING user_id
+        """,
+        (staff_id, full_name, email, hash_password(temporary_password), role["role_id"]),
+    )
+    user_id = cur.fetchone()["user_id"]
+    cur.execute(
+        """
+        SELECT u.user_id, u.staff_id, u.full_name, u.email, u.is_active, u.must_change_password,
+               u.created_at, r.role_name, r.permission_level
+        FROM app_user u
+        JOIN role r ON r.role_id = u.role_id
+        WHERE u.user_id = %s
+        """,
+        (user_id,),
+    )
+    return {"user": cur.fetchone(), "temporary_password": temporary_password}
+
+
+@app.post("/api/admin/users", status_code=201)
+def create_admin_user(
+    payload: AdminUserCreate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            return _insert_admin_user(cur, _admin_user_values(payload))
+
+
+@app.post("/api/admin/users/bulk", status_code=201)
+def create_admin_users(
+    payload: AdminUserBulkCreate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    if not payload.users:
+        raise HTTPException(status_code=422, detail="At least one staff account is required")
+    values = [_admin_user_values(item) for item in payload.users]
+    if len({item[0] for item in values}) != len(values) or len({item[2] for item in values}) != len(values):
+        raise HTTPException(status_code=422, detail="The upload has duplicate staff IDs or emails")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            accounts = [_insert_admin_user(cur, item) for item in values]
+    return {"accounts": accounts}
+
+
+@app.patch("/api/admin/users/{user_id}")
+def update_admin_user_status(
+    user_id: int,
+    payload: AdminUserStatusUpdate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    if user_id == user["user_id"] and not payload.is_active:
+        raise HTTPException(status_code=409, detail="You cannot deactivate your own account")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE app_user SET is_active = %s WHERE user_id = %s RETURNING user_id", (payload.is_active, user_id))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Staff account not found")
+    return {"status": "updated"}

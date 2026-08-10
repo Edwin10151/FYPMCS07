@@ -41,15 +41,19 @@ export default function Sidebar({ user }: { user: SessionUser }) {
         ))}
       </nav>
 
-      <div className="sec">Administration</div>
-      <nav>
-        {NAV_ADMIN.map(({ to, label, ic, end }) => (
-          <NavLink key={label} to={to} end={end} className={({ isActive }) => (isActive ? "active" : "")}>
-            <span className={`ic ${ic}`} />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+      {user.permission_level >= 30 && (
+        <>
+          <div className="sec">Administration</div>
+          <nav>
+            {NAV_ADMIN.map(({ to, label, ic, end }) => (
+              <NavLink key={label} to={to} end={end} className={({ isActive }) => (isActive ? "active" : "")}>
+                <span className={`ic ${ic}`} />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+        </>
+      )}
 
       <div className="user">
         <div className={`av ${avatarClass(user.user_id)}`}>{initials(user.full_name)}</div>

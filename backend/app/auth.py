@@ -8,7 +8,7 @@ import secrets
 from typing import Annotated, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -16,6 +16,8 @@ from app.db import fetch_one
 
 bearer = HTTPBearer(auto_error=False)
 PBKDF2_ITERATIONS = 390_000
+MIN_PASSWORD_LENGTH = 12
+TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*"
 
 
 def hash_password(password: str) -> str:
@@ -41,6 +43,14 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+def generate_temporary_password() -> str:
+    return "".join(secrets.choice(TEMPORARY_PASSWORD_ALPHABET) for _ in range(18))
+
+
+def is_valid_password(password: str) -> bool:
+    return len(password) >= MIN_PASSWORD_LENGTH
+
+
 def create_access_token(user: dict) -> str:
     settings = get_settings()
     payload = {
@@ -54,6 +64,7 @@ def create_access_token(user: dict) -> str:
 
 def get_current_user(
     credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer)],
+    request: Request,
 ) -> dict:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
@@ -69,7 +80,8 @@ def get_current_user(
 
     user = fetch_one(
         """
-        SELECT u.user_id, u.full_name, u.email, u.is_active, r.role_name, r.permission_level
+        SELECT u.user_id, u.staff_id, u.full_name, u.email, u.is_active, u.must_change_password,
+               r.role_name, r.permission_level
         FROM app_user u
         JOIN role r ON r.role_id = u.role_id
         WHERE u.user_id = %s
@@ -78,6 +90,8 @@ def get_current_user(
     )
     if not user or not user["is_active"]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+    if user["must_change_password"] and request.url.path != "/api/auth/change-password":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Change the temporary password before continuing")
     return user
 
 
@@ -98,8 +112,19 @@ def ensure_offering_access(user: dict, offering_id: int, min_permission_level: i
 
     if user["role_name"] == "coordinator":
         access = fetch_one(
-            "SELECT 1 FROM unit_offering WHERE offering_id = %s AND coordinator_id = %s",
-            (offering_id, user["user_id"]),
+            """
+            SELECT 1
+            FROM unit_offering o
+            WHERE o.offering_id = %s
+              AND (
+                o.coordinator_id = %s
+                OR (%s < 20 AND EXISTS (
+                    SELECT 1 FROM offering_lecturer ol
+                    WHERE ol.offering_id = o.offering_id AND ol.lecturer_id = %s
+                ))
+              )
+            """,
+            (offering_id, user["user_id"], min_permission_level, user["user_id"]),
         )
     elif user["role_name"] == "lecturer":
         access = fetch_one(

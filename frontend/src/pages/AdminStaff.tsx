@@ -1,17 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { findColumn, formatFileSize, parseCsv } from "../csv";
 import { STAFF_RECORDS, STAFF_ROLE_LABEL, UNIT_OFFERINGS, type StaffRecord, type StaffRole, type StaffStatus } from "../mockData";
 import { Link } from "react-router-dom";
-import { getSelectedUnit } from "../api";
+import { createAdminUser, createAdminUsers, errorMessage, getAdminUsers, getSelectedUnit, setAdminUserActive, type AdminUser } from "../api";
 
 const selectedUnit = getSelectedUnit();
 const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const STATUS_LABEL: Record<StaffStatus, string> = { active: "Active", pending: "Pending activation", inactive: "Inactive" };
-const ROLES: StaffRole[] = ["coordinator", "lecturer", "tutor", "admin"];
+const ROLES: StaffRole[] = ["coordinator", "lecturer", "admin"];
 
 // Staff IDs at Monash are 7 digits.
 const ID_PATTERN = /^\d{7}$/;
@@ -37,9 +37,26 @@ function formatDate(iso: string) {
 
 const BLANK_FORM = { staffId: "", name: "", email: "", role: "lecturer" as StaffRole };
 
+function fromApiUser(user: AdminUser): StaffRecord {
+  return {
+    staffId: user.staff_id ?? "--",
+    name: user.full_name,
+    email: user.email,
+    role: user.role_name === "management" ? "admin" : user.role_name === "coordinator" ? "coordinator" : "lecturer",
+    status: !user.is_active ? "inactive" : user.must_change_password ? "pending" : "active",
+    addedOn: user.created_at,
+  };
+}
+
+function apiRole(role: StaffRole): "management" | "coordinator" | "lecturer" {
+  if (role === "coordinator" || role === "lecturer") return role;
+  return "management";
+}
+
 export default function AdminStaff() {
   const session = useSession();
-  const [staff, setStaff] = useState<StaffRecord[]>(STAFF_RECORDS);
+  const [staff, setStaff] = useState<StaffRecord[]>([]);
+  const [userIds, setUserIds] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | StaffRole>("all");
   const [showAdd, setShowAdd] = useState(false);
@@ -47,6 +64,20 @@ export default function AdminStaff() {
   const [showUpload, setShowUpload] = useState(false);
   const [staged, setStaged] = useState<Staged | null>(null);
   const [flash, setFlash] = useState("");
+  const [temporaryPasswords, setTemporaryPasswords] = useState<Array<{ name: string; password: string }>>([]);
+
+  useEffect(() => {
+    if (!session) return;
+    getAdminUsers(session.access_token)
+      .then(({ users }) => {
+        setStaff(users.map(fromApiUser));
+        setUserIds(Object.fromEntries(users.filter((item) => item.staff_id).map((item) => [item.staff_id!, item.user_id])));
+      })
+      .catch((err) => {
+        if (import.meta.env.DEV && err instanceof TypeError) setStaff(STAFF_RECORDS);
+        else setFlash(errorMessage(err));
+      });
+  }, [session]);
 
   // How many units each person teaches — drives the "unassigned" warning.
   const unitsByStaff = useMemo(() => {
@@ -75,19 +106,23 @@ export default function AdminStaff() {
   const unassigned = staff.filter((s) => s.status !== "inactive" && s.role !== "admin" && !(unitsByStaff[s.staffId]?.length ?? 0)).length;
   const setField = (patch: Partial<typeof BLANK_FORM>) => setForm((f) => ({ ...f, ...patch }));
 
-  const addStaff = () => {
-    const created: StaffRecord = {
-      staffId: form.staffId.trim(),
-      name: form.name.trim(),
-      email: form.email.trim(),
-      role: form.role,
-      status: "pending",
-      addedOn: new Date().toISOString().slice(0, 10),
-    };
-    setStaff((prev) => [created, ...prev]);
-    setFlash(`${created.name} added as ${STAFF_ROLE_LABEL[created.role].toLowerCase()} — an activation email has been queued.`);
-    setForm(BLANK_FORM);
-    setShowAdd(false);
+  const addStaff = async () => {
+    if (!session) return;
+    setTemporaryPasswords([]);
+    try {
+      const account = await createAdminUser(session.access_token, {
+        staff_id: form.staffId.trim(), full_name: form.name.trim(), email: form.email.trim(), role_name: apiRole(form.role),
+      });
+      const created = fromApiUser(account.user);
+      setStaff((prev) => [created, ...prev]);
+      setUserIds((prev) => ({ ...prev, [created.staffId]: account.user.user_id }));
+      setTemporaryPasswords([{ name: created.name, password: account.temporary_password }]);
+      setFlash(`${created.name} added. Give them the temporary password below; it is not emailed automatically.`);
+      setForm(BLANK_FORM);
+      setShowAdd(false);
+    } catch (err) {
+      setFlash(errorMessage(err));
+    }
   };
 
   const readFile = async (file: File) => {
@@ -124,23 +159,34 @@ export default function AdminStaff() {
   const clean = staged ? staged.rows.filter((r) => !r.issue) : [];
   const problems = staged ? staged.rows.filter((r) => r.issue) : [];
 
-  const commitUpload = () => {
+  const commitUpload = async () => {
     if (!staged) return;
-    const today = new Date().toISOString().slice(0, 10);
-    setStaff((prev) => [
-      ...clean.map((r) => ({ staffId: r.staffId, name: r.name, email: r.email, role: r.role, status: "pending" as StaffStatus, addedOn: today })),
-      ...prev,
-    ]);
-    setFlash(
-      `${clean.length} staff record${clean.length === 1 ? "" : "s"} added from ${staged.fileName}` +
-        (problems.length ? ` — ${problems.length} rows skipped.` : ".")
-    );
-    setStaged(null);
-    setShowUpload(false);
+    if (!session) return;
+    setTemporaryPasswords([]);
+    try {
+      const result = await createAdminUsers(session.access_token, clean.map((row) => ({
+        staff_id: row.staffId, full_name: row.name, email: row.email, role_name: apiRole(row.role),
+      })));
+      const created = result.accounts.map((account) => fromApiUser(account.user));
+      setStaff((prev) => [...created, ...prev]);
+      setUserIds((prev) => ({ ...prev, ...Object.fromEntries(result.accounts.map((account) => [account.user.staff_id!, account.user.user_id])) }));
+      setTemporaryPasswords(result.accounts.map((account) => ({ name: account.user.full_name, password: account.temporary_password })));
+      setFlash(`${created.length} staff record${created.length === 1 ? "" : "s"} added from ${staged.fileName}.`);
+      setStaged(null);
+      setShowUpload(false);
+    } catch (err) {
+      setFlash(errorMessage(err));
+    }
   };
 
-  const setStatus = (staffId: string, status: StaffStatus) => {
-    setStaff((prev) => prev.map((s) => (s.staffId === staffId ? { ...s, status } : s)));
+  const setStatus = async (staffId: string, status: StaffStatus) => {
+    if (!session || !userIds[staffId]) return;
+    try {
+      await setAdminUserActive(session.access_token, userIds[staffId], status !== "inactive");
+      setStaff((prev) => prev.map((s) => (s.staffId === staffId ? { ...s, status } : s)));
+    } catch (err) {
+      setFlash(errorMessage(err));
+    }
   };
 
   const canAdd = ID_PATTERN.test(form.staffId.trim()) && form.name.trim().length > 2 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim());
@@ -185,8 +231,13 @@ export default function AdminStaff() {
 
           {flash && (
             <div className="adm-flash">
-              ✓ {flash}
-              <span className="x" onClick={() => setFlash("")}>
+              {flash}
+              {temporaryPasswords.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {temporaryPasswords.map((item) => <div key={item.name}><strong>{item.name}:</strong> <code>{item.password}</code></div>)}
+                </div>
+              )}
+              <span className="x" onClick={() => { setFlash(""); setTemporaryPasswords([]); }}>
                 ✕
               </span>
             </div>
@@ -306,11 +357,7 @@ export default function AdminStaff() {
                       <td className="mono">{formatDate(s.addedOn)}</td>
                       <td>
                         <div className="adm-row-act">
-                          {s.status === "pending" && (
-                            <button className="adm-btn-sm navy" onClick={() => setStatus(s.staffId, "active")}>
-                              Activate
-                            </button>
-                          )}
+                          {s.status === "pending" && <span className="adm-row-status warn">Password change required</span>}
                           {s.status === "inactive" ? (
                             <button className="adm-btn-sm" onClick={() => setStatus(s.staffId, "active")}>
                               Reinstate
@@ -337,8 +384,8 @@ export default function AdminStaff() {
           <div className="adm-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Add staff</h3>
             <div className="adm-modal-sub">
-              New staff start as <strong>pending activation</strong> until they sign in with their Monash account. You can assign
-              them to units straight away.
+              New staff receive a generated temporary password and must change it at their first sign-in. You can assign them to
+              units after their staff record exists.
             </div>
 
             <div className="adm-form">

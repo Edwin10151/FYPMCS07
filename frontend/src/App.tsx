@@ -14,10 +14,20 @@ import AdminStaff from "./pages/AdminStaff";
 import { loadSession } from "./api";
 import Report from "./pages/Report";
 import Settings from "./pages/Settings";
+import ChangePassword from "./pages/ChangePassword";
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function RequireAuth({ children, allowPasswordChange = false }: { children: React.ReactNode; allowPasswordChange?: boolean }) {
   const session = loadSession();
   if (!session) return <Navigate to="/login" replace />;
+  if (session.user.must_change_password && !allowPasswordChange) return <Navigate to="/change-password" replace />;
+  return <>{children}</>;
+}
+
+function RequireManagement({ children }: { children: React.ReactNode }) {
+  const session = loadSession();
+  if (!session) return <Navigate to="/login" replace />;
+  if (session.user.must_change_password) return <Navigate to="/change-password" replace />;
+  if (session.user.permission_level < 30) return <Navigate to="/units" replace />;
   return <>{children}</>;
 }
 
@@ -26,6 +36,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to={loadSession() ? "/units" : "/login"} replace />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/change-password" element={<RequireAuth allowPasswordChange><ChangePassword /></RequireAuth>} />
       <Route path="/units" element={<RequireAuth><UnitSelect /></RequireAuth>} />
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
       <Route path="/reports" element={<RequireAuth><Report /></RequireAuth>} />
@@ -36,12 +47,12 @@ export default function App() {
       {/* Admin hub lives at /admin/setup (semester checklist). /admin itself is
           the People & roles directory; the other screens hang off the shared
           AdminNav tabs. */}
-      <Route path="/admin" element={<RequireAuth><Admin /></RequireAuth>} />
-      <Route path="/admin/setup" element={<RequireAuth><AdminSetup /></RequireAuth>} />
-      <Route path="/admin/periods" element={<RequireAuth><AdminPeriods /></RequireAuth>} />
-      <Route path="/admin/units" element={<RequireAuth><AdminUnits /></RequireAuth>} />
-      <Route path="/admin/enrolments" element={<RequireAuth><AdminEnrolments /></RequireAuth>} />
-      <Route path="/admin/staff" element={<RequireAuth><AdminStaff /></RequireAuth>} />
+      <Route path="/admin" element={<RequireManagement><Admin /></RequireManagement>} />
+      <Route path="/admin/setup" element={<RequireManagement><AdminSetup /></RequireManagement>} />
+      <Route path="/admin/periods" element={<RequireManagement><AdminPeriods /></RequireManagement>} />
+      <Route path="/admin/units" element={<RequireManagement><AdminUnits /></RequireManagement>} />
+      <Route path="/admin/enrolments" element={<RequireManagement><AdminEnrolments /></RequireManagement>} />
+      <Route path="/admin/staff" element={<RequireManagement><AdminStaff /></RequireManagement>} />
       <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

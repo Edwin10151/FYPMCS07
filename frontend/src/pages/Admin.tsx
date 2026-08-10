@@ -1,18 +1,31 @@
+import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
-import { ADMIN_USERS, ROLE_CARDS } from "../mockData";
 import "./Admin.css";
 import { Link } from "react-router-dom";
-import { getSelectedUnit } from "../api";
+import { avatarClass, errorMessage, getAdminUsers, getSelectedUnit, initials, roleLabel, type AdminUser } from "../api";
 
 const selectedUnit = getSelectedUnit();
 const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 export default function Admin() {
   const session = useSession();
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!session) return;
+    getAdminUsers(session.access_token).then(({ users }) => setUsers(users)).catch((err) => setError(errorMessage(err)));
+  }, [session]);
 
   if (!session) return null;
+
+  const roleCounts = {
+    management: users.filter((user) => user.role_name === "management").length,
+    coordinator: users.filter((user) => user.role_name === "coordinator").length,
+    lecturer: users.filter((user) => user.role_name === "lecturer").length,
+  };
 
   return (
     <div className="app">
@@ -34,7 +47,7 @@ export default function Admin() {
             </div>
             <button className="btn ghost">Audit log</button>
             <button className="btn">Export</button>
-            <button className="btn primary">+ Invite user</button>
+            <Link className="btn primary" to="/admin/staff">+ Add staff</Link>
           </div>
         </div>
 
@@ -43,31 +56,32 @@ export default function Admin() {
             <div>
               <h1 style={{ fontSize: 26 }}>Management Portal</h1>
               <div className="sub">
-                Faculty of IT &nbsp;·&nbsp; <strong>38 active users</strong> &nbsp;·&nbsp; 3 pending invitations &nbsp;·&nbsp; Last
-                audited 09 May 2026
+                Faculty of IT &nbsp;·&nbsp; <strong>{users.filter((user) => user.is_active).length} active users</strong>
               </div>
             </div>
           </div>
 
-          <AdminNav counts={{ "/admin": ADMIN_USERS.length }} />
+          <AdminNav counts={{ "/admin": users.length }} />
+
+          {error && <div className="adm-flash">{error}</div>}
 
           <div className="role-legend">
-            {ROLE_CARDS.map((r) => (
-              <div key={r.label} className="rl-card">
+            {[
+              { role: "management", label: "Management", text: "Manages staff accounts and teaching-period setup.", can: "Manage staff, periods and offerings" },
+              { role: "coordinator", label: "Unit coordinator", text: "Owns unit setup and confirms mappings.", can: "Confirm Handbook imports and mappings" },
+              { role: "lecturer", label: "Lecturer", text: "Works with assessment setup and grade uploads.", can: "Upload and review grade data" },
+            ].map((role) => (
+              <div key={role.role} className="rl-card">
                 <div className="top">
-                  <span className={`role-chip ${r.chip}`}>
+                  <span className={`role-chip ${role.role === "management" ? "admin" : role.role === "lecturer" ? "lec" : ""}`}>
                     <span className="icn" />
-                    {r.label}
+                    {role.label}
                   </span>
-                  <span className="ct">{r.count}</span>
+                  <span className="ct">{roleCounts[role.role as keyof typeof roleCounts]} ppl</span>
                 </div>
-                <p>{r.desc}</p>
+                <p>{role.text}</p>
                 <ul>
-                  {r.can.map((c, i) => (
-                    <li key={i} className={typeof c === "object" && c.no ? "no" : ""}>
-                      {typeof c === "object" ? c.text : c}
-                    </li>
-                  ))}
+                  <li>{role.can}</li>
                 </ul>
               </div>
             ))}
@@ -86,7 +100,7 @@ export default function Admin() {
                 <span>{f.val}</span> <span className="arr">▾</span>
               </span>
             ))}
-            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--ink-3)" }}>Showing 1–8 of 38</span>
+            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--ink-3)" }}>Showing {users.length} users</span>
           </div>
 
           <div className="users-card">
@@ -105,18 +119,18 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {ADMIN_USERS.map((u, i) => (
-                  <tr key={i}>
+                {users.map((u) => (
+                  <tr key={u.user_id}>
                     <td>
                       <span className="chk-box" />
                     </td>
                     <td>
                       <div className="person">
-                        <div className={`av ${u.av} lg`}>{u.init}</div>
+                        <div className={`av ${avatarClass(u.user_id)} lg`}>{initials(u.full_name)}</div>
                         <div>
                           <div className="meta-line">
-                            {u.name}
-                            {u.you && (
+                            {u.full_name}
+                            {u.user_id === session.user.user_id && (
                               <span className="tag" style={{ marginLeft: 6, fontSize: 9.5 }}>
                                 YOU
                               </span>
@@ -127,59 +141,30 @@ export default function Admin() {
                       </div>
                     </td>
                     <td>
-                      <span className={`role-chip ${u.chip}`}>
+                      <span className={`role-chip ${u.role_name === "management" ? "admin" : u.role_name === "lecturer" ? "lec" : ""}`}>
                         <span className="icn" />
-                        {u.chipLabel}
+                        {roleLabel(u.role_name)}
                       </span>
                     </td>
                     <td>
-                      <div className="unit-tags">
-                        {u.units.map((ut, j) => (
-                          <span
-                            key={j}
-                            className={`tag ${ut.cls}`}
-                            style={
-                              ut.cls === "warn"
-                                ? { fontSize: 9.5, background: "var(--warn-bg)", borderColor: "#F1D9B5", color: "var(--warn)" }
-                                : ut.cls === "plain"
-                                  ? { fontSize: 10.5, color: "var(--ink-4)", background: "white" }
-                                  : { fontSize: 10.5 }
-                            }
-                          >
-                            {ut.label}
-                          </span>
-                        ))}
-                        {u.more && <span className="more">{u.more}</span>}
-                      </div>
+                      <span className="muted">Assignments are managed in Units & Offerings.</span>
                     </td>
                     <td>
-                      <span className={`status-dot ${u.status}`}>
+                      <span className={`status-dot ${!u.is_active ? "disabled" : u.must_change_password ? "pending" : "active"}`}>
                         <span className="d" />
-                        {u.status === "active" ? "Active" : u.status === "pending" ? "Invited" : "Disabled"}
+                        {!u.is_active ? "Disabled" : u.must_change_password ? "Password change required" : "Active"}
                       </span>
                     </td>
-                    <td className="last-active">{u.lastActive}</td>
+                    <td className="last-active">Created {new Date(u.created_at).toLocaleDateString()}</td>
                     <td>
-                      <div className="row-act">
-                        <div className="ic">✎</div>
-                        <div className="ic">⋯</div>
-                      </div>
+                      <Link to="/admin/staff" className="adm-btn-sm">Manage</Link>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div className="pagination">
-              <span>Showing 1–8 of 38</span>
-              <div className="right">
-                <div className="pg dis">‹</div>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <div key={n} className={`pg${n === 1 ? " on" : ""}`}>
-                    {n}
-                  </div>
-                ))}
-                <div className="pg">›</div>
-              </div>
+              <span>{users.length} staff accounts</span>
             </div>
           </div>
         </div>

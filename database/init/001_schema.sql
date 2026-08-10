@@ -19,12 +19,15 @@ CREATE TABLE role (
 -- lecturer-style workflow access without assigning multiple roles.
 CREATE TABLE app_user (
     user_id       SERIAL PRIMARY KEY,
+    staff_id      VARCHAR(7) UNIQUE,
     full_name     VARCHAR(150) NOT NULL,
     email         VARCHAR(200) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role_id       INT          NOT NULL REFERENCES role(role_id),
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    CHECK (staff_id IS NULL OR staff_id ~ '^[0-9]{7}$')
 );
 
 -- 3. PROGRAM

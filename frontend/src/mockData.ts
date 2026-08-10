@@ -15,6 +15,8 @@ export const ULO_SHORT = ["Algorithmic paradigms", "Correctness & complexity", "
 
 export type Plo = { id: string; cat: string; text: string };
 
+// Development-only PLOs. They are replaced only when the teaching team supplies
+// the approved program PLO source; they must never be presented as official.
 export const PLOS: Plo[] = [
   { id: "PLO 1", cat: "FOUNDATIONS", text: "Apply mathematical and computational foundations to model and solve problems in information technology." },
   { id: "PLO 2", cat: "DESIGN", text: "Design and implement reliable software solutions using appropriate algorithms and data structures." },

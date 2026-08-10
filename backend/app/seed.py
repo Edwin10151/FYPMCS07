@@ -24,34 +24,38 @@ def seed_demo_data() -> None:
             roles = {row["role_name"]: row["role_id"] for row in cur.fetchall()}
 
             users = [
-                ("Dr. Elise Chen", "elise.chen@monash.edu", "coordinator"),
-                ("Aaron Lim", "aaron.lim@monash.edu", "lecturer"),
-                ("Maya Rao", "maya.rao@monash.edu", "management"),
+                ("0001001", "Dr. Elise Chen", "elise.chen@monash.edu", "coordinator"),
+                ("0001002", "Aaron Lim", "aaron.lim@monash.edu", "lecturer"),
+                ("0001003", "Maya Rao", "maya.rao@monash.edu", "management"),
             ]
             user_ids = {}
             password_hash = hash_password(settings.demo_password)
-            for full_name, email, role_name in users:
+            for staff_id, full_name, email, role_name in users:
                 cur.execute(
                     """
-                    INSERT INTO app_user (full_name, email, password_hash, role_id)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO app_user (staff_id, full_name, email, password_hash, role_id)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING user_id
                     """,
-                    (full_name, email, password_hash, roles[role_name]),
+                    (staff_id, full_name, email, password_hash, roles[role_name]),
                 )
                 user_ids[email] = cur.fetchone()["user_id"]
 
             program_id = _one(
                 cur,
                 "INSERT INTO program (program_code, program_name) VALUES (%s, %s) RETURNING program_id",
-                ("C2001", "Bachelor of Computer Science"),
+                ("DEV-BIT", "Bachelor of Information Technology (development mock data)"),
             )
 
             plos = [
-                ("PLO1", "Apply algorithmic thinking and computational problem solving."),
-                ("PLO2", "Design and evaluate software systems using appropriate methods."),
-                ("PLO3", "Communicate technical solutions clearly and professionally."),
-                ("PLO4", "Work ethically with data, software, and stakeholders."),
+                ("PLO 1", "Apply mathematical and computational foundations to model and solve problems in information technology."),
+                ("PLO 2", "Design and implement reliable software solutions using appropriate algorithms and data structures."),
+                ("PLO 3", "Analyse system behaviour using rigorous methods including formal proof and empirical evaluation."),
+                ("PLO 4", "Communicate technical content effectively across written, visual, and oral channels to diverse audiences."),
+                ("PLO 5", "Evaluate and select abstract data types and architectures appropriate to a given problem context."),
+                ("PLO 6", "Decompose ill-defined problems into tractable sub-problems and devise principled solutions."),
+                ("PLO 7", "Investigate current research literature to inform engineering decisions and identify open questions."),
+                ("PLO 8", "Demonstrate professional and ethical practice in the development and deployment of IT artefacts."),
             ]
             plo_ids = []
             for code, description in plos:
@@ -241,4 +245,3 @@ def seed_demo_data() -> None:
                     "Review assessment coverage before final report export.",
                 ),
             )
-

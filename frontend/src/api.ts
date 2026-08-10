@@ -3,8 +3,10 @@ const SESSION_KEY = "mcs07.session";
 
 export type SessionUser = {
   user_id: number;
+  staff_id: string | null;
   full_name: string;
   email: string;
+  must_change_password: boolean;
   role_name: string;
   permission_level: number;
 };
@@ -78,9 +80,11 @@ export type Assessment = {
 
 export type AdminUser = {
   user_id: number;
+  staff_id: string | null;
   full_name: string;
   email: string;
   is_active: boolean;
+  must_change_password: boolean;
   created_at: string;
   role_name: string;
   permission_level: number;
@@ -126,6 +130,13 @@ export function login(email: string, password: string) {
   });
 }
 
+export function changePassword(token: string, currentPassword: string, newPassword: string) {
+  return apiFetch<{ status: string }>("/auth/change-password", token, {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
 export function getOfferings(token: string) {
   return apiFetch<{ offerings: Offering[] }>("/offerings", token);
 }
@@ -151,6 +162,33 @@ export function getAssessments(token: string, offeringId: number) {
 
 export function getAdminUsers(token: string) {
   return apiFetch<{ users: AdminUser[] }>("/admin/users", token);
+}
+
+export function createAdminUser(
+  token: string,
+  payload: { staff_id: string; full_name: string; email: string; role_name: "management" | "coordinator" | "lecturer" },
+) {
+  return apiFetch<{ user: AdminUser; temporary_password: string }>("/admin/users", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createAdminUsers(
+  token: string,
+  users: Array<{ staff_id: string; full_name: string; email: string; role_name: "management" | "coordinator" | "lecturer" }>,
+) {
+  return apiFetch<{ accounts: Array<{ user: AdminUser; temporary_password: string }> }>("/admin/users/bulk", token, {
+    method: "POST",
+    body: JSON.stringify({ users }),
+  });
+}
+
+export function setAdminUserActive(token: string, userId: number, isActive: boolean) {
+  return apiFetch<{ status: string }>(`/admin/users/${userId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active: isActive }),
+  });
 }
 
 export function validateUpload(token: string, file: File) {
