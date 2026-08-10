@@ -4,12 +4,58 @@ import Sidebar from "../components/Sidebar";
 import { useSession } from "../useSession";
 import { AI_SUMMARY_DEMO, DASHBOARD_ASSESSMENTS, DIST, LOS, TREND } from "../mockData";
 import "./Dashboard.css";
+import { getSelectedUnit } from "../api";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 export default function Dashboard() {
   const session = useSession();
   const [summary, setSummary] = useState("");
+  const [showBanner, setShowBanner] = useState(true);
+  const selectedUnit = getSelectedUnit();
+  const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
   if (!session) return null;
+
+  const loAttainmentData = [
+    {
+      lo: "LO 1",
+      attainment: 83,
+      passed: "238/287 passed",
+      status: "On track",
+      fill: "#16744D",
+    },
+    {
+      lo: "LO 2",
+      attainment: 62,
+      passed: "178/287 passed",
+      status: "On risk",
+      fill: "#A8321C",
+    },
+    {
+      lo: "LO 3",
+      attainment: 88,
+      passed: "253/287 passed",
+      status: "On track",
+      fill: "#16744D",
+    },
+    {
+      lo: "LO 4",
+      attainment: 58,
+      passed: "166/287 passed",
+      status: "On risk",
+      fill: "#A8321C",
+    },
+  ];
 
   return (
     <div className="app">
@@ -18,13 +64,13 @@ export default function Dashboard() {
         {/* Topbar */}
         <div className="topbar">
           <div className="crumbs">
-            Units <span className="sep">›</span> FIT <span className="sep">›</span> <strong>FIT2004</strong>{" "}
-            <span className="sep">›</span> Semester 1 2026
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">Dashboard</Link>
           </div>
           <div className="top-actions">
-            <div className="search">
-              ⌕ Search units, students, LOs… <span className="kbd">⌘K</span>
-            </div>
             <button className="btn ghost">Export CSV</button>
             <button className="btn">Print report</button>
             <button className="btn primary" onClick={() => setSummary(AI_SUMMARY_DEMO)}>
@@ -35,19 +81,20 @@ export default function Dashboard() {
         </div>
 
         <div className="content">
-          {/* Banner */}
-          <div className="banner">
-            <div className="ico">i</div>
-            <div className="body">
-              <strong>Handbook synced to v2026.1 on 04 May 2026.</strong> Unit details and learning outcomes match the current
-              Monash Handbook entry for FIT2004. <Link to="/mapping">Review LO ↔ PLO mapping ›</Link>
+          {showBanner && (
+            <div className="banner">
+              <div className="ico">i</div>
+              <div className="body">
+                <strong>Handbook synced to v2026.1 on 04 May 2026.</strong> Unit details and learning outcomes match the current
+                Monash Handbook entry for FIT2004. <Link to="/mapping">Review LO ↔ PLO mapping ›</Link>
+              </div>
+              <div className="actions">
+                <button className="btn ghost" style={{ height: 28, fontSize: 11.5 }} onClick={() => setShowBanner(false)}>
+                  Dismiss
+                </button>
+              </div>
             </div>
-            <div className="actions">
-              <button className="btn ghost" style={{ height: 28, fontSize: 11.5 }}>
-                Dismiss
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Unit banner */}
           <div className="unit-banner">
@@ -59,11 +106,6 @@ export default function Dashboard() {
                 Faculty of Information Technology &nbsp;·&nbsp; Coordinated by {session.user.full_name} &nbsp;·&nbsp; Last grade
                 upload: 11 May 2026, 09:42
               </div>
-            </div>
-            <div className="sem-switch">
-              <span className="arrow">‹</span>
-              <span className="v">Semester 1, 2026</span>
-              <span className="arrow">›</span>
             </div>
           </div>
 
@@ -123,153 +165,95 @@ export default function Dashboard() {
           <div className="panel">
             <div className="panel-head">
               <div>
-                <h4>Learning outcomes</h4>
-                <div className="h-sub">% of cohort meeting the 50% attainment threshold for each outcome</div>
-              </div>
-              <div className="seg">
-                <span className="on">Pass rate</span>
-                <span>Mean score</span>
-                <span>Distribution</span>
-              </div>
-            </div>
-            <div className="lo-grid">
-              {LOS.map((lo) => (
-                <div key={lo.code} className={`lo-card${lo.risk ? " risk" : ""}`}>
-                  <div className="lo-h">
-                    <span className="lo-code">{lo.code}</span>
-                    <span className={`pill ${lo.risk ? "risk" : "ok"}`}>
-                      <span className="dot" />
-                      {lo.risk ? "At risk" : "On track"}
-                    </span>
-                  </div>
-                  <div className="lo-text">{lo.text}</div>
-                  <div className="lo-pct">
-                    {lo.pct}
-                    <span className="u">%</span>
-                  </div>
-                  <div className="lo-bar">
-                    <div className="fill" style={{ right: `${100 - lo.pct}%` }} />
-                  </div>
-                  <div className="lo-meta">
-                    <span>{lo.passed} / 287 passed</span>
-                    <span>μ {lo.mean}</span>
-                  </div>
+                <h4>LO attainment</h4>
+                <div className="h-sub">
+                  Attainment by learning outcome. Bars below the 70% threshold are highlighted in red.
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
 
-          <div className="two-col">
-            {/* Distribution */}
-            <div className="panel">
-              <div className="panel-head">
-                <div>
-                  <h4>Cohort grade distribution per LO</h4>
-                  <div className="h-sub">Stacked share of HD / D / C / P / N for each outcome — 287 students</div>
-                </div>
-                <div className="seg">
-                  <span className="on">Counts</span>
-                  <span>%</span>
-                </div>
-              </div>
-              {DIST.map((row) => (
-                <div key={row.lo} className="dist-row">
-                  <div className="lo-tag">
-                    {row.lo}
-                    <span className="sub">{row.label}</span>
-                  </div>
-                  <div className="stacked">
-                    {row.bars.map((b) => (
-                      <div key={b.cls} className={`seg-bar ${b.cls}`} style={{ width: `${b.w}%` }}>
-                        {b.w}
-                      </div>
+            <div style={{ width: "100%", height: 300, marginTop: 10 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={loAttainmentData} margin={{ top: 10, right: 8, left: -12, bottom: 0 }} barSize={54}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--line)" />
+                  <XAxis
+                    dataKey="lo"
+                    tick={{ fill: "var(--ink-2)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}
+                    axisLine={{ stroke: "var(--line)" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tickFormatter={(value) => `${value}%`}
+                    tick={{ fill: "var(--ink-3)", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <ReferenceLine
+                    y={70}
+                    stroke="#C97A5C"
+                    strokeDasharray="4 4"
+                    label={{ value: "Threshold 70%", position: "insideTopRight", fill: "#C97A5C", fontSize: 11 }}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(0, 75, 117, 0.05)" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const item = payload[0].payload;
+
+                      return (
+                        <div
+                          style={{
+                            background: "#fff",
+                            border: "1px solid var(--line)",
+                            borderRadius: 10,
+                            padding: "12px 14px",
+                            boxShadow: "0 8px 22px rgba(0, 27, 43, 0.12)",
+                            minWidth: 170,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: "JetBrains Mono, monospace",
+                              fontSize: 11,
+                              color: "var(--ink-3)",
+                              marginBottom: 6,
+                            }}
+                          >
+                            {item.lo}
+                          </div>
+                          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)", lineHeight: 1.1 }}>
+                            {item.attainment}%
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--ink-2)", marginTop: 8 }}>{item.passed}</div>
+                          <div
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              marginTop: 6,
+                              color: item.attainment < 70 ? "var(--risk)" : "var(--ok)",
+                            }}
+                          >
+                            {item.status}
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="attainment" radius={[8, 8, 0, 0]}>
+                    {loAttainmentData.map((entry) => (
+                      <Cell key={entry.lo} fill={entry.fill} />
                     ))}
-                  </div>
-                  <div className={`n ${row.deltaOk === true ? "pass" : row.deltaOk === false ? "fail" : ""}`}>{row.pass}</div>
-                  <div className="n">{row.mean}</div>
-                  <div className="n">{row.sd}</div>
-                  <div className="n" style={{ color: row.deltaOk === false ? "var(--risk)" : row.deltaOk === true ? "var(--ok)" : undefined }}>
-                    {row.delta}
-                  </div>
-                </div>
-              ))}
-              <div className="legend">
-                {[
-                  ["#16744D", "HD ≥80"],
-                  ["#4FA37E", "D 70–79"],
-                  ["#E0A33E", "C 60–69"],
-                  ["#C97A5C", "P 50–59"],
-                  ["#A8321C", "N <50"],
-                ].map(([c, l]) => (
-                  <span key={l}>
-                    <span className="sw" style={{ background: c }} />
-                    {l}
-                  </span>
-                ))}
-                <span style={{ marginLeft: "auto", color: "var(--ink-3)" }}>Δ column compares pass rate vs S2 2025</span>
-              </div>
-            </div>
-
-            {/* Assessments mini */}
-            <div className="panel">
-              <div className="panel-head">
-                <div>
-                  <h4>Assessments &amp; LO coverage</h4>
-                  <div className="h-sub">Weights distribute evenly to tagged LOs</div>
-                </div>
-                <Link to="/assessments" className="btn ghost" style={{ height: 28, fontSize: 11.5 }}>
-                  Configure ›
-                </Link>
-              </div>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Assessment</th>
-                    <th className="num">Weight</th>
-                    <th>Covers</th>
-                    <th className="num">Submitted</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DASHBOARD_ASSESSMENTS.map((a) => (
-                    <tr key={a.name}>
-                      <td className="nm">
-                        {a.name}
-                        <span className="meta">{a.meta}</span>
-                      </td>
-                      <td className="num">{a.weight}</td>
-                      <td>
-                        {a.covers.map((c) => (
-                          <span key={c} className="tag navy" style={{ marginRight: 3 }}>
-                            {c}
-                          </span>
-                        ))}
-                      </td>
-                      <td className="num" style={{ color: a.ok ? "var(--ok)" : "var(--ink-3)", fontWeight: a.ok ? 600 : undefined }}>
-                        {a.submitted}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ marginTop: 18, borderTop: "1px solid var(--line-2)", paddingTop: 14 }}>
-                <div style={{ fontSize: 11, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
-                  Overall attainment trend
-                </div>
-                <div className="trend">
-                  {TREND.map((t) => (
-                    <div key={t.sem} className={`trend-cell${t.now ? " now" : ""}`}>
-                      <div className="sem">{t.sem}</div>
-                      <div className="v">
-                        {t.v}
-                        <span style={{ fontSize: 11, color: "var(--ink-3)" }}>%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
+
+            {/* Distribution */}
+ 
+            {/* Assessments mini */}
+
         </div>
       </main>
     </div>

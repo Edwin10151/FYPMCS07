@@ -3,6 +3,11 @@ import Sidebar from "../components/Sidebar";
 import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { ACADEMIC_PERIODS, TEACHING_PERIODS, periodShortCode, type AcademicPeriod, type PeriodStatus } from "../mockData";
+import {Link} from "react-router-dom";
+import { getSelectedUnit } from "../api";
+
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const STATUS_LABEL: Record<PeriodStatus, string> = { active: "Active", planning: "Planning", archived: "Archived" };
 
@@ -111,7 +116,13 @@ export default function AdminPeriods() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Administration <span className="sep">›</span> <strong>Academic periods</strong>
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/admin/setup">Semester setup</Link>
+            <span className="sep">›</span>
+            <strong>Academic periods</strong>
           </div>
           <div className="top-actions">
             <button className="btn ghost">Export</button>

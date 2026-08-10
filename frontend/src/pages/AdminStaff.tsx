@@ -4,6 +4,11 @@ import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { findColumn, formatFileSize, parseCsv } from "../csv";
 import { STAFF_RECORDS, STAFF_ROLE_LABEL, UNIT_OFFERINGS, type StaffRecord, type StaffRole, type StaffStatus } from "../mockData";
+import { Link } from "react-router-dom";
+import { getSelectedUnit } from "../api";
+
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const STATUS_LABEL: Record<StaffStatus, string> = { active: "Active", pending: "Pending activation", inactive: "Inactive" };
 const ROLES: StaffRole[] = ["coordinator", "lecturer", "tutor", "admin"];
@@ -146,7 +151,13 @@ export default function AdminStaff() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Administration <span className="sep">›</span> <strong>Staff records</strong>
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/admin/setup">Semester setup</Link>
+            <span className="sep">›</span>
+            <strong>Staff Records</strong>
           </div>
           <div className="top-actions">
             <button className="btn ghost">Download template</button>
@@ -162,7 +173,7 @@ export default function AdminStaff() {
         <div className="content">
           <div className="unit-banner">
             <div>
-              <h1 style={{ fontSize: 26 }}>Staff records</h1>
+              <h1 style={{ fontSize: 26 }}>Staff Records</h1>
               <div className="sub">
                 Faculty of IT &nbsp;·&nbsp; The staff directory used when assigning people to units. Add new staff one at a time or
                 upload a list of staff IDs at the start of a period.

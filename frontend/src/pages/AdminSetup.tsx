@@ -5,8 +5,13 @@ import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { ACADEMIC_PERIODS, ENROLMENT_BATCHES, STAFF_RECORDS, UNIT_OFFERINGS } from "../mockData";
 import "./AdminSetup.css";
+import { getSelectedUnit } from "../api";
 
 type TaskStatus = "done" | "progress" | "todo" | "locked";
+
+// get selected unit for the topbar
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   done: "Complete",
@@ -146,7 +151,11 @@ export default function AdminSetup() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Administration <span className="sep">›</span> <strong>Semester setup</strong>
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <strong>Semester Setup</strong>
           </div>
           <div className="top-actions">
             <span className="setup-period-lbl">Period</span>
@@ -167,7 +176,7 @@ export default function AdminSetup() {
         <div className="content">
           <div className="unit-banner">
             <div>
-              <h1 style={{ fontSize: 26 }}>Semester setup</h1>
+              <h1 style={{ fontSize: 26 }}>Semester Setup</h1>
               <div className="sub">
                 Faculty of IT &nbsp;·&nbsp; Everything an administrator needs to open, run and close a teaching period — in the
                 order it needs doing.

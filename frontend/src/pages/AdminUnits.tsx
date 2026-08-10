@@ -11,6 +11,11 @@ import {
   type UnitOffering,
   type UnitStatus,
 } from "../mockData";
+import { Link } from "react-router-dom";
+import { getSelectedUnit } from "../api";
+
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 const STATUS_LABEL: Record<UnitStatus, string> = { active: "Active", draft: "Draft", discontinued: "Discontinued" };
 const ASSIGNABLE_ROLES: StaffRole[] = ["coordinator", "lecturer", "tutor"];
@@ -172,7 +177,13 @@ export default function AdminUnits() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Administration <span className="sep">›</span> <strong>Units &amp; offerings</strong>
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/admin/setup">Semester setup</Link>
+            <span className="sep">›</span>
+            <strong>Units & Offerings</strong>
           </div>
           <div className="top-actions">
             <button className="btn ghost">Export</button>

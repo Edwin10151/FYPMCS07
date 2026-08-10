@@ -4,12 +4,12 @@ import "./AdminNav.css";
 // Section-level navigation shared by every /admin screen. `end` is set on the
 // routes that are a prefix of the others so they don't stay highlighted.
 const ADMIN_TABS = [
-  { to: "/admin/setup", label: "Semester setup" },
-  { to: "/admin/periods", label: "Academic periods" },
-  { to: "/admin/units", label: "Units & offerings" },
-  { to: "/admin/enrolments", label: "Student enrolments" },
-  { to: "/admin/staff", label: "Staff records" },
-  { to: "/admin", label: "People & roles", end: true },
+  { to: "/admin/setup", label: "Semester Setup" },
+  { to: "/admin/periods", label: "Academic Periods" },
+  { to: "/admin/units", label: "Units & Offerings" },
+  { to: "/admin/enrolments", label: "Student Enrolments" },
+  { to: "/admin/staff", label: "Staff Records" },
+  { to: "/admin", label: "People & Roles", end: true },
 ];
 
 export default function AdminNav({ counts = {} }: { counts?: Record<string, string | number> }) {

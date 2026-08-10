@@ -3,6 +3,11 @@ import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { ADMIN_USERS, ROLE_CARDS } from "../mockData";
 import "./Admin.css";
+import { Link } from "react-router-dom";
+import { getSelectedUnit } from "../api";
+
+const selectedUnit = getSelectedUnit();
+const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
 export default function Admin() {
   const session = useSession();
@@ -15,7 +20,13 @@ export default function Admin() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Administration <span className="sep">›</span> <strong>Users &amp; roles</strong>
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/admin/setup">Semester setup</Link>
+            <span className="sep">›</span>
+            <strong>Academic periods</strong>
           </div>
           <div className="top-actions">
             <div className="search">
@@ -30,7 +41,7 @@ export default function Admin() {
         <div className="content">
           <div className="unit-banner">
             <div>
-              <h1 style={{ fontSize: 26 }}>Management portal</h1>
+              <h1 style={{ fontSize: 26 }}>Management Portal</h1>
               <div className="sub">
                 Faculty of IT &nbsp;·&nbsp; <strong>38 active users</strong> &nbsp;·&nbsp; 3 pending invitations &nbsp;·&nbsp; Last
                 audited 09 May 2026
