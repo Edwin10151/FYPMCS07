@@ -182,11 +182,6 @@ export default function Mapping() {
                   <div className="sync-toast">✓ Up to date with the {unitCode} handbook, Semester 1 2026</div>
                 )}
               </div>
-              <div className="sem-switch">
-                <span className="arrow">‹</span>
-                <span className="v">Semester 1, 2026</span>
-                <span className="arrow">›</span>
-              </div>
             </div>
           </div>
 

@@ -9,6 +9,7 @@ import { getSelectedUnit } from "../api";
 
 type TaskStatus = "done" | "progress" | "todo" | "locked";
 
+// get selected unit for the topbar
 const selectedUnit = getSelectedUnit();
 const unitCode = selectedUnit?.unitCode ?? "FIT2004";
 
@@ -175,7 +176,7 @@ export default function AdminSetup() {
         <div className="content">
           <div className="unit-banner">
             <div>
-              <h1 style={{ fontSize: 26 }}>Semester setup</h1>
+              <h1 style={{ fontSize: 26 }}>Semester Setup</h1>
               <div className="sub">
                 Faculty of IT &nbsp;·&nbsp; Everything an administrator needs to open, run and close a teaching period — in the
                 order it needs doing.

@@ -161,7 +161,7 @@ export default function Assessments() {
         <div className="content">
           <div className="unit-banner">
             <div>
-              <h1 style={{ fontSize: 26 }}>Assessment setup</h1>
+              <h1 style={{ fontSize: 26 }}>Assessment Setup</h1>
               <div className="sub">
                 <span className="code">FIT2004</span> Algorithms and Data Structures &nbsp;·&nbsp; Define what's assessed and
                 which LOs each assessment covers. Weight distributes evenly across tagged LOs.
@@ -189,11 +189,6 @@ export default function Assessments() {
                   {syncState === "checking" ? "Checking handbook…" : "Update to latest version"}
                 </button>
                 {syncState === "synced" && <div className="sync-toast">✓ Weights match the FIT2004 handbook, Semester 1 2026</div>}
-              </div>
-              <div className="sem-switch">
-                <span className="arrow">‹</span>
-                <span className="v">Semester 1, 2026</span>
-                <span className="arrow">›</span>
               </div>
             </div>
           </div>

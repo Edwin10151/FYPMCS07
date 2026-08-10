@@ -115,20 +115,10 @@ export default function Setting() {
                       style={{ display: "none" }}
                     />
                   </label>
-
-                  <div className="settings-avatar-help">
-                    Default avatar uses your initials.
-                    <br />
-                    Uploading a photo is optional.
-                  </div>
                 </div>
 
                 <div className="settings-hero-copy">
                   <h4>{session.user.full_name}</h4>
-                  <p>
-                    This page keeps identity fields read-only, while still allowing the user to update their profile image and
-                    password.
-                  </p>
                 </div>
               </div>
 
