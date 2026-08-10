@@ -4,6 +4,7 @@ import AdminNav from "../components/AdminNav";
 import { useSession } from "../useSession";
 import { findColumn, formatFileSize, parseCsv } from "../csv";
 import { ACADEMIC_PERIODS, ENROLMENT_BATCHES, UNIT_OFFERINGS, type EnrolmentBatch } from "../mockData";
+import { Link } from "react-router-dom";
 
 type RowIssue = "" | "Missing student ID" | "Invalid ID format" | "Missing name" | "Duplicate in file";
 
@@ -109,7 +110,13 @@ export default function AdminEnrolments() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs">
-            Administration <span className="sep">›</span> <strong>Student enrolments</strong>
+            <Link to="/units">Home</Link>
+            <span className="sep">›</span>
+            <Link to="/dashboard">{unitCode}</Link>
+            <span className="sep">›</span>
+            <Link to="/admin/setup">Semester setup</Link>
+            <span className="sep">›</span>
+            <strong>Student Enrolments</strong>
           </div>
           <div className="top-actions">
             <button className="btn ghost">Download template</button>
@@ -120,7 +127,7 @@ export default function AdminEnrolments() {
         <div className="content">
           <div className="unit-banner">
             <div>
-              <h1 style={{ fontSize: 26 }}>Student enrolments</h1>
+              <h1 style={{ fontSize: 26 }}>Student Enrolments</h1>
               <div className="sub">
                 Faculty of IT &nbsp;·&nbsp; Upload the student list (ID + name) for each teaching period. Grade uploads can only
                 match students who are registered here.
