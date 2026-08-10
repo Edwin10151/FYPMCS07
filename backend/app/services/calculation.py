@@ -5,7 +5,10 @@ def split_weight(weight: Decimal, linked_ulos: list[int]) -> dict[int, Decimal]:
     if not linked_ulos:
         return {}
     share = (weight / Decimal(len(linked_ulos))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return {ulo_id: share for ulo_id in linked_ulos}
+    allocated = {ulo_id: share for ulo_id in linked_ulos}
+    # Keep the persisted allocation equal to the parent assessment weight.
+    allocated[linked_ulos[-1]] += weight - sum(allocated.values())
+    return allocated
 
 
 def attainment_percentage(achieved_weight: Decimal, total_available_weight: Decimal) -> Decimal:
@@ -15,4 +18,3 @@ def attainment_percentage(achieved_weight: Decimal, total_available_weight: Deci
         Decimal("0.01"),
         rounding=ROUND_HALF_UP,
     )
-
