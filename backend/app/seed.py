@@ -90,17 +90,20 @@ def seed_demo_data() -> None:
             offering_id = _one(
                 cur,
                 """
-                INSERT INTO unit_offering (unit_id, program_id, semester_id, coordinator_id, handbook_url, last_scraped_at)
-                VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                INSERT INTO unit_offering (unit_id, semester_id, coordinator_id, handbook_url, last_scraped_at)
+                VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
                 RETURNING offering_id
                 """,
                 (
                     unit_id,
-                    program_id,
                     semester_id,
                     user_ids["elise.chen@monash.edu"],
                     "https://handbook.monash.edu/2026/units/FIT2004?year=2026",
                 ),
+            )
+            cur.execute(
+                "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s)",
+                (offering_id, program_id),
             )
             cur.execute(
                 "INSERT INTO offering_lecturer (offering_id, lecturer_id) VALUES (%s, %s)",
@@ -167,8 +170,8 @@ def seed_demo_data() -> None:
                 for plo_index in mapped_plos:
                     cur.execute(
                         """
-                        INSERT INTO ulo_plo_mapping (offering_id, offering_ulo_id, plo_id, mapping_source, confirmed_by)
-                        VALUES (%s, %s, %s, 'manual', %s)
+                        INSERT INTO ulo_plo_mapping (offering_id, offering_ulo_id, plo_id, confirmed_by)
+                        VALUES (%s, %s, %s, %s)
                         """,
                         (offering_id, ulo_ids[ulo_index], plo_ids[plo_index], user_ids["elise.chen@monash.edu"]),
                     )

@@ -1,3 +1,5 @@
+-- SUPERSEDED: folded into database/init/002_schema.sql. Kept commented out for history.
+/*
 -- This development system imports Malaysia offerings only. Storing the scope
 -- prevents a Handbook page containing multiple semesters from being blended.
 ALTER TABLE unit_offering
@@ -15,3 +17,4 @@ BEGIN
             CHECK (handbook_location = 'Malaysia');
     END IF;
 END $$;
+*/

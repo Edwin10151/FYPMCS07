@@ -9,6 +9,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from openpyxl import load_workbook
 from pydantic import BaseModel, EmailStr
 
 from app.auth import (
@@ -101,7 +102,7 @@ class AdminSemesterUpdate(BaseModel):
 
 class AdminOfferingCreate(BaseModel):
     semester_id: int
-    program_id: int
+    program_ids: list[int]
     unit_code: str
     unit_name: str
     coordinator_id: int
@@ -112,6 +113,7 @@ class AdminOfferingCreate(BaseModel):
 class AdminOfferingUpdate(BaseModel):
     unit_code: str
     unit_name: str
+    program_ids: list[int]
     coordinator_id: int
     lecturer_ids: list[int] = []
     status: str
@@ -191,8 +193,8 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             o.offering_id,
             u.unit_code,
             u.unit_name,
-            p.program_code,
-            p.program_name,
+            ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code) AS program_codes,
+            ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names,
             s.year,
             s.period,
             o.coordinator_id,
@@ -200,7 +202,8 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             o.last_scraped_at
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN program p ON p.program_id = o.program_id
+        JOIN offering_program op ON op.offering_id = o.offering_id
+        JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
     """
     if user["role_name"] == "coordinator":
@@ -219,7 +222,12 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
         params = None
     else:
         raise HTTPException(status_code=403, detail="Unknown role")
-    rows = fetch_all(query + " ORDER BY s.year DESC, s.period, u.unit_code", params)
+    query += """
+        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period,
+                 o.coordinator_id, o.handbook_url, o.last_scraped_at
+        ORDER BY s.year DESC, s.period, u.unit_code
+    """
+    rows = fetch_all(query, params)
     for row in rows:
         row["can_edit"] = user["role_name"] == "management" or row["coordinator_id"] == user["user_id"]
         del row["coordinator_id"]
@@ -429,12 +437,15 @@ def confirm_handbook_import(
 def dashboard(user: Annotated[dict, Depends(require_offering_access())], offering_id: int = 1):
     offering = fetch_one(
         """
-        SELECT o.offering_id, u.unit_code, u.unit_name, p.program_name, s.year, s.period
+        SELECT o.offering_id, u.unit_code, u.unit_name, s.year, s.period,
+               ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN program p ON p.program_id = o.program_id
+        JOIN offering_program op ON op.offering_id = o.offering_id
+        JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
         WHERE o.offering_id = %s
+        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period
         """,
         (offering_id,),
     )
@@ -514,17 +525,17 @@ def mappings(user: Annotated[dict, Depends(require_offering_access())], offering
     )
     plos = fetch_all(
         """
-        SELECT p.plo_id, p.plo_code, p.description
+        SELECT DISTINCT p.plo_id, p.plo_code, p.description
         FROM plo p
-        JOIN unit_offering o ON o.program_id = p.program_id
-        WHERE o.offering_id = %s
+        JOIN offering_program op ON op.program_id = p.program_id
+        WHERE op.offering_id = %s
         ORDER BY p.plo_code
         """,
         (offering_id,),
     )
     rows = fetch_all(
         """
-        SELECT mapping_id, offering_ulo_id, plo_id, mapping_source, confirmed_at
+        SELECT mapping_id, offering_ulo_id, plo_id, confirmed_at
         FROM ulo_plo_mapping
         WHERE offering_id = %s AND is_active = TRUE
         ORDER BY offering_ulo_id, plo_id
@@ -549,8 +560,8 @@ def save_mappings(
             for item in payload.mappings:
                 cur.execute(
                     """
-                    INSERT INTO ulo_plo_mapping (offering_id, offering_ulo_id, plo_id, mapping_source, confirmed_by)
-                    VALUES (%s, %s, %s, 'manual', %s)
+                    INSERT INTO ulo_plo_mapping (offering_id, offering_ulo_id, plo_id, confirmed_by)
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT DO NOTHING
                     """,
                     (payload.offering_id, item["offering_ulo_id"], item["plo_id"], user["user_id"]),
@@ -789,10 +800,13 @@ def _admin_context_payload() -> dict:
     )
     offerings_rows = fetch_all(
         """
-        SELECT o.offering_id, o.semester_id, o.program_id, o.unit_id, o.coordinator_id, o.status,
+        SELECT o.offering_id, o.semester_id, o.unit_id, o.coordinator_id, o.status,
                o.handbook_url, o.last_scraped_at,
                u.unit_code, u.unit_name, replacement.unit_code AS replacement_unit_code,
-               p.program_code, p.program_name, s.year, s.period,
+               ARRAY_AGG(DISTINCT p.program_id) AS program_ids,
+               ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code) AS program_codes,
+               ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names,
+               s.year, s.period,
                coordinator.full_name AS coordinator_name,
                ARRAY(SELECT ol.lecturer_id FROM offering_lecturer ol
                      WHERE ol.offering_id = o.offering_id ORDER BY ol.lecturer_id) AS lecturer_ids,
@@ -801,10 +815,14 @@ def _admin_context_payload() -> dict:
                 WHERE b.offering_id = o.offering_id AND b.status = 'committed') AS committed_grade_upload_count
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN program p ON p.program_id = o.program_id
+        JOIN offering_program op ON op.offering_id = o.offering_id
+        JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
         JOIN app_user coordinator ON coordinator.user_id = o.coordinator_id
         LEFT JOIN unit replacement ON replacement.unit_id = o.replaced_by_unit_id
+        GROUP BY o.offering_id, o.semester_id, o.unit_id, o.coordinator_id, o.status,
+                 o.handbook_url, o.last_scraped_at, u.unit_code, u.unit_name,
+                 replacement.unit_code, s.year, s.period, coordinator.full_name
         ORDER BY s.year DESC, s.period DESC, u.unit_code
         """
     )
@@ -888,6 +906,26 @@ def _save_offering_staff(cur, offering_id: int, coordinator_id: int, lecturer_id
         )
 
 
+def _validate_program_ids(cur, program_ids: list[int]) -> list[int]:
+    cleaned = list(dict.fromkeys(program_ids))
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Select at least one program")
+    cur.execute("SELECT program_id FROM program WHERE program_id = ANY(%s)", (cleaned,))
+    found = {row["program_id"] for row in cur.fetchall()}
+    if found != set(cleaned):
+        raise HTTPException(status_code=422, detail="Program not found")
+    return cleaned
+
+
+def _save_offering_programs(cur, offering_id: int, program_ids: list[int]) -> None:
+    cur.execute("DELETE FROM offering_program WHERE offering_id = %s", (offering_id,))
+    for program_id in program_ids:
+        cur.execute(
+            "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s)",
+            (offering_id, program_id),
+        )
+
+
 @app.get("/api/admin/context")
 def admin_context(user: Annotated[dict, Depends(require_permission(30))]):
     return _admin_context_payload()
@@ -961,12 +999,10 @@ def create_admin_offering(
     with get_conn() as conn:
         with conn.cursor() as cur:
             lecturer_ids = _validate_offering_staff(cur, payload.coordinator_id, payload.lecturer_ids)
+            program_ids = _validate_program_ids(cur, payload.program_ids)
             cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (payload.semester_id,))
             if not cur.fetchone():
                 raise HTTPException(status_code=422, detail="Academic period not found")
-            cur.execute("SELECT 1 FROM program WHERE program_id = %s", (payload.program_id,))
-            if not cur.fetchone():
-                raise HTTPException(status_code=422, detail="Program not found")
             cur.execute(
                 """
                 INSERT INTO unit (unit_code, unit_name)
@@ -980,21 +1016,22 @@ def create_admin_offering(
             cur.execute(
                 """
                 SELECT 1 FROM unit_offering
-                WHERE unit_id = %s AND program_id = %s AND semester_id = %s
+                WHERE unit_id = %s AND semester_id = %s
                 """,
-                (unit_id, payload.program_id, payload.semester_id),
+                (unit_id, payload.semester_id),
             )
             if cur.fetchone():
                 raise HTTPException(status_code=409, detail="This unit offering already exists for the selected period")
             cur.execute(
                 """
-                INSERT INTO unit_offering (unit_id, program_id, semester_id, coordinator_id, status)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO unit_offering (unit_id, semester_id, coordinator_id, status)
+                VALUES (%s, %s, %s, %s)
                 RETURNING offering_id
                 """,
-                (unit_id, payload.program_id, payload.semester_id, payload.coordinator_id, payload.status),
+                (unit_id, payload.semester_id, payload.coordinator_id, payload.status),
             )
             offering_id = cur.fetchone()["offering_id"]
+            _save_offering_programs(cur, offering_id, program_ids)
             _save_offering_staff(cur, offering_id, payload.coordinator_id, lecturer_ids)
     return {"offering_id": offering_id, "status": "created"}
 
@@ -1017,6 +1054,7 @@ def update_admin_offering(
     with get_conn() as conn:
         with conn.cursor() as cur:
             lecturer_ids = _validate_offering_staff(cur, payload.coordinator_id, payload.lecturer_ids)
+            program_ids = _validate_program_ids(cur, payload.program_ids)
             cur.execute("SELECT unit_id FROM unit_offering WHERE offering_id = %s FOR UPDATE", (offering_id,))
             offering = cur.fetchone()
             if not offering:
@@ -1046,6 +1084,7 @@ def update_admin_offering(
                 "UPDATE unit_offering SET status = %s, replaced_by_unit_id = %s WHERE offering_id = %s",
                 (payload.status, replacement_unit_id, offering_id),
             )
+            _save_offering_programs(cur, offering_id, program_ids)
             _save_offering_staff(cur, offering_id, payload.coordinator_id, lecturer_ids)
     return {"status": "updated"}
 
@@ -1124,12 +1163,16 @@ async def commit_enrolment_upload(
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT program_id FROM unit_offering WHERE offering_id = %s FOR UPDATE",
+                "SELECT 1 FROM unit_offering WHERE offering_id = %s FOR UPDATE",
                 (offering_id,),
             )
             offering = cur.fetchone()
             if not offering:
                 raise HTTPException(status_code=404, detail="Unit offering not found")
+            cur.execute("SELECT program_id FROM offering_program WHERE offering_id = %s", (offering_id,))
+            offering_program_ids = [row["program_id"] for row in cur.fetchall()]
+            # A student's program is only unambiguous when the offering serves a single program.
+            student_program_id = offering_program_ids[0] if len(offering_program_ids) == 1 else None
             for _, row in rows:
                 student_code = row[student_code_column].strip().replace(" ", "")
                 full_name = row[full_name_column].strip()
@@ -1140,7 +1183,7 @@ async def commit_enrolment_upload(
                     ON CONFLICT (student_code) DO UPDATE SET full_name = EXCLUDED.full_name
                     RETURNING student_id
                     """,
-                    (student_code, full_name, offering["program_id"]),
+                    (student_code, full_name, student_program_id),
                 )
                 student_id = cur.fetchone()["student_id"]
                 cur.execute(
@@ -1515,3 +1558,162 @@ def commit_grade_upload(
         "grades_saved": len(grade_rows),
         "attainment_records": attainment_count,
     }
+
+
+# ---------------------------------------------------------------------------
+# Teaching staff roster (Lecture / Tutorial / Laboratory) — e.g. the SoIT
+# "Lecture and Tutor List" spreadsheet. This is a reporting/compliance roster,
+# separate from offering_lecturer (which controls dashboard login access).
+# ---------------------------------------------------------------------------
+
+_ROSTER_ROLE_COLUMNS = [
+    ("lecture", 4, 5),
+    ("tutorial", 6, 7),
+    ("laboratory", 8, 9),
+]
+_NOT_APPLICABLE = {"", "not applicable", "n/a", "na"}
+
+
+def _roster_cell(row: tuple, index: int) -> str:
+    if index >= len(row) or row[index] is None:
+        return ""
+    return str(row[index]).strip()
+
+
+def _parse_staffing_roster(content: bytes) -> list[dict]:
+    """Parse a block-structured roster: one unit spans 1+ rows, later rows in
+    the same block leave 'Unit Code' blank and only add more staff."""
+    try:
+        workbook = load_workbook(io.BytesIO(content), data_only=True, read_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Could not read the roster spreadsheet") from exc
+    sheet = workbook.worksheets[0]
+    units: list[dict] = []
+    current: dict | None = None
+    for row in sheet.iter_rows(min_row=4, values_only=True):
+        unit_code = _roster_cell(row, 2).upper()
+        if unit_code:
+            programme_raw = _roster_cell(row, 1)
+            current = {
+                "unit_code": unit_code,
+                "unit_name": _roster_cell(row, 3),
+                "programme_codes": [item.strip().upper() for item in programme_raw.split("/") if item.strip()],
+                "staffing": [],
+            }
+            units.append(current)
+        if current is None:
+            continue
+        for role_type, name_col, email_col in _ROSTER_ROLE_COLUMNS:
+            name = _roster_cell(row, name_col)
+            if name.lower() in _NOT_APPLICABLE:
+                continue
+            email = _roster_cell(row, email_col).lower() or None
+            current["staffing"].append({"role_type": role_type, "name": name, "email": email})
+    return units
+
+
+@app.post("/api/admin/staffing/roster-import")
+async def import_staffing_roster(
+    user: Annotated[dict, Depends(require_permission(30))],
+    semester_id: int = Form(...),
+    file: UploadFile = File(...),
+):
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=422, detail="Upload an .xlsx roster file")
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Roster files must be 10 MB or smaller")
+    units = _parse_staffing_roster(content)
+    if not units:
+        raise HTTPException(status_code=422, detail="No units were found in this roster file")
+
+    warnings: list[str] = []
+    unmatched_units: list[dict] = []
+    matched_offerings = 0
+    staffing_rows_created = 0
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=422, detail="Academic period not found")
+            for unit in units:
+                cur.execute(
+                    """
+                    SELECT o.offering_id FROM unit_offering o
+                    JOIN unit u ON u.unit_id = o.unit_id
+                    WHERE u.unit_code = %s AND o.semester_id = %s
+                    """,
+                    (unit["unit_code"], semester_id),
+                )
+                offering = cur.fetchone()
+                if not offering:
+                    unmatched_units.append(
+                        {"unit_code": unit["unit_code"], "unit_name": unit["unit_name"], "programme_codes": unit["programme_codes"]}
+                    )
+                    continue
+                offering_id = offering["offering_id"]
+                matched_offerings += 1
+
+                if unit["programme_codes"]:
+                    cur.execute(
+                        "SELECT program_id, program_code FROM program WHERE UPPER(program_code) = ANY(%s)",
+                        (unit["programme_codes"],),
+                    )
+                    found_programs = cur.fetchall()
+                    found_codes = {row["program_code"].upper() for row in found_programs}
+                    for code in unit["programme_codes"]:
+                        if code not in found_codes:
+                            warnings.append(f"{unit['unit_code']}: no matching program for '{code}'")
+                    for program in found_programs:
+                        cur.execute(
+                            "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (offering_id, program["program_id"]),
+                        )
+
+                cur.execute(
+                    "DELETE FROM offering_staffing WHERE offering_id = %s AND source = 'roster_import'",
+                    (offering_id,),
+                )
+                for entry in unit["staffing"]:
+                    staff_user_id = None
+                    if entry["email"]:
+                        cur.execute("SELECT user_id FROM app_user WHERE LOWER(email) = %s", (entry["email"],))
+                        match = cur.fetchone()
+                        staff_user_id = match["user_id"] if match else None
+                    cur.execute(
+                        """
+                        INSERT INTO offering_staffing (offering_id, role_type, staff_user_id, external_name, external_email)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (offering_id, entry["role_type"], staff_user_id, entry["name"], entry["email"]),
+                    )
+                    staffing_rows_created += 1
+
+    return {
+        "status": "imported",
+        "units_in_file": len(units),
+        "matched_offerings": matched_offerings,
+        "staffing_rows_created": staffing_rows_created,
+        "unmatched_units": unmatched_units,
+        "warnings": warnings,
+    }
+
+
+@app.get("/api/offerings/{offering_id}/staffing")
+def offering_staffing(
+    offering_id: int,
+    user: Annotated[dict, Depends(require_offering_access())],
+):
+    rows = fetch_all(
+        """
+        SELECT s.staffing_id, s.role_type, s.staff_user_id, s.external_name, s.external_email,
+               u.full_name AS staff_full_name
+        FROM offering_staffing s
+        LEFT JOIN app_user u ON u.user_id = s.staff_user_id
+        WHERE s.offering_id = %s
+        ORDER BY s.role_type, COALESCE(u.full_name, s.external_name)
+        """,
+        (offering_id,),
+    )
+    return {"staffing": rows}

@@ -1,3 +1,5 @@
+-- SUPERSEDED: folded into database/init/002_schema.sql. Kept commented out for history.
+/*
 ALTER TABLE app_user ADD COLUMN IF NOT EXISTS staff_id VARCHAR(7);
 ALTER TABLE app_user ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE app_user ADD CONSTRAINT app_user_staff_id_format
@@ -48,3 +50,4 @@ CROSS JOIN (VALUES
 ) AS item(plo_code, description)
 WHERE pr.program_code = 'DEV-BIT'
 ON CONFLICT (program_id, plo_code) DO UPDATE SET description = EXCLUDED.description;
+*/

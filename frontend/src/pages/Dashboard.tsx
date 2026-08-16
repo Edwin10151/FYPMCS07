@@ -52,7 +52,7 @@ export default function Dashboard() {
         <div className="content">
           {(error || offeringError) && <div className="banner"><div className="ico">!</div><div className="body">{error || offeringError}</div></div>}
           {loading ? <div className="panel">Loading dashboard data...</div> : !data ? <div className="panel">The selected offering could not be loaded.</div> : <>
-            <div className="unit-banner"><div><h1><span className="code">{data.offering.unit_code}</span>{data.offering.unit_name}</h1><div className="sub">{data.offering.program_name} · {data.offering.year} {data.offering.period} · Development database</div></div></div>
+            <div className="unit-banner"><div><h1><span className="code">{data.offering.unit_code}</span>{data.offering.unit_name}</h1><div className="sub">{data.offering.program_names.join(" / ")} · {data.offering.year} {data.offering.period} · Development database</div></div></div>
             <div className="kpi-row">
               <div className="kpi"><div className="lbl">Enrolled</div><div className="val">{data.stats.student_count}</div><div className="delta">Recorded enrolments</div></div>
               <div className="kpi"><div className="lbl">Overall attainment</div><div className="val">{averageAttainment === null ? "--" : <>{averageAttainment.toFixed(1)}<span className="u">%</span></>}</div><div className="delta">Mean across {data.stats.lo_count} ULOs</div></div>

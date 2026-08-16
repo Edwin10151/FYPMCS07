@@ -1,3 +1,5 @@
+-- SUPERSEDED: folded into database/init/002_schema.sql. Kept commented out for history.
+/*
 -- Administration state and upload audit records for the first development phase.
 -- The initial schema already contains the final student/grade/result tables; this
 -- migration adds the workflow state needed to populate them safely.
@@ -68,3 +70,4 @@ CREATE TABLE IF NOT EXISTS grade_upload_cell (
 
 CREATE INDEX IF NOT EXISTS idx_grade_upload_cell_assessment
     ON grade_upload_cell(assessment_id);
+*/

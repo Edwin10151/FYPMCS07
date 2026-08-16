@@ -108,7 +108,7 @@ function OfferingCard({ offering, role, onOpen }: { offering: Offering; role: st
         <span className="role-pill coord">{role}</span>
       </div>
       <h3>{offering.unit_name}</h3>
-      <div className="unit-meta">{offering.year} {offering.period} · {offering.program_name}</div>
+      <div className="unit-meta">{offering.year} {offering.period} · {offering.program_names.join(" / ")}</div>
       <div className="unit-stats">
         <div className="unit-stat"><span className="unit-stat-val">{offering.period}</span><span className="unit-stat-lbl">Teaching period</span></div>
         <div className="unit-stat"><span className="unit-stat-val">{offering.handbook_url ? "Ready" : "Setup"}</span><span className="unit-stat-lbl">{handbookStatus}</span></div>

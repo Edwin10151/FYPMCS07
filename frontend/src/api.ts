@@ -21,8 +21,8 @@ export type Offering = {
   offering_id: number;
   unit_code: string;
   unit_name: string;
-  program_code: string;
-  program_name: string;
+  program_codes: string[];
+  program_names: string[];
   year: number;
   period: string;
   can_edit: boolean;
@@ -53,7 +53,7 @@ export type DashboardPayload = {
     offering_id: number;
     unit_code: string;
     unit_name: string;
-    program_name: string;
+    program_names: string[];
     year: number;
     period: string;
   };
@@ -124,7 +124,7 @@ export type AdminPeriod = {
 export type AdminOffering = {
   offering_id: number;
   semester_id: number;
-  program_id: number;
+  program_ids: number[];
   unit_id: number;
   coordinator_id: number;
   coordinator_name: string;
@@ -135,8 +135,8 @@ export type AdminOffering = {
   unit_code: string;
   unit_name: string;
   replacement_unit_code: string | null;
-  program_code: string;
-  program_name: string;
+  program_codes: string[];
+  program_names: string[];
   year: number;
   period: string;
   student_count: number;
@@ -275,7 +275,7 @@ export function updateAdminPeriod(
 
 export type OfferingInput = {
   semester_id: number;
-  program_id: number;
+  program_ids: number[];
   unit_code: string;
   unit_name: string;
   coordinator_id: number;
@@ -289,8 +289,32 @@ export function createAdminOffering(token: string, payload: OfferingInput) {
   return apiFetch<{ offering_id: number; status: string }>("/admin/offerings", token, { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function updateAdminOffering(token: string, offeringId: number, payload: Omit<OfferingInput, "semester_id" | "program_id">) {
+export function updateAdminOffering(token: string, offeringId: number, payload: Omit<OfferingInput, "semester_id">) {
   return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export type OfferingStaffingRow = {
+  staffing_id: number;
+  role_type: "lecture" | "tutorial" | "laboratory";
+  staff_user_id: number | null;
+  external_name: string | null;
+  external_email: string | null;
+  staff_full_name: string | null;
+};
+
+export function getOfferingStaffing(token: string, offeringId: number) {
+  return apiFetch<{ staffing: OfferingStaffingRow[] }>(`/offerings/${offeringId}/staffing`, token);
+}
+
+export function importStaffingRoster(token: string, semesterId: number, file: File) {
+  return uploadForm(token, "/admin/staffing/roster-import", { semester_id: String(semesterId) }, file) as Promise<{
+    status: string;
+    units_in_file: number;
+    matched_offerings: number;
+    staffing_rows_created: number;
+    unmatched_units: Array<{ unit_code: string; unit_name: string; programme_codes: string[] }>;
+    warnings: string[];
+  }>;
 }
 
 export function createAdminUser(
