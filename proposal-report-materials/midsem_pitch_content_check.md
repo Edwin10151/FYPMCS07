@@ -8,17 +8,49 @@ This document covers **content only**. Formatting items (presenter names on each
 
 ## 1. Two answers
 
-**Does the risk slide need triggers, worst-case actions, and linkage to the issues?**
+### Where does "triggers / worst case" come from?
 
-The Moodle post says *"a **suggested** layout"*, so it is guidance rather than a mandate. Do it anyway:
+Searched both faculty PDFs for `trigger`, `worst`, `worse`, `contingency` — **no match in either**. The only source is the lecturer's Week 5 Moodle post, item 5:
 
-- The supervisor signs off against that post, and those three questions appear in it verbatim.
-- The rubric's HD descriptor for Pitch Content requires content that *"connects effectively"* and shows a *"well-managed project direction"*. Triggers and contingencies are the only thing in the deck that would evidence this.
-- Without them the slide is risk + mitigation — identical to the proposal stage. It shows no progression.
+> *"Risks discussion (mgmt etc) - are they affected by (4) above? triggers? worse case scenario actions?"*
 
-**Do issues and risks need separate slides?**
+What the faculty documents do say about risk:
 
-Yes. The post lists them as separate items (4) and (5). Splitting produces 7 core slides, inside the stated 6–8 range. It is also the only way the required detail fits legibly — 3 issues plus 3 risks with four fields each will not read on one slide, and clutter is marked under Visual Communication.
+| Source | Exact wording |
+|---|---|
+| Brief — required content | "Top-3 risks being monitored?" |
+| Rubric — criterion definition | "…current and anticipated issues, **risk management**, team roles and task allocation…" |
+| Rubric — HD descriptor | "…key risks and anticipated future issues… content **connects effectively**… **no material gaps**" |
+
+So triggers and worst-case actions are **not faculty-mandated**. Do them anyway: the rubric's word is "risk *management*", not "risks", and three risks with mitigations is the minimum reading of that. Triggers and contingencies are the clearest available evidence of management rather than listing — and the supervisor signs off against the Moodle post.
+
+### Do issues and risks need separate slides?
+
+Yes. The Moodle post lists them as separate items (4) and (5). Splitting gives 7 core slides, inside the stated 6–8 range. It is also the only way the detail fits legibly — 3 issues plus 3 risks with four fields each will not read on one slide, and clutter is marked under Visual Communication.
+
+## 1b. How to split the content across speakers
+
+The brief, page 2, gives a worked example for a **4-member team**:
+
+> a. Team member 1: "Milestone Progress and Methodology Adaptations"
+> b. Team member 2: "Current Project Management & Development Issues"
+> c. Team member 3: "Risk Management and Anticipated Issues"
+> d. Team member 4: "RTM Summary and Next/Remaining Steps"
+
+Two things to take from it: the faculty pairs **risk management with anticipated issues** on one member, and it puts the **RTM** on a slide. The rubric groups them identically — *"key risks and anticipated future issues"*. So anticipated future issues belong on the risk slide (S6), not Next Steps.
+
+Recommended split — contiguous blocks, lecturer's slide order unchanged:
+
+| Speaker | Slides | Content | Min |
+|---|---|---|---|
+| A | S1–S3 | Cover, overview, problem/opportunity, SMART goals, deliverables | 2.5 |
+| B | S4 | Methodology + adaptation, tracking, milestones, 35% and its calculation, roles + task allocation | 3.0 |
+| C | S5–S6 | Top-3 issues → risks with triggers, worst case, linkage → anticipated future issues | 3.5 |
+| D | S7–S9 | End users + RTM validation, demo, next steps, priorities, KIV, close | 3.0 |
+
+Total 12.0 — the exact allocation for a 4-member team.
+
+Contiguous blocks matter: the 15-mark structure criterion penalises a deck that *"feels more like separate individual contributions than a coordinated team presentation."* One handover per speaker, four in total. Speaker C carries the heaviest block but also the most connected one — issues flow straight into the risks they cause.
 
 ## 2. Missing outright
 
@@ -26,7 +58,7 @@ The brief's wording is *"the following material **must** be covered"* — mandat
 
 | Brief requirement | Status | Note |
 |---|---|---|
-| "What are the anticipated future issues or problems?" | **Absent** | S9's "Future Roadmap" lists KIV *features*, not anticipated problems |
+| "What are the anticipated future issues or problems?" | **Absent** | S9's "Future Roadmap" lists KIV *features*, not anticipated problems. Belongs on S6 — see §1b |
 | "What roles have been assigned to your team members?" | **Absent** | S2 shows presentation contributions, not project roles |
 | "How are you allocating tasks to team members?" | **Absent** | — |
 
@@ -96,16 +128,16 @@ Existing mitigations stay — they are preventive. The contingency row is the ne
 
 The third line is the one that scores. *"We consulted stakeholders"* is not evidence; a decision traceable to a conversation is. Show one RTM row traced end to end rather than the whole table.
 
-### S9 — add anticipated future issues
+### S6 — add anticipated future issues
 
-Distinct from current issues (S5) and from risks (S6): what the team expects to *become* a problem.
+Place these on the risk slide, not Next Steps: both the brief's example split and the rubric group anticipated issues with risk management. Distinct from current issues (S5): what the team expects to *become* a problem.
 
 > - LLM inference speed on local hardware once report volumes grow
 > - PDF export fidelity — FR12, not yet started
 > - End-to-end Docker orchestration once the LLM service joins the compose stack (NFR4)
 > - Test-data realism as the dataset passes 100 records
 
-Keep the existing out-of-scope and KIV content — it already uses the lecturer's own framing.
+S9 then stays purely next steps: immediate priorities, critical path, out of scope, KIV, and the close. That content already uses the lecturer's own framing.
 
 ## 5. Demo
 
