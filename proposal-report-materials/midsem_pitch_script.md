@@ -3,163 +3,173 @@
 ---
 
 ## Slide 1 — Cover
-**Sharmanne**
 
-Good morning everyone. We're Team MCS07.
+Speaker: Sharmanne Yeoh
 
-Our project is the Student Academic Performance Dashboard. Our team is Sharmanne Yeoh, Chuah Yuan Yu, Edwin Ting Heng Wei and Lim Wen Jung. We're supervised by Mr Soo Wooi King and Dr Tan Chee Keong.
+Good morning everyone. We are Team MCS07, and our project is the Student Academic Performance Dashboard. Our team members are Sharmanne Yeoh, Chuah Yuan Yu, Edwin Ting Heng Wei, and Lim Wen Jung.
 
-We're here today to show you where the project stands at the halfway point, what we're dealing with right now, and to ask for the go-ahead for the rest of the work.
+This project is supervised by Mr Soo Wooi King and Dr Tan Chee Keong.
+
+The purpose of this pitch is to report our progress at the mid-point of the project, explain the issues and risks we are currently managing, and request approval to continue with the remaining work.
 
 ---
 
 ## Slide 2 — Overview
-**Sharmanne**
 
-Here's how we'll run through it.
+Speaker: Sharmanne Yeoh
 
-I'll start with the problem and our goals. Yuan Yu will cover our methodology, our progress, and the three issues we're handling. Edwin will take our risks, and how we're working with our end users. And Wen Jung will show you a short demo, then close with what's next.
+This slide shows how we have divided the presentation.
+
+I will cover the problem statement, our project goals, and our deliverables. Yuan Yu will explain our methodology, our current progress, and the top three issues we are managing. Edwin will cover our top three risks and our end-user engagement. Wen Jung will present a short demonstration and our next steps.
 
 ---
 
 ## Slide 3 — Problem Statement
-**Sharmanne**
 
-So, the problem.
+Speaker: Sharmanne Yeoh
 
-Academic data is scattered. Unit information sits in the Monash Handbook. Grades sit in spreadsheets and Moodle exports. And learning outcome mapping is still done by hand. That makes tracking learning outcomes slow, manual, and easy to get wrong.
+The problem we are addressing is that academic data remains fragmented. Unit information is held in the Monash Handbook, grades are held in spreadsheets and Moodle exports, and learning outcome mapping is still performed manually.
 
-Our answer is a secure dashboard that runs locally. It brings grade validation and learning outcome reporting into one place. We're building it with React, FastAPI, and a local LLM running on Ollama. Everything stays on the machine, so student data never leaves.
+This makes learning outcome tracking slow, repetitive, and difficult to verify.
 
-We've set our goals so we can measure them. The dashboard has to show at least three charts. It has to handle at least a hundred student records in one upload. The AI has to produce three-sentence draft summaries that staff can edit. And all core modules have to be done and handed over by Week 10.
+Our solution is a secure dashboard that is hosted locally. It brings grade validation and learning outcome reporting into a single workflow. The system is built with React, FastAPI, and a local LLM running on Ollama, so that student data does not leave the local environment.
 
-Those are our deliverables too — the dashboard, the validation pipeline, the AI reporting, and PDF export.
+Our project goals are defined so that they can be measured. The dashboard must provide at least three visualisation charts. The system must process at least one hundred student records in a single upload. The local LLM must generate three-sentence draft summaries that staff can edit. All core modules must be completed and handed over by Week 10.
 
-I'll now hand over to Yuan Yu, who'll explain how we've been running the project.
+These goals also define our deliverables: the dashboard, the validation pipeline, the AI-assisted reporting, and the PDF export function.
+
+I will now hand over to Yuan Yu, who will explain our methodology and current progress.
 
 ---
 
 ## Slide 4 — Methodology, Progress and Team
-**Yuan Yu**
+
+Speaker: Chuah Yuan Yu
 
 Thank you, Sharmanne.
 
-We run a lightweight Agile process, and we track everything on a Kanban board in Trello.
+This slide covers how we have managed and monitored the project so far.
 
-We chose not to use full Scrum. Sprint ceremonies and a Scrum Master don't really fit four part-time students on a fixed studio timetable. So we replaced sprints with milestone planning and supervisor checkpoints instead.
+We are using a lightweight Agile process with Kanban-style tracking in Trello. We did not adopt full Scrum. Fixed sprint ceremonies and a dedicated Scrum Master do not suit four part-time students working to a fixed studio timetable. We therefore replaced sprints with milestone planning and supervisor checkpoints.
 
-We track our work in three ways. Every meeting opens with a live Trello audit, so the board gets corrected in front of everyone, not afterwards. We run short stand-ups on WhatsApp between meetings. And we use our GitHub commit history as the record of who actually did what.
+We track and document our work in three ways. First, every meeting begins with a live Trello audit, so the board is corrected in front of the team rather than afterwards. Second, we hold short stand-ups on WhatsApp between meetings. Third, we use our GitHub commit history as the record of individual contribution.
 
-On the board right now, we have 34 tasks in Done. We're currently working on Backend Implementation and Database Setup. We've finished two of our six core phases — Requirements, and UI/UX Prototypes. Four are left.
+On the board, 34 tasks are archived in the Done column, and we are currently working on the Backend Implementation and Database Setup cards. We have completed two of our six core phases, Requirements and UI/UX Prototypes, and four phases remain.
 
-We put ourselves at 35 percent complete. And that number is effort-weighted, not just a phase count. Two out of six phases would be 33 percent. But the four phases left are development and testing, and they carry about 70 percent of our estimated 120 developer hours. So 35 percent reflects hours, not just the count.
+We assess the project as 35 percent complete. This figure is effort-weighted rather than a simple phase count. Two of six phases would give 33 percent, but the four remaining phases are development and testing, and they carry approximately 70 percent of our estimated 120 developer hours. The figure therefore reflects effort rather than phase count.
 
-Against our milestone plan, we're on track for handover in Week 10.
+Against our milestone plan, we are on track for handover in Week 10.
 
-On roles — Sharmanne owns the database and UI/UX. I own the frontend and UI/UX. Edwin owns architecture and the AI work. And Wen Jung owns the backend.
+Our roles are assigned as follows. Sharmanne is responsible for the database and UI/UX. I am responsible for the frontend and UI/UX. Edwin is responsible for the architecture and the AI work. Wen Jung is responsible for the backend.
 
-We allocate tasks by that ownership. Each of us pulls cards from our own track. So the frontend and the database never depend on each other directly — they meet at the API contract. And when we need to move effort around, we decide it at the weekly audit. That's exactly how we funded the extra hours for the local LLM.
-
-Which brings me to our issues.
+Tasks are allocated according to these roles. Each member draws Trello cards from their own track, so the frontend and the database do not depend on each other directly. They meet at the API contract instead. Where effort needs to be moved between members, this is decided at the weekly board audit. This is how we funded the additional hours required for the local LLM, which leads to our current issues.
 
 ---
 
 ## Slide 5 — Top 3 Issues
-**Yuan Yu**
 
-These are the three issues we're actively handling.
+Speaker: Chuah Yuan Yu
 
-First, Handbook scraper stability. Our scraper depends on the Handbook's HTML, and that can change without warning. Rather than chase every change, we built a manual fallback screen. Staff can review and correct the imported data themselves. So the scraper is a convenience, not a single point of failure.
+This slide covers the top three management and software issues we are currently handling.
 
-Second, local LLM complexity. Running Ollama locally is the heaviest work we have left — around 20 to 30 developer hours. We funded it by moving hours away from non-essential features. This one matters beyond itself, because it also drives one of our risks. Edwin will pick that up.
+The first issue is Handbook scraper stability. Our scraper depends on the Handbook's HTML structure, which may change without notice. Rather than continually adjust the scraper, we built a manual fallback interface so that staff can review and correct imported data. The scraper is therefore a convenience, not a single point of failure.
 
-Third, data reconciliation. Moodle CSV exports are inconsistent. Column names differ, student IDs don't always match, and marks can be out of range. We handle it with a four-step validation pipeline that flags every problem before anything is saved. Wen Jung will show you that working in the demo.
+The second issue is local LLM complexity. Running Ollama locally is the most demanding task remaining, at approximately 20 to 30 developer hours. We funded this by reallocating hours from non-essential features. This issue is significant beyond itself, because it also drives one of our risks. Edwin will explain that shortly.
 
-Over to Edwin for our risks.
+The third issue is data reconciliation. Moodle CSV exports are inconsistent. Column names differ, student IDs do not always match, and marks may fall outside the valid range. We address this with a four-step validation pipeline that flags every problem before any data is committed. Wen Jung will demonstrate this later.
+
+I will now hand over to Edwin for our risk management.
 
 ---
 
 ## Slide 6 — Top 3 Risks
-**Edwin**
+
+Speaker: Edwin Ting Heng Wei
 
 Thank you, Yuan Yu.
 
-We're monitoring three risks. For each one, we track what would set it off, what the worst case looks like, and what we'd actually do.
+This slide covers the three risks we are actively monitoring. For each risk, we record what would trigger it, what the worst case would be, and what action we would take.
 
-R1 is privacy. We can't use real student data under PDPA. The trigger is any request that would touch identifiable records. Worst case, we can't demonstrate on realistic data at all. We've already acted on this — we generated a synthetic dataset, and by design, individual records never leave the local environment.
+The first is R1, privacy. We cannot use real student data under PDPA. The trigger is any request that would involve identifiable records. In the worst case, we would be unable to demonstrate the system on realistic data. We have already acted on this by generating a synthetic dataset, and the system is designed so that individual records never leave the local environment.
 
-R5 is integration. And this one is caused directly by the second issue Yuan Yu just showed you. The local LLM's 20 to 30 hours pushes integration late into the term. The trigger is a bi-weekly merge slipping, or a contract test failing. Worst case, the AI phase isn't integrated by Week 10. We mitigate that with strict bi-weekly merges. And if it still slips, we ship the LLM behind a feature flag, and deliver the dashboard and PDF export without the AI summaries.
+The second is R5, integration. This risk is caused directly by the second issue Yuan Yu described. The 20 to 30 hours required for the local LLM pushes integration late into the term. The trigger is a scheduled bi-weekly merge slipping, or a contract test failing. In the worst case, the AI phase would not be integrated by Week 10. We mitigate this with strict bi-weekly merges. If the schedule still slips, we will place the local LLM behind a feature flag and deliver the dashboard and PDF export without AI summaries.
 
-R6 is task desync. It's the same cause, seen from the other side. If the board goes stale, an effort overrun stays hidden until it's too late to move people around. The trigger is the board being unchanged at a weekly audit. That's exactly why every meeting opens with a live audit.
+The third is R6, task desynchronisation. This is the same cause viewed from the other side. If the board is not kept current, an effort overrun remains hidden until it is too late to reallocate work. The trigger is the board being unchanged at a weekly audit. This is the reason every meeting begins with a live audit.
 
-Looking further ahead, there are three things we expect to become problems. LLM speed on local hardware. PDF export, which we haven't started. And Docker orchestration, once the LLM service joins the stack.
+Looking further ahead, we anticipate three future issues. The first is local LLM inference speed on our hardware. The second is PDF export, which has not yet started. The third is Docker orchestration once the local LLM service joins the stack.
 
 ---
 
 ## Slide 7 — Target Users and Engagement
-**Edwin**
 
-We have three groups of users.
+Speaker: Edwin Ting Heng Wei
 
-Unit Coordinators handle mapping, assessment setup, CSV upload, and reviewing dashboards and reports. They're our primary users. Lecturers do assessment setup, CSV upload, and view learning outcome attainment. And the Management Team handles user creation, role assignment, access control, and reporting.
+This slide covers our target users and how we are validating their requirements.
 
-On engagement — we've spoken with academic and administrative staff, alongside our regular checkpoints with our supervisor. And that's already changed the product. Our dashboard now leads with learning outcome attainment instead of raw marks, because that's what staff told us they look at first.
+The system has three user groups. Unit Coordinators handle mapping, assessment setup, CSV upload, and dashboard and report review. They are our primary users. Lecturers handle assessment setup, CSV upload, and viewing learning outcome attainment. The Management Team handles user creation, role assignment, access control, and reporting.
 
-We validate our requirements through our Requirements Traceability Matrix. It holds 12 functional and 6 non-functional requirements. Each one records the stakeholder who asked for it, and the acceptance criteria that will prove it's met.
+For engagement, we have spoken with academic and administrative staff, in addition to our regular supervisor checkpoints. This has already changed the product. The dashboard now presents learning outcome attainment before raw marks, because staff indicated that this is what they review first.
 
-Here's one example. Our CSV validation requirement is traced to the Lecturer role. Its acceptance criterion is that missing students, unmatched IDs and invalid marks all get flagged before any data is committed. And that's exactly what Wen Jung is about to show you.
+We validate requirements through our Requirements Traceability Matrix. It records 12 functional and 6 non-functional requirements. Each entry identifies the stakeholder who requested it and the acceptance criteria that will demonstrate it has been met.
 
-On privacy — the system is designed so individual records never leave the local environment, and never reach an external API.
+As one example, the CSV validation requirement is traced to the Lecturer role. Its acceptance criterion is that missing students, unmatched IDs, and invalid marks are all flagged before any data is committed. This is what Wen Jung will demonstrate next.
 
-Over to Wen Jung for the demo.
+On privacy, the system is designed so that individual records never leave the local environment and are never sent to an external API.
+
+I will now hand over to Wen Jung for the demonstration.
 
 ---
 
 ## Slide 8 — Demo
-**Wen Jung**
 
-Thank you, Edwin. I'll show you one part of the system that's close to complete.
+Speaker: Lim Wen Jung
 
-*(Optional — only if you're comfortable on time)*
+Thank you, Edwin.
 
-First, this is our Handbook import. I select the unit offering, and the system pulls the unit details, learning outcomes and assessment items straight from the Monash Handbook. Anything it can't retrieve stays editable. That's the manual fallback Yuan Yu mentioned.
+I will demonstrate one part of the system that is near completion.
+
+*(Optional — only if the team is comfortable on time)*
+
+First, this is our Handbook import. I select the unit offering, and the system retrieves the unit details, learning outcomes, and assessment items from the Monash Handbook. Any information that cannot be retrieved remains editable. This is the manual fallback that Yuan Yu described.
 
 *(Always run this part)*
 
-Now the grade upload. I'll upload a CSV export.
+Next is the grade upload. I will upload a CSV export.
 
-The system inspects the file first, and asks me to map its columns to our fields. Then it previews the data and reports the problems. You can see unmatched student IDs here, and marks that are out of range — all flagged before anything is saved. Nothing gets committed until these are resolved.
+The system first inspects the file and asks me to map its columns to our system fields. It then previews the data and reports the issues found. Here you can see unmatched student IDs, and marks that fall outside the valid range. All of these are flagged before any data is saved, and nothing is committed until they are resolved.
 
-Once I commit, the marks flow into the learning outcome calculation. And the dashboard updates to show attainment by outcome across the cohort.
+Once I commit, the marks are passed to the learning outcome calculation, and the dashboard updates to show attainment by outcome across the cohort.
 
-So that's the reconciliation issue and the validation requirement, working end to end. The AI summary layer sits on top of this data, and that's our next piece of work.
+This demonstrates the reconciliation issue and the validation requirement working end to end. The AI summary layer will sit on top of this data, and that is our next piece of work.
 
-*(If the demo fails, say this and move on)*
+*(If the demonstration fails, say this and move on)*
 
-The environment isn't cooperating today. What you'd see here is the validation step flagging unmatched IDs before commit — I'm happy to show it properly during Q&A.
+The environment is not responding as expected. What would be shown here is the validation step flagging unmatched IDs before commit. I am happy to demonstrate this during Q&A.
 
 ---
 
 ## Slide 9 — Next Steps
-**Wen Jung**
 
-Our immediate priorities are finishing the PostgreSQL schema, and completing the four-step validation pipeline. We want data integrity settled before we start the AI phase.
+Speaker: Lim Wen Jung
 
-Our critical path is the Ollama integration. It's the heaviest work we have left, and as Edwin said, it carries our highest risk.
+This slide covers our priorities and what remains.
 
-Two things are out of scope. We're not integrating directly with Moodle or Callista, and we're not building a student-facing portal. Both are deliberate. We'd rather deliver a solid staff-facing prototype than a thin, broad one.
+Our immediate priorities are finalising the PostgreSQL schema and completing the four-step validation pipeline, so that data integrity is settled before the AI phase begins.
 
-And two things are KIV — kept in view, not cut. Advanced grade forecasting, and a university-wide rollout. We've scoped both. But neither fits what four of us can deliver by Week 10. So they're parked for after the project.
+Our critical path is the local LLM integration. It is the most demanding work remaining, and as Edwin explained, it carries our highest risk.
+
+Two items are out of scope. We are not integrating directly with Moodle or Callista, and we are not building a student-facing portal. Both exclusions are deliberate. They allow us to deliver a robust staff-facing prototype rather than a broad but shallow one.
+
+Two further items are KIV, that is, kept in view rather than removed. These are advanced grade forecasting and a university-wide production rollout. We have scoped both, but neither fits what four members can deliver by Week 10, so they are deferred to post-project work.
 
 ---
 
 ## Slide 10 — Close
-**Wen Jung**
 
-So, to summarise.
+Speaker: Lim Wen Jung
 
-We're 35 percent complete by effort. Backend and database work is landing now. And we're on track for Week 10.
+To summarise, we are 35 percent complete by effort. Backend and database work is currently being delivered, and we are on track for Week 10.
 
-What we're asking for today is the go-ahead for the remaining four phases. We're confident Week 10 holds — the expensive phase is scoped, and the local LLM has a fallback if integration slips.
+What we are requesting today is approval to proceed with the remaining four phases. We are confident that Week 10 remains achievable, because the most demanding phase is scoped and the local LLM has a defined fallback if integration slips.
 
-Thank you for listening. We're happy to take your questions.
+Thank you for your attention. We are happy to take any questions.
