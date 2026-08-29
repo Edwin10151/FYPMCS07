@@ -1,109 +1,140 @@
-# Mid-Semester Pitch — What To Fix
+# Mid-Semester Pitch — Missing Content
 
 Team MCS07 · FIT3162 · Deck: "FYP2 presentation 1" (Canva, 9 pages)
 
-Checked against: assessment brief `v10082026`, marking rubric `v17082026`, and the lecturer's Week 5 Moodle sign-off post.
+Sources: assessment brief `v10082026`, marking rubric `v17082026`, lecturer's Week 5 Moodle sign-off post.
 
-**Before anything else:** no supervisor sign-off before the presentation = presentation invalid, no marks. That gate comes first.
+This document covers **content only**. Formatting items (presenter names on each slide, Allocate+ name consistency) are listed once in §7 and not discussed further.
 
-**Verdict:** the deck does not need rebuilding. It needs 3 missing items added, 1 slide split into two, and the presenter names filled in.
+## 1. Two answers
 
-## The fix list
+**Does the risk slide need triggers, worst-case actions, and linkage to the issues?**
 
-Ordered by marks at risk.
+The Moodle post says *"a **suggested** layout"*, so it is guidance rather than a mandate. Do it anyway:
 
-| # | Problem | Slide | Fix | Required by |
-|---|---|---|---|---|
-| 1 | **Team roles missing.** S2 shows presentation contributions, not project roles | S4 | Add who owns Frontend / Backend / Database (see `docs/team-split.md`) | Rubric, 30 marks |
-| 2 | **Task allocation missing** | S4 | State the rule: work assigned by contract boundary, Trello cards drawn from the owner's track | Rubric, 30 marks |
-| 3 | **Anticipated future issues missing** — different from current issues and from risks | S9 | Add what you expect to *become* a problem: LLM speed on local hardware, PDF export (FR12, not started), Docker orchestration once the LLM joins the stack | Brief + rubric |
-| 4 | **Risk slide has no triggers, no worst-case actions, no link to your top-3 issues** | S6 | See table below | Lecturer's post, verbatim |
-| 5 | **Issues and risks are on one slide** | S5 | Split into two slides | Lecturer's layout |
-| 6 | **Presenter name blank on 6 slides** (3,4,5,6,7,8) | all | Fill in every one, Allocate+ form | Brief, hard rule |
-| 7 | **End-user engagement is one thin line** about your supervisor | S7 | Name the staff you spoke to and **what changed because of it**; cite the RTM | Rubric, 30 marks |
-| 8 | **Best PM content is stuck in presenter notes** (notes aren't marked) | S4 | Move onto the slide: Scrum dropped for milestone planning, the 3 tracking methods, how 35% was calculated | Brief + lecturer's post |
-| 9 | **No progress-vs-schedule statement** | S4 | One sentence: on track / ahead / behind, against which milestone dates | Brief |
-| 10 | **Name inconsistent** — "Lim Wen Jung" (S1) vs "WEN JUNG LIM" (S2) | S1, S2 | Pick the Allocate+ form | Brief |
-| 11 | **S2 section labels don't match slide order** | S2 | Reorder | Structure & flow, 15 marks |
-| 12 | **No real conclusion** — "Thank You" isn't one | S9 | 3 lines: where we stand, we're asking for the go-ahead, why Week 10 is achievable | Structure & flow, 15 marks |
+- The supervisor signs off against that post, and those three questions appear in it verbatim.
+- The rubric's HD descriptor for Pitch Content requires content that *"connects effectively"* and shows a *"well-managed project direction"*. Triggers and contingencies are the only thing in the deck that would evidence this.
+- Without them the slide is risk + mitigation — identical to the proposal stage. It shows no progression.
 
-## Fix 4 in detail — the risk slide
+**Do issues and risks need separate slides?**
 
-The lecturer asked three specific questions. Your slide answers none of them. Add these rows:
+Yes. The post lists them as separate items (4) and (5). Splitting produces 7 core slides, inside the stated 6–8 range. It is also the only way the required detail fits legibly — 3 issues plus 3 risks with four fields each will not read on one slide, and clutter is marked under Visual Communication.
+
+## 2. Missing outright
+
+The brief's wording is *"the following material **must** be covered"* — mandatory, unlike the Moodle post.
+
+| Brief requirement | Status | Note |
+|---|---|---|
+| "What are the anticipated future issues or problems?" | **Absent** | S9's "Future Roadmap" lists KIV *features*, not anticipated problems |
+| "What roles have been assigned to your team members?" | **Absent** | S2 shows presentation contributions, not project roles |
+| "How are you allocating tasks to team members?" | **Absent** | — |
+
+## 3. Present but too thin to score
+
+| Brief requirement | On the slide | Missing |
+|---|---|---|
+| Methodology *"adapted to student/unit-specific requirements"* | "Lightweight Agile / Kanban / Trello" | The adaptation — Scrum dropped for milestone planning and supervisor checkpoints — is in presenter notes only |
+| "How are you tracking and documenting your processes" | "Trello" | Weekly Trello audits, WhatsApp stand-ups, GitHub commit history — notes only |
+| "Progress **in relation to your schedule**" | 35%, 2 of 6 phases | No schedule comparison, no milestone dates, no on-track/behind statement |
+| Percentage complete *"(also how it was calculated)"* | Method named | The working — ~120 developer hours, remaining 4 phases carry ~70% — is in notes only |
+| "How you are engaging with end-users" | One line, Dr. Tan | Dr. Tan is the supervisor, not an end user. No evidence that anything in the project changed as a result |
+| Overview: *"objectives/SMART goals and deliverables"* | Goals present, measurable | Not labelled as SMART goals; deliverables not listed as a distinct set |
+
+**Presenter notes are not marked.** The strongest project-management material in the deck currently sits where the marker never sees it. Moving it onto the slides is the highest-value, lowest-effort change available.
+
+## 4. Draft content for the gaps
+
+### S4 — add roles and task allocation
+
+> **Roles**
+> - Frontend — React app, API client, role-aware views · *[name]*
+> - Backend — FastAPI, auth, scraper integration, CSV validation, ULO calculation · *[name]*
+> - Database — PostgreSQL schema, migrations, seed data · *[name]*
+> - *[fourth member's track]*
+>
+> **How tasks are allocated**
+> - Work is split by contract boundary, so frontend and database never depend on each other directly
+> - Trello cards are drawn from the owner's track; cross-track work is paired at the API contract
+> - Reallocation is decided at the weekly board audit — this is how the local LLM's 20–30 hours were funded
+
+Source for the split: `docs/team-split.md`. Name-to-track assignment is not recorded anywhere in the repo — fill in before sign-off.
+
+### S4 — add progress against schedule
+
+> - 2 of 6 phases complete · 4 remaining · 34 tasks in Done
+> - 35% complete, by effort-weighted phase completion: the 4 remaining phases carry ~70% of the estimated ~120 developer hours
+> - Against schedule: *[on track / X weeks behind]* against *[milestone dates]*, with handover due Week 10
+
+The last line is currently absent entirely and is explicitly required.
+
+### S4 — promote from notes onto the slide
+
+> - Formal Scrum (sprints, Scrum Master) deliberately replaced with milestone planning and supervisor checkpoints, to fit the academic calendar
+> - Tracked through weekly Trello board audits at the start of each meeting, WhatsApp stand-ups, and GitHub commit history for individual accountability
+
+### S6 — the risk slide, rebuilt
 
 | | R1 Privacy | R5 Integration | R6 Task desync |
 |---|---|---|---|
-| Linked to your top-3 issues? | No, independent | **Yes** — issue 2 (LLM effort) pushes integration late | **Yes** — hides issue 2's effort overrun |
-| Trigger | Any request touching identifiable records | A bi-weekly merge slips | Board unchanged at a weekly audit |
-| Worst case | Can't demo on realistic data | AI phase unintegrated at Week 10 | Overrun found too late to reallocate |
-| Contingency | *to fill* | Ship LLM behind a feature flag; deliver dashboard + PDF without AI summaries | *to fill* |
+| **Risk** | Cannot use real student data (PDPA) | Frontend / backend / LLM fail to connect late in term | Members not updating Trello |
+| **Affected by the Top-3 issues?** | No — independent | **Yes** — issue 2, local LLM effort pushes integration late | **Yes** — hides issue 2's effort overrun |
+| **Trigger** | Any request touching identifiable records | A scheduled bi-weekly merge slips, or a contract test fails | Board unchanged at a weekly audit |
+| **Worst case** | Cannot demonstrate on realistic data | AI phase unintegrated at Week 10 handover | Overrun found too late to reallocate hours |
+| **Mitigation** (have) | Synthetic mock dataset; NFR1 keeps records local | Strict bi-weekly merges | Live Trello audit opening each meeting |
+| **Contingency** (add) | *[to fill]* | Ship LLM behind a feature flag; deliver dashboard + PDF export without AI summaries | *[to fill]* |
 
-Your existing mitigations stay — they are preventive. These add the contingency side.
+Existing mitigations stay — they are preventive. The contingency row is the new part.
 
-## Slide plan — 8 slides excluding cover
+### S7 — end-user engagement
 
-Stays inside the lecturer's 6–8 limit. No new slides; the missing items fold into existing ones.
+> - Users: Unit Coordinator (mapping, assessment setup, CSV upload, dashboard review), Lecturer (assessment setup, CSV upload, LO attainment), Management Team (user CRUD, roles, access control, reporting)
+> - Engaged: *[which staff, what was asked]*
+> - **What changed as a result:** *[the decision that moved]*
+> - Validated through the RTM — 12 functional and 6 non-functional requirements, each with a named stakeholder, priority and acceptance criteria
+> - Privacy: NFR1, records never leave the local environment or reach external APIs
 
-| | Slide | Change |
-|---|---|---|
-| S1 | Cover | none |
-| S2 | Overview + speaker allocation | fix label order |
-| S3 | Problem, SMART goals, deliverables | label the goals as SMART |
-| S4 | Methodology, tracking, **roles + allocation** | expand (fixes 1, 2, 8, 9) |
-| S5 | Top 3 issues | split out |
-| S6 | Risks | split out + expand (fix 4) |
-| S7 | End users, engagement, validation | merge old S6+S7, add evidence |
-| S8 | Demo | scope down (see below) |
-| S9 | Next steps, **anticipated issues**, close | expand (fixes 3, 12) |
+The third line is the one that scores. *"We consulted stakeholders"* is not evidence; a decision traceable to a conversation is. Show one RTM row traced end to end rather than the whole table.
 
-## Demo — keep it, scope it
+### S9 — add anticipated future issues
 
-It is in the lecturer's layout, so it stays. But: *"just show one or more functions that are near complete"*, not a full walkthrough.
+Distinct from current issues (S5) and from risks (S6): what the team expects to *become* a problem.
 
-Show: grade upload → validation issues surfaced → commit → LO attainment on dashboard. Covers FR7/FR8/FR9, is test-covered, and is the evidence behind your "Data Reconciliation" issue. **Do not demo Ollama** — no summary endpoint exists yet, and you correctly list it as critical path still ahead. Budget 90 seconds, have a recorded fallback.
+> - LLM inference speed on local hardware once report volumes grow
+> - PDF export fidelity — FR12, not yet started
+> - End-to-end Docker orchestration once the LLM service joins the compose stack (NFR4)
+> - Test-data realism as the dataset passes 100 records
 
-## Timing
+Keep the existing out-of-scope and KIV content — it already uses the lecturer's own framing.
 
-4 members = **12 minutes**. Overrun costs **5 points off every member's mark, per minute**.
+## 5. Demo
 
-Rough split: opening 1 · problem 1.5 · methodology 3 · issues 1.5 · risks 2 · end users 1.5 · demo 1.5 · close 1 = **13 min**. One minute over — trim the problem statement (the audience already knows it from the proposal) and the architecture content currently on S6, which no source requires.
+Keep it; it is in the suggested layout. Scope per the post: *"just show one or more functions that are near complete"*.
 
-Printed cards are allowed. Holding a phone or reading off a laptop caps your individual fluency mark.
+Show grade upload → validation issues surfaced → commit → LO attainment on dashboard. It covers FR7/FR8/FR9, is test-covered in `backend/tests/`, and is the concrete evidence behind the "Data Reconciliation" issue on S5.
 
-## Where the marks are
+Do not demo Ollama — no summary endpoint exists in `backend/app/main.py`, and the deck correctly lists it as critical path still ahead.
 
-| Criterion | Weight |
-|---|---|
-| Pitch content (team) | **30** |
-| Fluency (individual) | 20 |
-| Content & contribution (individual) | 20 |
-| Structure & flow (team) | **15** |
-| Q&A (individual) | 5 |
-| Professional conduct (individual) | 5 |
-| Visual communication (team) | **5** |
+## 6. What lifts this above a Pass
 
-Visual design is worth 5, content is worth 30 — don't spend the remaining time on Canva styling.
+The rubric states: *"Meeting all requirements well, or simply having no obvious weaknesses, is not by itself sufficient for an HD."* Covering every bullet caps at Distinction. The HD descriptor asks for content that **connects**. Three connections available in this project:
 
-The rubric also says *"meeting all requirements well… is not by itself sufficient for an HD."* Doing everything above gets a solid D. The HD lever is depth: the risk-to-issue linkage, showing how 35% was calculated, and one traced requirement where a real user changed a real decision.
+1. **Risk R5 ← Issue 2.** The LLM's 20–30 hour cost is what makes late integration likely. Say it out loud — it turns two separate lists into one causal account.
+2. **35% ← the calculation.** Anyone can claim a percentage. Showing the effort-weighting, and that the remaining phases are the expensive ones, demonstrates the schedule is actually understood.
+3. **A requirement ← a user.** One RTM row where a real conversation changed a real decision does more for the 30-mark criterion than any amount of coverage.
 
-## Pre-sign-off checklist
+## 7. Sign-off requirements
 
-- [ ] Presenter name on every content slide, Allocate+ form, consistent
-- [ ] 3–5 plain-text bullets per content slide (required for the Week 5 draft)
-- [ ] Issues and risks on separate slides
-- [ ] Risk slide: linkage, triggers, worst-case actions
-- [ ] Roles + task allocation on S4
-- [ ] 35% calculation and schedule statement on S4
-- [ ] Anticipated future issues on S9
-- [ ] Engagement evidence on S7
-- [ ] 6–8 slides excluding cover
-- [ ] Sign-off documents ready: **Risk Register, SMART Goals, RTM, updated Kanban board**
-- [ ] Draft uploaded to Moodle and signed off **before** the presentation
+The gate is pass/fail: no sign-off before the presentation means the session is invalid and no marks are awarded.
 
-## Still needed from you
+Four documents must exist for Week 5 sign-off, per the brief: **Risk Register, S.M.A.R.T. Goals, Requirements Traceability Matrix, updated Kanban board**. The RTM exists at `proposal-report-materials/requirements_traceability_matrix.md`. A standalone Risk Register is not in the repo, though R1/R5/R6 implies at least six entries.
 
-1. Who owns Frontend / Backend / Database
-2. Engagement specifics — which staff, what changed as a result
+Also required by the brief, not discussed above: presenter's name on every slide they speak to (currently blank on six), consistent Allocate+ name form, and a plain-text 3–5 bullet summary per content slide for the draft deck.
+
+## 8. Still needed
+
+1. Name-to-track assignment for all four members
+2. Engagement specifics — which staff, and what changed because of it
 3. Milestone dates the 35% is measured against
 4. Contingency actions for R1 and R6
-5. Does a standalone Risk Register exist? R1/R5/R6 implies six or more entries, but it is not in the repo
+5. Whether a standalone Risk Register exists
