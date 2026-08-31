@@ -774,6 +774,54 @@ async def _read_csv_upload(file: UploadFile) -> tuple[str, list[str], list[tuple
     return file.filename, headers, rows
 
 
+async def _read_grade_upload(
+    file: UploadFile,
+    sheet_name: str | None = None,
+) -> tuple[str, list[str], list[tuple[int, dict[str, str]]], list[str], str | None]:
+    if file.filename and file.filename.lower().endswith(".csv"):
+        filename, headers, rows = await _read_csv_upload(file)
+        return filename, headers, rows, [], None
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=422, detail="Upload a Moodle CSV or XLSX gradebook")
+
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Gradebook files must be 10 MB or smaller")
+    try:
+        workbook = load_workbook(io.BytesIO(content), data_only=True, read_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Could not read the Excel gradebook") from exc
+
+    sheet_names = workbook.sheetnames
+    selected_sheet = sheet_name or sheet_names[0]
+    if selected_sheet not in sheet_names:
+        workbook.close()
+        raise HTTPException(status_code=422, detail="Selected worksheet was not found")
+    values = workbook[selected_sheet].iter_rows(values_only=True)
+    try:
+        raw_headers = ["" if value is None else str(value) for value in next(values)]
+    except StopIteration as exc:
+        workbook.close()
+        raise HTTPException(status_code=422, detail="Worksheet has no header row") from exc
+    headers = _normalise_headers(raw_headers)
+    if not any(header.strip() for header in raw_headers):
+        workbook.close()
+        raise HTTPException(status_code=422, detail="Worksheet has no usable header row")
+
+    rows: list[tuple[int, dict[str, str]]] = []
+    for row_number, raw_values in enumerate(values, start=2):
+        cells = ["" if value is None else str(value) for value in raw_values]
+        if not any(cell.strip() for cell in cells):
+            continue
+        if len(rows) >= _MAX_UPLOAD_ROWS:
+            workbook.close()
+            raise HTTPException(status_code=413, detail="Worksheet has too many rows")
+        padded = cells[: len(headers)] + [""] * max(0, len(headers) - len(cells))
+        rows.append((row_number, dict(zip(headers, padded, strict=True))))
+    workbook.close()
+    return f"{file.filename} [{selected_sheet}]", headers, rows, sheet_names, selected_sheet
+
+
 def _require_columns(headers: list[str], *columns: str) -> None:
     missing = [column for column in columns if column not in headers]
     if missing:
@@ -1251,11 +1299,19 @@ def _load_offering_assessments(cur, offering_id: int) -> dict[int, dict]:
 async def inspect_grade_upload(
     user: Annotated[dict, Depends(require_permission(10))],
     offering_id: int = Form(...),
+    sheet_name: str | None = Form(None),
     file: UploadFile = File(...),
 ):
     ensure_offering_access(user, offering_id, min_permission_level=10)
-    filename, headers, rows = await _read_csv_upload(file)
-    return {"filename": filename, "headers": headers, "row_count": len(rows), "offering_id": offering_id}
+    filename, headers, rows, sheet_names, selected_sheet = await _read_grade_upload(file, sheet_name)
+    return {
+        "filename": filename,
+        "headers": headers,
+        "row_count": len(rows),
+        "offering_id": offering_id,
+        "sheet_names": sheet_names,
+        "selected_sheet": selected_sheet,
+    }
 
 
 @app.post("/api/grade-uploads/preview")
@@ -1264,10 +1320,11 @@ async def preview_grade_upload(
     offering_id: int = Form(...),
     student_code_column: str = Form(...),
     assessment_columns: str = Form(...),
+    sheet_name: str | None = Form(None),
     file: UploadFile = File(...),
 ):
     ensure_offering_access(user, offering_id, min_permission_level=10)
-    filename, headers, rows = await _read_csv_upload(file)
+    filename, headers, rows, _, _ = await _read_grade_upload(file, sheet_name)
     _require_columns(headers, student_code_column)
     with get_conn() as conn:
         with conn.cursor() as cur:

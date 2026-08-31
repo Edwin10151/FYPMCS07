@@ -166,7 +166,13 @@ export type AdminContext = {
 
 export type UploadIssue = { row: number; severity: "info" | "warning" | "error"; message: string };
 
-export type CsvInspection = { filename: string; headers: string[]; row_count: number };
+export type CsvInspection = {
+  filename: string;
+  headers: string[];
+  row_count: number;
+  sheet_names?: string[];
+  selected_sheet?: string | null;
+};
 
 export type GradePreview = {
   upload_batch_id: number;
@@ -374,8 +380,10 @@ export function commitEnrolmentUpload(token: string, offeringId: number, student
   }, file) as Promise<{ status: string; batch_id: number; accepted_count: number }>;
 }
 
-export function inspectGradeUpload(token: string, offeringId: number, file: File) {
-  return uploadForm(token, "/grade-uploads/inspect", { offering_id: String(offeringId) }, file) as Promise<CsvInspection>;
+export function inspectGradeUpload(token: string, offeringId: number, file: File, sheetName = "") {
+  return uploadForm(token, "/grade-uploads/inspect", {
+    offering_id: String(offeringId), ...(sheetName ? { sheet_name: sheetName } : {}),
+  }, file) as Promise<CsvInspection>;
 }
 
 export function previewGradeUpload(
@@ -384,9 +392,11 @@ export function previewGradeUpload(
   studentCodeColumn: string,
   assessmentColumns: Array<{ assessment_id: number; csv_column: string; max_mark: number }>,
   file: File,
+  sheetName = "",
 ) {
   return uploadForm(token, "/grade-uploads/preview", {
-    offering_id: String(offeringId), student_code_column: studentCodeColumn, assessment_columns: JSON.stringify(assessmentColumns),
+    offering_id: String(offeringId), student_code_column: studentCodeColumn,
+    assessment_columns: JSON.stringify(assessmentColumns), ...(sheetName ? { sheet_name: sheetName } : {}),
   }, file) as Promise<GradePreview>;
 }
 
