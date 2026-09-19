@@ -9,3 +9,70 @@
 .current-sem-stat { display: flex; flex-direction: column; gap: 3px; }
 .current-sem-stat .v { font-family: 'Newsreader', serif; font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; }
 .current-sem-stat .l { font-size: 11.5px; color: var(--ink-3); }
+
+/* Tutor List / Student List entry tiles */
+.admin-portal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.admin-portal-tile {
+  text-align: left;
+  background: var(--card, #FFFEFB);
+  border: 1px solid var(--line, #E4E0D6);
+  border-radius: 12px;
+  padding: 24px 26px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.admin-portal-tile:hover {
+  border-color: var(--monash-mid);
+  box-shadow: 0 12px 28px -12px rgba(0, 75, 117, 0.28);
+  transform: translateY(-2px);
+}
+
+.admin-portal-tile-icon {
+  width: 40px; height: 40px;
+  border-radius: 9px;
+  background: var(--monash-navy);
+  background-image: linear-gradient(135deg, var(--monash-mid), var(--monash-dark));
+  color: white;
+  display: grid; place-items: center;
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.admin-portal-tile h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink, #232017);
+}
+
+.admin-portal-tile p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3, #8A8578);
+  line-height: 1.55;
+  flex: 1;
+}
+
+.admin-portal-tile-cta {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2, #ECE8DC);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--monash-mid);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.admin-portal-tile:hover .admin-portal-tile-cta { color: var(--monash-dark); }
+.admin-portal-tile:hover .unit-arrow { transform: translateX(3px); }

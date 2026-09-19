@@ -5,7 +5,6 @@ import AdminSidebar from "../components/AdminSidebar";
 import "../components/AdminNav.css";
 import { useAdminContext } from "../useAdminContext";
 import "./UnitSelect.css";
-import "./AdminMain.css";
 import "./AdminSetup.css";
 
 export default function AdminSetup() {
@@ -40,10 +39,10 @@ export default function AdminSetup() {
       <AdminSidebar user={session.user} />
       <main className="main">
         <div className="topbar">
-          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/portal">Admin Portal</Link><span className="sep">›</span><strong>Semester setup</strong></div>
+          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><strong>Semester Setup</strong></div>
         </div>
         <div className="content">
-          <div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Semester setup</h1><div className="sub">Manage the current teaching semester, then reach the Tutor List and Student List uploads.</div></div></div>
+          <div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Semester Setup</h1><div className="sub">Manage the current teaching semester, then reach the Tutor List and Student List uploads.</div></div></div>
 
           {(error || flashError) && <div className="adm-flash" style={{ background: "var(--risk-bg)", borderColor: "#F2D8CC", color: "var(--risk)" }}>{error || flashError}<span className="x" onClick={() => setFlashError("")}>✕</span></div>}
           {flash && <div className="adm-flash">{flash}<span className="x" onClick={() => setFlash("")}>✕</span></div>}
