@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { commitEnrolmentUpload, errorMessage, inspectEnrolmentUpload, previewEnrolmentUpload, type CsvInspection, type UploadIssue } from "../api";
-import Sidebar from "../components/Sidebar";
-import AdminNav from "../components/AdminNav";
+import AdminSidebar from "../components/AdminSidebar";
+import "../components/AdminNav.css";
 import { formatFileSize } from "../csv";
 import { useAdminContext } from "../useAdminContext";
 
@@ -56,10 +56,9 @@ export default function AdminEnrolments() {
     } catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
   };
 
-  return <div className="app"><Sidebar user={session.user} /><main className="main">
-    <div className="topbar"><div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester setup</Link><span className="sep">›</span><strong>Student enrolments</strong></div></div>
-    <div className="content"><div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Student enrolments</h1><div className="sub">Upload student ID and name for one unit offering. Grade imports only match against the enrolments stored here.</div></div></div>
-      <AdminNav counts={{ "/admin/enrolments": data?.enrollment_batches.length ?? 0 }} />
+  return <div className="app"><AdminSidebar user={session.user} /><main className="main">
+    <div className="topbar"><div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/portal">Admin Portal</Link><span className="sep">›</span><Link to="/admin/setup">Semester setup</Link><span className="sep">›</span><strong>Student list</strong></div></div>
+    <div className="content"><div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Student list</h1><div className="sub">Upload student ID and name for one unit offering. Grade imports only match against the enrolments stored here.</div></div></div>
       {(flash || error || loading) && <div className="adm-flash">{flash || error || "Loading enrolment records..."}<span className="x" onClick={() => setFlash("")}>✕</span></div>}
       <div className="adm-stats"><div className="adm-stat navy"><div className="lbl"><span className="b" />Offerings</div><div className="v">{data?.offerings.filter((offering) => offering.status !== "discontinued").length ?? 0}</div><div className="sub">Available for student lists</div></div><div className="adm-stat ok"><div className="lbl"><span className="b" />Registered students</div><div className="v">{data?.offerings.reduce((sum, offering) => sum + offering.student_count, 0) ?? 0}</div><div className="sub">Across all stored offerings</div></div><div className="adm-stat"><div className="lbl"><span className="b" />Committed files</div><div className="v">{data?.enrollment_batches.length ?? 0}</div><div className="sub">Retained as import history</div></div><div className="adm-stat warn"><div className="lbl"><span className="b" />Selected offering</div><div className="v">{selectedOffering?.student_count ?? 0}</div><div className="sub">{selectedOffering?.unit_code ?? "Choose an offering"}</div></div></div>
       <div className="adm-card"><div className="adm-card-head"><div><h4>Upload student list</h4><div className="h-sub">Use a UTF-8 CSV. First inspect the headers, map Student ID and full name, then validate before committing.</div></div><select className="adm-select" value={offeringId ?? ""} onChange={(event) => { setOfferingId(Number(event.target.value)); setFile(null); setInspection(null); setPreview(null); }}>{data?.offerings.filter((offering) => offering.status !== "discontinued").map((offering) => <option key={offering.offering_id} value={offering.offering_id}>{offering.year} {offering.period} · {offering.unit_code}</option>)}</select></div>

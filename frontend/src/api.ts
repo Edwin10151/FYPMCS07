@@ -316,6 +316,14 @@ export function updateAdminPeriod(
   return apiFetch<{ status: string }>(`/admin/periods/${semesterId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
+export function deactivateAdminPeriod(token: string, semesterId: number) {
+  return apiFetch<{ status: string; archived_semester_id: number; next_semester_id: number; next_year: number; next_period: "S1" | "S2" }>(
+    `/admin/periods/${semesterId}/deactivate`,
+    token,
+    { method: "POST" },
+  );
+}
+
 export type OfferingInput = {
   semester_id: number;
   program_ids: number[];

@@ -71,12 +71,22 @@ export default function UnitSelect() {
         {loading ? <div className="panel">Loading your unit offerings...</div> : (
           <>
             <div className="us-section-label">Available offerings <span className="us-count">{offerings.length}</span></div>
-            {offerings.length === 0 ? (
+            <div className="us-grid">
+              {session.user.permission_level >= 30 && (
+                <button className="unit-card admin-portal-card" onClick={() => navigate("/admin/portal")}>
+                  <div className="unit-card-top">
+                    <div className="unit-code-badge admin">ADMIN</div>
+                    <span className="role-pill coord">{roleLabel(session.user.role_name)}</span>
+                  </div>
+                  <h3>Admin Portal</h3>
+                  <div className="unit-meta">Semester setup · Tutor list · Student list</div>
+                  <div className="unit-cta">Open admin portal <span className="unit-arrow">→</span></div>
+                </button>
+              )}
+              {offerings.map((offering) => <OfferingCard key={offering.offering_id} offering={offering} role={offering.can_edit ? roleLabel(session.user.role_name) : "Read-only access"} onOpen={openOffering} />)}
+            </div>
+            {offerings.length === 0 && session.user.permission_level < 30 && (
               <div className="panel">No unit offerings have been assigned to this account yet.</div>
-            ) : (
-              <div className="us-grid">
-                {offerings.map((offering) => <OfferingCard key={offering.offering_id} offering={offering} role={offering.can_edit ? roleLabel(session.user.role_name) : "Read-only access"} onOpen={openOffering} />)}
-              </div>
             )}
           </>
         )}

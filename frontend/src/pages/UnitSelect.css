@@ -328,3 +328,22 @@
 .unit-card:hover .unit-cta { color: var(--monash-dark); }
 .unit-arrow { transition: transform .15s; }
 .unit-card:hover .unit-arrow { transform: translateX(3px); }
+
+/* Admin Portal entrance — same card shape, filled to stand out as the one
+   card that isn't a unit offering. */
+.unit-card.admin-portal-card {
+  background: var(--monash-navy);
+  background-image: linear-gradient(150deg, var(--monash-mid), var(--monash-dark));
+  border-color: transparent;
+  color: white;
+}
+.unit-card.admin-portal-card:hover {
+  box-shadow: 0 14px 32px -12px rgba(0, 43, 75, 0.5);
+  border-color: transparent;
+}
+.unit-card.admin-portal-card h3 { color: white; }
+.unit-card.admin-portal-card .unit-meta { color: rgba(255, 255, 255, 0.7); }
+.unit-card.admin-portal-card .unit-cta { color: white; }
+.unit-card.admin-portal-card:hover .unit-cta { color: white; }
+.unit-code-badge.admin { background: white; background-image: none; color: var(--monash-navy); }
+.unit-card.admin-portal-card .role-pill.coord { background: rgba(255, 255, 255, 0.16); color: white; border-color: rgba(255, 255, 255, 0.28); }

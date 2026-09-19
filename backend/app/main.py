@@ -241,7 +241,10 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
     """
     rows = fetch_all(query, params)
     for row in rows:
-        row["can_edit"] = user["role_name"] == "management" or row["coordinator_id"] == user["user_id"]
+        # Management has view-only access to every unit unless it is literally
+        # the assigned coordinator for that offering (admin workflows live in
+        # the Admin Portal, not the per-unit workspace).
+        row["can_edit"] = row["coordinator_id"] == user["user_id"]
         del row["coordinator_id"]
     return {"offerings": rows}
 
@@ -1168,6 +1171,52 @@ def update_admin_period(
                 (payload.start_date, payload.end_date, payload.status, semester_id),
             )
     return {"status": "updated"}
+
+
+def _next_period(year: int, period: str) -> tuple[int, str]:
+    """Each year has two semesters: S1 rolls to S2 the same year, S2 rolls to S1 the next year."""
+    if period == "S1":
+        return year, "S2"
+    return year + 1, "S1"
+
+
+@app.post("/api/admin/periods/{semester_id}/deactivate")
+def deactivate_admin_period(
+    semester_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT year, period, status FROM semester WHERE semester_id = %s FOR UPDATE", (semester_id,))
+            current = cur.fetchone()
+            if not current:
+                raise HTTPException(status_code=404, detail="Academic period not found")
+            if current["status"] != "active":
+                raise HTTPException(status_code=409, detail="Only the active semester can be deactivated")
+
+            cur.execute("UPDATE semester SET status = 'archived' WHERE semester_id = %s", (semester_id,))
+
+            next_year, next_period = _next_period(current["year"], current["period"])
+            cur.execute("SELECT semester_id FROM semester WHERE year = %s AND period = %s", (next_year, next_period))
+            existing_next = cur.fetchone()
+            if existing_next:
+                # A future period was already pre-created (e.g. via Academic Periods) — promote it
+                # instead of failing on the (year, period) uniqueness constraint.
+                cur.execute("UPDATE semester SET status = 'active' WHERE semester_id = %s", (existing_next["semester_id"],))
+                next_semester_id = existing_next["semester_id"]
+            else:
+                cur.execute(
+                    "INSERT INTO semester (year, period, status) VALUES (%s, %s, 'active') RETURNING semester_id",
+                    (next_year, next_period),
+                )
+                next_semester_id = cur.fetchone()["semester_id"]
+    return {
+        "status": "deactivated",
+        "archived_semester_id": semester_id,
+        "next_semester_id": next_semester_id,
+        "next_year": next_year,
+        "next_period": next_period,
+    }
 
 
 @app.post("/api/admin/offerings", status_code=201)

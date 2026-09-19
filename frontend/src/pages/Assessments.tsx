@@ -397,7 +397,7 @@ export default function Assessments() {
                   <div className="alloc-bar">{coveredBy.length === 0
                     ? <div className="alloc-empty">No assessment currently links this ULO</div>
                     : coveredBy.map((row) => <div key={row.key} className="seg-a" style={{ width: `${100 / coveredBy.length}%`, background: colorForKey(row.key) }}>{row.assessment_name}</div>)}</div>
-                  <div className="per-lo-actions"><button type="button" className="btn ghost" disabled={coveredBy.length === 0} onClick={() => openUloEditor(ulo.ulo_code)}>Edit</button></div>
+                  <div className="per-lo-actions">{canEdit && <button type="button" className="btn ghost" disabled={coveredBy.length === 0} onClick={() => openUloEditor(ulo.ulo_code)}>Edit</button>}</div>
                 </div>;
               })}
             </div>

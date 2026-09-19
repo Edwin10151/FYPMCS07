@@ -6,7 +6,9 @@ import Mapping from "./pages/Mapping";
 import Assessments from "./pages/Assessments";
 import CsvUpload from "./pages/CsvUpload";
 import Admin from "./pages/Admin";
+import AdminMain from "./pages/AdminMain";
 import AdminSetup from "./pages/AdminSetup";
+import AdminTutors from "./pages/AdminTutors";
 import AdminPeriods from "./pages/AdminPeriods";
 import AdminUnits from "./pages/AdminUnits";
 import AdminEnrolments from "./pages/AdminEnrolments";
@@ -42,11 +44,15 @@ export default function App() {
       <Route path="/assessments" element={<RequireAuth><Assessments /></RequireAuth>} />
       <Route path="/upload" element={<RequireAuth><CsvUpload /></RequireAuth>} />
       <Route path="/upload/:assessmentId" element={<Navigate to="/upload" replace />} />
-      {/* Admin hub lives at /admin/setup (semester checklist). /admin itself is
-          the People & roles directory; the other screens hang off the shared
-          AdminNav tabs. */}
+      {/* Admin Portal lives at /admin/portal (UnitSelect's "Admin Portal" card
+          links here) and fans out to Semester Setup, Tutor List and Student
+          List, each using AdminSidebar. /admin, /admin/periods, /admin/units
+          and /admin/staff are kept reachable but are no longer linked from
+          navigation — see Sidebar's emptied Administration section. */}
+      <Route path="/admin/portal" element={<RequireManagement><AdminMain /></RequireManagement>} />
       <Route path="/admin" element={<RequireManagement><Admin /></RequireManagement>} />
       <Route path="/admin/setup" element={<RequireManagement><AdminSetup /></RequireManagement>} />
+      <Route path="/admin/tutors" element={<RequireManagement><AdminTutors /></RequireManagement>} />
       <Route path="/admin/periods" element={<RequireManagement><AdminPeriods /></RequireManagement>} />
       <Route path="/admin/units" element={<RequireManagement><AdminUnits /></RequireManagement>} />
       <Route path="/admin/enrolments" element={<RequireManagement><AdminEnrolments /></RequireManagement>} />
