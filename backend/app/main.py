@@ -604,10 +604,10 @@ def assessments(user: Annotated[dict, Depends(require_offering_access())], offer
         (offering_id,),
     )
     all_ulos = fetch_all(
-        "SELECT ulo_code FROM offering_ulo WHERE offering_id = %s ORDER BY ulo_code",
+        "SELECT offering_ulo_id, ulo_code FROM offering_ulo WHERE offering_id = %s ORDER BY ulo_code",
         (offering_id,),
     )
-    return {"assessments": rows, "all_ulos": [row["ulo_code"] for row in all_ulos]}
+    return {"assessments": rows, "all_ulos": all_ulos}
 
 
 @app.put("/api/assessments")
@@ -657,7 +657,6 @@ def save_assessments(
                         (name, item.weight, order, user["user_id"], item.assessment_id, payload.offering_id),
                     )
                     assessment_id = item.assessment_id
-                    cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
                 else:
                     cur.execute(
                         """
@@ -672,8 +671,21 @@ def save_assessments(
                     )
                     assessment_id = cur.fetchone()["assessment_id"]
 
+                cur.execute(
+                    "SELECT offering_ulo_id, allocated_weight FROM assessment_ulo WHERE assessment_id = %s",
+                    (assessment_id,),
+                )
+                existing_links = {row["offering_ulo_id"]: row["allocated_weight"] for row in cur.fetchall()}
+                cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
+
                 linked_ulo_ids = [ulo_ids[code] for code in item.ulo_codes if code in ulo_ids]
-                for offering_ulo_id, allocated_weight in split_weight(item.weight, linked_ulo_ids).items():
+                # New LO links default to an even split of 100% (the LO-contribution
+                # convention, independent of the assessment's own weight). A link that
+                # already existed keeps whatever contribution percentage a coordinator
+                # set for it in the Assessment coverage editor.
+                default_shares = split_weight(Decimal(100), linked_ulo_ids)
+                for offering_ulo_id, default_share in default_shares.items():
+                    allocated_weight = existing_links.get(offering_ulo_id, default_share)
                     cur.execute(
                         """
                         INSERT INTO assessment_ulo (
@@ -684,6 +696,37 @@ def save_assessments(
                         """,
                         (payload.offering_id, assessment_id, offering_ulo_id, allocated_weight, user["user_id"]),
                     )
+    return {"status": "saved"}
+
+
+class AssessmentUloWeightInput(BaseModel):
+    assessment_id: int
+    offering_ulo_id: int
+    allocated_weight: Decimal
+
+
+class AssessmentUloWeightsUpdate(BaseModel):
+    offering_id: int
+    weights: list[AssessmentUloWeightInput]
+
+
+@app.put("/api/assessment-ulo-weights")
+def save_assessment_ulo_weights(
+    payload: AssessmentUloWeightsUpdate,
+    user: Annotated[dict, Depends(require_permission(20))],
+):
+    ensure_offering_access(user, payload.offering_id, min_permission_level=20)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for item in payload.weights:
+                cur.execute(
+                    """
+                    UPDATE assessment_ulo
+                    SET allocated_weight = %s, is_confirmed = TRUE, confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP
+                    WHERE offering_id = %s AND assessment_id = %s AND offering_ulo_id = %s
+                    """,
+                    (item.allocated_weight, user["user_id"], payload.offering_id, item.assessment_id, item.offering_ulo_id),
+                )
     return {"status": "saved"}
 
 

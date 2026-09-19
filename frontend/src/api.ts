@@ -80,9 +80,14 @@ export type Assessment = {
   allocated_weights: string[];
 };
 
+export type OfferingUlo = {
+  offering_ulo_id: number;
+  ulo_code: string;
+};
+
 export type AssessmentsPayload = {
   assessments: Assessment[];
-  all_ulos: string[];
+  all_ulos: OfferingUlo[];
 };
 
 export type AssessmentInput = {
@@ -90,6 +95,12 @@ export type AssessmentInput = {
   assessment_name: string;
   weight: number;
   ulo_codes: string[];
+};
+
+export type AssessmentUloWeightInput = {
+  assessment_id: number;
+  offering_ulo_id: number;
+  allocated_weight: number;
 };
 
 export type HandbookDraft = {
@@ -257,6 +268,13 @@ export function saveAssessments(token: string, offeringId: number, assessments: 
   return apiFetch<{ status: string }>("/assessments", token, {
     method: "PUT",
     body: JSON.stringify({ offering_id: offeringId, assessments }),
+  });
+}
+
+export function saveAssessmentUloWeights(token: string, offeringId: number, weights: AssessmentUloWeightInput[]) {
+  return apiFetch<{ status: string }>("/assessment-ulo-weights", token, {
+    method: "PUT",
+    body: JSON.stringify({ offering_id: offeringId, weights }),
   });
 }
 

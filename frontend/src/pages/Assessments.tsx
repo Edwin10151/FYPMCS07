@@ -5,8 +5,11 @@ import {
   getAssessments,
   getOfferings,
   saveAssessments,
+  saveAssessmentUloWeights,
   type AssessmentInput,
+  type AssessmentUloWeightInput,
   type Offering,
+  type OfferingUlo,
 } from "../api";
 import Sidebar from "../components/Sidebar";
 import { useOfferingId } from "../useOfferingId";
@@ -22,6 +25,7 @@ type EditableRow = {
   weight: number;
   is_hurdle: boolean;
   covers: string[];
+  allocated_weights: number[];
 };
 
 let newRowSeq = 0;
@@ -34,15 +38,47 @@ function toRows(assessments: Awaited<ReturnType<typeof getAssessments>>["assessm
     weight: Number(assessment.weight),
     is_hurdle: assessment.is_hurdle,
     covers: assessment.covers,
+    allocated_weights: assessment.allocated_weights.map(Number),
   }));
 }
 
-function splitEvenly(weight: number, count: number): number[] {
-  if (count <= 0) return [];
-  const share = Math.round((weight / count) * 100) / 100;
-  const shares = new Array(count).fill(share);
-  shares[count - 1] = Math.round((shares[count - 1] + (weight - share * count)) * 100) / 100;
-  return shares;
+function contributionsFromRows(rows: EditableRow[]): Record<string, number> {
+  const next: Record<string, number> = {};
+  rows.forEach((row) => {
+    if (row.assessment_id === null) return;
+    row.covers.forEach((code, index) => {
+      next[`${row.assessment_id}::${code}`] = row.allocated_weights[index] ?? 0;
+    });
+  });
+  return next;
+}
+
+function stableStringify(map: Record<string, number>): string {
+  return JSON.stringify(Object.keys(map).sort().map((key) => [key, map[key]]));
+}
+
+function capitalizeFirst(value: string): string {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function blurOnWheel(event: React.WheelEvent<HTMLInputElement>) {
+  event.currentTarget.blur();
+}
+
+function buildWeightsPayload(savedRows: EditableRow[], allUlos: OfferingUlo[], contributions: Record<string, number>): AssessmentUloWeightInput[] {
+  const weights: AssessmentUloWeightInput[] = [];
+  savedRows.forEach((row) => {
+    if (row.assessment_id === null) return;
+    row.covers.forEach((code, index) => {
+      const uloMeta = allUlos.find((item) => item.ulo_code === code);
+      if (!uloMeta) return;
+      const key = `${row.assessment_id}::${code}`;
+      const fallback = row.allocated_weights[index] ?? Math.round((100 / row.covers.length) * 100) / 100;
+      weights.push({ assessment_id: row.assessment_id as number, offering_ulo_id: uloMeta.offering_ulo_id, allocated_weight: contributions[key] ?? fallback });
+    });
+  });
+  return weights;
 }
 
 export default function Assessments() {
@@ -50,15 +86,20 @@ export default function Assessments() {
   const session = useSession();
   const { offeringId, error: offeringError } = useOfferingId();
   const [rows, setRows] = useState<EditableRow[]>([]);
-  const [savedSnapshot, setSavedSnapshot] = useState("[]");
-  const [allUlos, setAllUlos] = useState<string[]>([]);
+  const [savedRows, setSavedRows] = useState<EditableRow[]>([]);
+  const [allUlos, setAllUlos] = useState<OfferingUlo[]>([]);
+  const [contributions, setContributions] = useState<Record<string, number>>({});
+  const [savedContributions, setSavedContributions] = useState<Record<string, number>>({});
   const [removingKeys, setRemovingKeys] = useState<Set<string>>(new Set());
   const [offering, setOffering] = useState<Offering | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingSetup, setSavingSetup] = useState(false);
+  const [savingCoverage, setSavingCoverage] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [editingUlo, setEditingUlo] = useState<string | null>(null);
+  const [modalDraft, setModalDraft] = useState<Record<number, number>>({});
   const canEdit = offering?.can_edit ?? false;
 
   const load = async () => {
@@ -70,9 +111,12 @@ export default function Assessments() {
         getOfferings(session.access_token),
       ]);
       const nextRows = toRows(assessmentResponse.assessments);
+      const nextContributions = contributionsFromRows(nextRows);
       setRows(nextRows);
-      setSavedSnapshot(JSON.stringify(nextRows));
+      setSavedRows(nextRows);
       setAllUlos(assessmentResponse.all_ulos);
+      setContributions(nextContributions);
+      setSavedContributions(nextContributions);
       setOffering(offeringResponse.offerings.find((item) => item.offering_id === offeringId) ?? null);
     } catch (err) {
       setError(errorMessage(err));
@@ -87,7 +131,9 @@ export default function Assessments() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offeringId, session]);
 
-  const dirty = useMemo(() => JSON.stringify(rows) !== savedSnapshot, [rows, savedSnapshot]);
+  const rowsDirty = useMemo(() => JSON.stringify(rows) !== JSON.stringify(savedRows), [rows, savedRows]);
+  const contributionsDirty = useMemo(() => stableStringify(contributions) !== stableStringify(savedContributions), [contributions, savedContributions]);
+  const anyDirty = rowsDirty || contributionsDirty;
   const totalWeight = useMemo(() => rows.reduce((sum, row) => sum + (Number.isFinite(row.weight) ? row.weight : 0), 0), [rows]);
   const invalidReason = useMemo(() => {
     if (rows.some((row) => !row.assessment_name.trim())) return "Every assessment needs a name.";
@@ -98,18 +144,18 @@ export default function Assessments() {
 
   // Warn on hard reload/tab close while there are unsaved edits.
   useEffect(() => {
-    if (!dirty) return;
+    if (!anyDirty) return;
     const handler = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
+  }, [anyDirty]);
 
   // Intercept in-app link navigation (sidebar, breadcrumbs, ...) while there are unsaved edits.
   useEffect(() => {
-    if (!dirty) return;
+    if (!anyDirty) return;
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest?.("a");
@@ -123,7 +169,7 @@ export default function Assessments() {
     };
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
-  }, [dirty]);
+  }, [anyDirty]);
 
   if (!session) return null;
 
@@ -149,6 +195,7 @@ export default function Assessments() {
       weight: 0,
       is_hurdle: false,
       covers: [],
+      allocated_weights: [],
     }]);
     setNotice("");
   };
@@ -166,9 +213,9 @@ export default function Assessments() {
     }, 220);
   };
 
-  const save = async (): Promise<boolean> => {
+  const persistRows = async (): Promise<boolean> => {
     if (!offeringId || !session || invalidReason) return false;
-    setSaving(true);
+    setSavingSetup(true);
     setError("");
     try {
       const payload: AssessmentInput[] = rows.map((row) => ({
@@ -178,30 +225,103 @@ export default function Assessments() {
         ulo_codes: row.covers,
       }));
       await saveAssessments(session.access_token, offeringId, payload);
-      setNotice("Assessment setup saved to the database.");
-      await load();
       return true;
     } catch (err) {
       setError(errorMessage(err));
       return false;
     } finally {
-      setSaving(false);
+      setSavingSetup(false);
     }
+  };
+
+  const persistCoverage = async (): Promise<boolean> => {
+    if (!offeringId || !session) return false;
+    setSavingCoverage(true);
+    setError("");
+    try {
+      const weights = buildWeightsPayload(savedRows, allUlos, contributions);
+      await saveAssessmentUloWeights(session.access_token, offeringId, weights);
+      return true;
+    } catch (err) {
+      setError(errorMessage(err));
+      return false;
+    } finally {
+      setSavingCoverage(false);
+    }
+  };
+
+  const save = async (): Promise<boolean> => {
+    const ok = await persistRows();
+    if (ok) {
+      setNotice("Assessment setup saved to the database.");
+      await load();
+    }
+    return ok;
+  };
+
+  const saveCoverage = async (): Promise<boolean> => {
+    const ok = await persistCoverage();
+    if (ok) {
+      setNotice("Assessment coverage saved to the database.");
+      await load();
+    }
+    return ok;
   };
 
   const discardAndNavigate = () => {
     const href = pendingHref;
-    setRows(JSON.parse(savedSnapshot) as EditableRow[]);
+    setRows(savedRows);
+    setContributions(savedContributions);
     setPendingHref(null);
     if (href) navigate(href);
   };
 
   const saveAndNavigate = async () => {
     const href = pendingHref;
-    const ok = await save();
+    let ok = true;
+    if (rowsDirty) ok = await persistRows();
+    if (ok && contributionsDirty) ok = (await persistCoverage()) && ok;
+    if (ok) {
+      setNotice("Changes saved to the database.");
+      await load();
+    }
     setPendingHref(null);
     if (ok && href) navigate(href);
   };
+
+  const openUloEditor = (uloCode: string) => {
+    const draft: Record<number, number> = {};
+    savedRows.forEach((row) => {
+      if (row.assessment_id === null || !row.covers.includes(uloCode)) return;
+      const index = row.covers.indexOf(uloCode);
+      const fallback = row.allocated_weights[index] ?? Math.round((100 / row.covers.length) * 100) / 100;
+      draft[row.assessment_id] = contributions[`${row.assessment_id}::${uloCode}`] ?? fallback;
+    });
+    setModalDraft(draft);
+    setEditingUlo(uloCode);
+  };
+
+  const commitUloEditor = () => {
+    if (!editingUlo) return;
+    setContributions((previous) => {
+      const next = { ...previous };
+      Object.entries(modalDraft).forEach(([assessmentId, pct]) => {
+        next[`${assessmentId}::${editingUlo}`] = pct;
+      });
+      return next;
+    });
+    setEditingUlo(null);
+    setNotice("");
+  };
+
+  const colorForKey = (key: string) => {
+    const index = savedRows.findIndex((row) => row.key === key);
+    return ROW_COLORS[(index < 0 ? 0 : index) % ROW_COLORS.length];
+  };
+
+  const editingSources = editingUlo ? savedRows.filter((row) => row.assessment_id !== null && row.covers.includes(editingUlo)) : [];
+  const modalTotal = editingSources.reduce((sum, row) => sum + (modalDraft[row.assessment_id as number] ?? 0), 0);
+  const modalOk = Math.abs(modalTotal - 100) < 0.01;
 
   return (
     <div className="app">
@@ -209,9 +329,7 @@ export default function Assessments() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{offering?.unit_code ?? "Unit"}</Link><span className="sep">›</span><Link to="/assessments">Assessments</Link></div>
-          <div className="top-actions">
-            {canEdit && rows.length > 0 && <button className="btn primary" disabled={!dirty || saving || !!invalidReason} onClick={() => void save()}>{saving ? "Saving..." : "Save changes"}</button>}
-          </div>
+          <div className="top-actions" />
         </div>
         <div className="content">
           <div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Assessment setup</h1><div className="sub"><span className="code">{offering?.unit_code ?? "..."}</span> {offering?.unit_name ?? "Loading offering..."} · {canEdit ? "Edit assessment weights, LO coverage, and save to the database" : "Confirmed assessment configuration from the database"}</div></div></div>
@@ -227,6 +345,10 @@ export default function Assessments() {
               </div>
             </div>
           ) : <div className="ass-layout">
+            {canEdit && <div className="save-bar top-save-bar">
+              <div className="stat">{invalidReason ? <strong>{invalidReason}</strong> : rowsDirty ? <><strong>Unsaved changes.</strong> Save to write this setup to the database.</> : <><strong>Up to date.</strong> No unsaved changes.</>}</div>
+              <div className="actions"><button className="btn primary" disabled={!rowsDirty || savingSetup || !!invalidReason} onClick={() => void save()}>{savingSetup ? "Saving..." : "Save changes"}</button></div>
+            </div>}
             <div className="weight-bar-card">
               <div className="wbar-head">
                 <div><div className="wbar-lbl">Total assessment weight</div><div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>{canEdit ? "Adjust each row's percentage below — this total updates live." : "Stored assessment weights for this selected offering."}</div></div>
@@ -240,44 +362,77 @@ export default function Assessments() {
               <div className="ass-name">
                 <div className="h">
                   {canEdit
-                    ? <input className="name-input" value={row.assessment_name} placeholder="Assessment name" onChange={(event) => updateRow(row.key, { assessment_name: event.target.value })} />
+                    ? <input className="name-input" value={row.assessment_name} placeholder="Assessment name" onChange={(event) => updateRow(row.key, { assessment_name: capitalizeFirst(event.target.value) })} />
                     : <strong>{row.assessment_name}</strong>}
                 </div>
                 <div className={`hurdle-tag ${row.is_hurdle ? "" : "none"}`}><span className="hurdle-dot" />{row.is_hurdle ? "Hurdle assessment" : "No hurdle"}</div>
               </div>
               <div className="weight-cell">
                 {canEdit
-                  ? <input type="number" min={0} max={100} step={0.5} value={row.weight} onChange={(event) => updateRow(row.key, { weight: Math.min(100, Math.max(0, Number(event.target.value) || 0)) })} />
+                  ? <input type="number" min={0} max={100} step={0.5} value={row.weight} onWheel={blurOnWheel} onChange={(event) => updateRow(row.key, { weight: Math.min(100, Math.max(0, Number(event.target.value) || 0)) })} />
                   : <strong>{row.weight}</strong>}
                 <span className="pct">%</span>
               </div>
-              <div className="lo-chips">{allUlos.length ? allUlos.map((code) => <button key={code} type="button" className={`lo-chip${row.covers.includes(code) ? " on" : ""}`} disabled={!canEdit} onClick={() => toggleUlo(row.key, code)} aria-pressed={row.covers.includes(code)}>{code.replace(/^ULO/i, "")}</button>) : <span className="h-sub">No ULOs set up for this offering</span>}</div>
+              <div className="lo-chips">{allUlos.length ? allUlos.map((ulo) => <button key={ulo.ulo_code} type="button" className={`lo-chip${row.covers.includes(ulo.ulo_code) ? " on" : ""}`} disabled={!canEdit} onClick={() => toggleUlo(row.key, ulo.ulo_code)} aria-pressed={row.covers.includes(ulo.ulo_code)}>{ulo.ulo_code}</button>) : <span className="h-sub">No ULOs set up for this offering</span>}</div>
               <div className="row-tools">{canEdit && <button type="button" className="ic danger" title="Delete this assessment" aria-label={`Delete ${row.assessment_name || "assessment"}`} onClick={() => removeRow(row.key)}>×</button>}</div>
             </div>)}
             {canEdit && <div className="add-row" role="button" tabIndex={0} onClick={addRow} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") addRow(); }}>+ Add assessment row</div>}
-            {canEdit && <div className="save-bar">
-              <div className="stat">{invalidReason ? <><strong>{invalidReason}</strong></> : dirty ? <><strong>Unsaved changes.</strong> Save to write this setup to the database.</> : <><strong>Up to date.</strong> No unsaved changes.</>}</div>
-              <div className="actions"><button className="btn primary" disabled={!dirty || saving || !!invalidReason} onClick={() => void save()}>{saving ? "Saving..." : "Save changes"}</button></div>
-            </div>}
             <div className="per-lo-breakdown">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid var(--line)" }}>
-                <div><h4 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Assessment coverage</h4><div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 4 }}>The Handbook can omit assessment-to-ULO links. Those links remain visible as missing until a coordinator supplies the approved mapping.</div></div>
-                <div className={`pill ${allUlos.length > 0 ? "ok" : "warn"}`}><span className="dot" />{allUlos.length} ULOs covered</div>
+              <div className="per-lo-head">
+                <div><h4>Assessment coverage</h4><div className="h-sub">Each assessment's contribution to a ULO is independent. A ULO is fully covered once its assessments' contributions add up to 100%.</div></div>
+                <div className="per-lo-head-actions">
+                  <div className={`pill ${allUlos.length > 0 ? "ok" : "warn"}`}><span className="dot" />{allUlos.length} ULOs covered</div>
+                  {canEdit && <button className="btn primary" disabled={!contributionsDirty || savingCoverage} onClick={() => void saveCoverage()}>{savingCoverage ? "Saving..." : "Save changes"}</button>}
+                </div>
               </div>
               {allUlos.map((ulo) => {
-                const coveredBy = rows.filter((row) => row.covers.includes(ulo));
-                return <div key={ulo} className="per-lo-row">
-                  <div className="lo-l">{ulo}<span className="sub">{coveredBy.map((row) => row.assessment_name || "Untitled assessment").join(", ") || "Not covered"}</span></div>
+                const coveredBy = savedRows.filter((row) => row.assessment_id !== null && row.covers.includes(ulo.ulo_code));
+                const total = coveredBy.reduce((sum, row) => sum + (contributions[`${row.assessment_id}::${ulo.ulo_code}`] ?? (100 / row.covers.length)), 0);
+                const ok = coveredBy.length > 0 && Math.abs(total - 100) < 0.01;
+                return <div key={ulo.ulo_code} className="per-lo-row">
+                  <div className="lo-l">
+                    <span className={`lo-status${coveredBy.length === 0 ? " none" : ok ? " ok" : " error"}`} title={coveredBy.length === 0 ? "Not covered" : ok ? "Fully covered (100%)" : `Total is ${total.toFixed(1)}%, not 100%`}>{coveredBy.length === 0 ? "–" : ok ? "✓" : "!"}</span>
+                    <div><div className="lo-code">{ulo.ulo_code}</div><span className="sub">{coveredBy.map((row) => row.assessment_name).join(", ") || "Not covered"}</span></div>
+                  </div>
                   <div className="alloc-bar">{coveredBy.length === 0
                     ? <div className="alloc-empty">No assessment currently links this ULO</div>
-                    : coveredBy.map((row, index) => <div key={row.key} className="seg-a" style={{ width: `${100 / coveredBy.length}%`, background: ROW_COLORS[index % ROW_COLORS.length] }}>{row.assessment_name || "Untitled"}</div>)}</div>
-                  <div className="per-lo-total">{coveredBy.reduce((sum, row) => sum + (splitEvenly(row.weight, row.covers.length)[row.covers.indexOf(ulo)] ?? 0), 0).toFixed(1)}%</div>
+                    : coveredBy.map((row) => <div key={row.key} className="seg-a" style={{ width: `${100 / coveredBy.length}%`, background: colorForKey(row.key) }}>{row.assessment_name}</div>)}</div>
+                  <div className="per-lo-actions"><button type="button" className="btn ghost" disabled={coveredBy.length === 0} onClick={() => openUloEditor(ulo.ulo_code)}>Edit</button></div>
                 </div>;
               })}
             </div>
           </div>}
         </div>
       </main>
+
+      {editingUlo && <div className="confirm-modal-overlay" onClick={() => setEditingUlo(null)}>
+        <div className="lo-map-modal" onClick={(event) => event.stopPropagation()}>
+          <span className="confirm-modal-tag">Edit LO coverage</span>
+          <h3>{editingUlo} contribution mapping</h3>
+          <p className="lo-map-intro">Set how much of each assessment's mark counts toward {editingUlo}. Percentages are independent per assessment — the total below should reach 100% for {editingUlo} to be fully covered.</p>
+          {editingSources.length === 0 ? <p className="lo-map-intro">No assessment currently covers {editingUlo}.</p> : <>
+            <div className="lo-map-canvas">
+              <div className="lo-map-sources">
+                {editingSources.map((row) => <div className="lo-map-row" key={row.key}>
+                  <div className="lo-map-node source">{row.assessment_name}</div>
+                  <div className="lo-map-wire" />
+                  <input type="number" className="lo-map-pct" min={0} max={100} step={0.5} onWheel={blurOnWheel}
+                    value={modalDraft[row.assessment_id as number] ?? 0}
+                    onChange={(event) => { const value = Math.min(100, Math.max(0, Number(event.target.value) || 0)); setModalDraft((previous) => ({ ...previous, [row.assessment_id as number]: value })); }} />
+                  <span className="pct-sign">%</span>
+                  <div className="lo-map-wire-out" />
+                </div>)}
+              </div>
+              <div className="lo-map-sink-wrap"><div className="lo-map-node sink">{editingUlo}</div></div>
+            </div>
+            <div className="lo-map-total">Total contribution to {editingUlo}: <strong style={{ color: modalOk ? "var(--ok)" : "var(--warn)" }}>{modalTotal.toFixed(1)}%</strong></div>
+          </>}
+          <div className="confirm-modal-actions">
+            <button className="btn" onClick={() => setEditingUlo(null)}>Cancel</button>
+            <button className="btn primary" onClick={commitUloEditor}>Done</button>
+          </div>
+        </div>
+      </div>}
 
       {pendingHref && <div className="confirm-modal-overlay" onClick={() => setPendingHref(null)}>
         <div className="confirm-modal" onClick={(event) => event.stopPropagation()}>
@@ -287,7 +442,7 @@ export default function Assessments() {
           <div className="confirm-modal-actions">
             <button className="btn" onClick={() => setPendingHref(null)}>Cancel</button>
             <button className="btn danger" onClick={discardAndNavigate}>Discard changes</button>
-            <button className="btn primary" disabled={saving || !!invalidReason} onClick={() => void saveAndNavigate()}>{saving ? "Saving..." : "Save and continue"}</button>
+            <button className="btn primary" disabled={savingSetup || savingCoverage || !!invalidReason} onClick={() => void saveAndNavigate()}>{savingSetup || savingCoverage ? "Saving..." : "Save and continue"}</button>
           </div>
         </div>
       </div>}

@@ -76,7 +76,7 @@
 .weight-cell input { border: none; background: transparent; font-family: inherit; font-size: inherit; color: inherit; font-weight: inherit; width: 42px; outline: none; padding: 0; }
 .weight-cell .pct { margin-left: auto; color: var(--ink-3); font-size: 12px; font-weight: 400; }
 .lo-chips { display: flex; gap: 4px; flex-wrap: wrap; }
-.lo-chip { width: 30px; height: 30px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); font-weight: 600; cursor: pointer; transition: background .1s, color .1s, border-color .1s; }
+.lo-chip { width: 30px; height: 30px; padding: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; display: grid; place-items: center; text-align: center; line-height: 1; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); font-weight: 600; cursor: pointer; transition: background .1s, color .1s, border-color .1s; }
 .lo-chip:hover { border-color: var(--navy-3); }
 .lo-chip.on { background: var(--navy); color: white; border-color: var(--navy); }
 .lo-chip:disabled { cursor: default; }
@@ -105,6 +105,7 @@
 .save-bar { margin-top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; gap: 16px; }
 .save-bar .stat { font-size: 12px; color: var(--ink-2); }
 .save-bar .actions { margin-left: auto; display: flex; gap: 8px; }
+.top-save-bar { margin-top: 0; }
 
 /* Unsaved-changes confirmation modal, shown when navigating away with dirty edits */
 .confirm-modal-overlay {
@@ -129,18 +130,57 @@
 .confirm-modal p { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0; }
 .confirm-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 
-.per-lo-breakdown { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-top: 16px; }
+/* LO coverage "map" editor: assessments (source, left) connect to a single LO (sink, right) */
+.lo-map-modal {
+  background: #fff; border-radius: 14px;
+  width: 100%; max-width: 620px;
+  padding: 26px 28px;
+  box-shadow: 0 20px 60px rgba(0,27,43,0.25);
+  animation: hurdle-modal-in 0.18s ease-out;
+}
+.lo-map-modal h3 { font-family: 'Newsreader', serif; font-weight: 500; font-size: 19px; margin: 0 0 10px; color: var(--ink); }
+.lo-map-intro { font-size: 12.5px; line-height: 1.6; color: var(--ink-2); margin: 0 0 6px; }
+.lo-map-canvas { display: flex; align-items: stretch; gap: 0; margin: 20px 0 14px; }
+.lo-map-sources { display: flex; flex-direction: column; gap: 14px; flex: 1; min-width: 0; position: relative; padding-right: 26px; }
+.lo-map-sources::after { content: ''; position: absolute; top: 22px; bottom: 22px; right: 0; width: 2px; background: var(--line-2); }
+.lo-map-row { display: flex; align-items: center; height: 44px; gap: 0; }
+.lo-map-node { border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.lo-map-node.source { background: var(--paper); border: 1px solid var(--line); color: var(--ink); padding: 9px 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lo-map-wire { flex: 0 0 22px; height: 2px; background: var(--line-2); }
+.lo-map-wire-out { flex: 0 0 22px; height: 2px; background: var(--line-2); }
+.lo-map-pct {
+  width: 56px; text-align: center; flex-shrink: 0;
+  border: 1.5px solid var(--navy-3); border-radius: 6px;
+  padding: 7px 4px; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
+  color: var(--navy); background: var(--navy-tint); outline: none;
+}
+.lo-map-pct:focus { box-shadow: 0 0 0 2px rgba(45,90,158,0.25); }
+.pct-sign { font-size: 11px; color: var(--ink-3); margin: 0 4px 0 5px; flex-shrink: 0; }
+.lo-map-sink-wrap { flex: 0 0 150px; display: flex; align-items: center; position: relative; padding-left: 26px; }
+.lo-map-sink-wrap::before { content: ''; position: absolute; left: 0; top: 50%; width: 26px; height: 2px; background: var(--line-2); }
+.lo-map-node.sink { background: var(--navy); color: white; border-radius: 10px; padding: 16px 14px; font-size: 14px; text-align: center; width: 100%; white-space: normal; }
+.lo-map-total { font-size: 13px; color: var(--ink-2); text-align: right; padding-top: 10px; border-top: 1px solid var(--line-2); }
+
+.per-lo-breakdown { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px 26px; margin-top: 16px; }
+.per-lo-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); gap: 16px; flex-wrap: wrap; }
+.per-lo-head h4 { margin: 0; font-size: 17px; font-weight: 600; }
+.per-lo-head .h-sub { font-size: 13px; color: var(--ink-3); margin-top: 5px; max-width: 480px; }
+.per-lo-head-actions { display: flex; align-items: center; gap: 12px; }
 .alloc-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--ink-2); margin-bottom: 14px; }
 .alloc-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-.per-lo-row { display: grid; grid-template-columns: 140px 1fr 70px; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line-2); align-items: center; font-size: 12.5px; }
+.per-lo-row { display: grid; grid-template-columns: 260px 1fr 110px; gap: 22px; padding: 18px 0; border-bottom: 1px solid var(--line-2); align-items: center; font-size: 15px; }
 .per-lo-row:last-child { border-bottom: none; }
-.lo-l { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink); font-weight: 500; }
-.lo-l .sub { display: block; font-family: 'Inter', sans-serif; font-weight: 400; color: var(--ink-3); font-size: 10.5px; margin-top: 2px; }
-.alloc-bar { height: 20px; background: var(--paper); border-radius: 4px; border: 1px solid var(--line); display: flex; overflow: hidden; }
-.seg-a { display: flex; align-items: center; justify-content: center; gap: 3px; padding: 0 4px; font-size: 9.5px; color: white; font-weight: 600; border-right: 1px solid rgba(255,255,255,0.25); font-family: 'JetBrains Mono', monospace; white-space: nowrap; overflow: hidden; cursor: default; }
+.lo-l { display: flex; align-items: center; gap: 12px; }
+.lo-status { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 700; background: var(--paper); color: var(--ink-4); border: 1px solid var(--line); }
+.lo-status.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-bg-2); }
+.lo-status.error { background: var(--risk-bg); color: var(--risk); border-color: #F2D8CC; }
+.lo-code { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: var(--ink); font-weight: 600; }
+.lo-l .sub { display: block; font-family: 'Inter', sans-serif; font-weight: 400; color: var(--ink-3); font-size: 12px; margin-top: 3px; }
+.alloc-bar { height: 34px; background: var(--paper); border-radius: 6px; border: 1px solid var(--line); display: flex; overflow: hidden; }
+.seg-a { display: flex; align-items: center; justify-content: center; gap: 3px; padding: 0 6px; font-size: 12px; color: white; font-weight: 600; border-right: 1px solid rgba(255,255,255,0.25); font-family: 'JetBrains Mono', monospace; white-space: nowrap; overflow: hidden; cursor: default; }
 .seg-a:last-child { border-right: none; }
-.alloc-empty { flex: 1; display: flex; align-items: center; padding: 0 10px; font-size: 11px; color: var(--warn); background: var(--warn-bg); font-family: 'Inter', sans-serif; font-weight: 500; }
-.per-lo-total { text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--ink); }
+.alloc-empty { flex: 1; display: flex; align-items: center; padding: 0 12px; font-size: 12.5px; color: var(--warn); background: var(--warn-bg); font-family: 'Inter', sans-serif; font-weight: 500; }
+.per-lo-actions { display: flex; justify-content: flex-end; }
 
 /* Hurdle description modal */
 .hurdle-modal-overlay {
