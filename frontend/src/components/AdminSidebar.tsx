@@ -13,7 +13,7 @@ const NAV_ADMIN = [
 export default function AdminSidebar({ user }: { user: SessionUser }) {
   return (
     <aside className="side">
-      <Link to="/admin/portal" className="brand">
+      <Link to="/admin/units" className="brand">
         <div className="mark">M</div>
         <div className="name">
           Admin

@@ -40,7 +40,6 @@ export default function Sidebar({ user }: { user: SessionUser }) {
 
       {user.permission_level >= 30 && (
         <>
-          <div className="sec">Administration</div>
           <nav>
             {NAV_ADMIN.map(({ to, label, ic, end }) => (
               <NavLink key={label} to={to} end={end} className={({ isActive }) => (isActive ? "active" : "")}>
