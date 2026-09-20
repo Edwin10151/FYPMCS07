@@ -68,6 +68,20 @@ export default function UnitSelect() {
         </div>
 
         {error && <div className="banner"><div className="ico">!</div><div className="body">{error}</div></div>}
+
+        {session.user.permission_level >= 30 && (
+          <button className="admin-portal-banner" onClick={() => navigate("/admin/setup")}>
+            <div className="admin-portal-banner-left">
+              <div className="admin-portal-banner-badge">ADMIN</div>
+              <div>
+                <h3>Admin Portal</h3>
+                <div className="admin-portal-banner-sub">Semester Setup · Tutor List · Student List</div>
+              </div>
+            </div>
+            <div className="admin-portal-banner-cta">Open Admin Portal <span className="unit-arrow">→</span></div>
+          </button>
+        )}
+
         {loading ? <div className="panel">Loading your unit offerings...</div> : (
           <>
             <div className="us-section-label">Available offerings <span className="us-count">{offerings.length}</span></div>

@@ -80,6 +80,29 @@ export type Assessment = {
   allocated_weights: string[];
 };
 
+export type OfferingUlo = {
+  offering_ulo_id: number;
+  ulo_code: string;
+};
+
+export type AssessmentsPayload = {
+  assessments: Assessment[];
+  all_ulos: OfferingUlo[];
+};
+
+export type AssessmentInput = {
+  assessment_id: number | null;
+  assessment_name: string;
+  weight: number;
+  ulo_codes: string[];
+};
+
+export type AssessmentUloWeightInput = {
+  assessment_id: number;
+  offering_ulo_id: number;
+  allocated_weight: number;
+};
+
 export type HandbookDraft = {
   handbook_import_id: number;
   source_url: string;
@@ -238,7 +261,21 @@ export function saveMappings(token: string, offeringId: number, mappings: Array<
 }
 
 export function getAssessments(token: string, offeringId: number) {
-  return apiFetch<{ assessments: Assessment[] }>(`/assessments?offering_id=${offeringId}`, token);
+  return apiFetch<AssessmentsPayload>(`/assessments?offering_id=${offeringId}`, token);
+}
+
+export function saveAssessments(token: string, offeringId: number, assessments: AssessmentInput[]) {
+  return apiFetch<{ status: string }>("/assessments", token, {
+    method: "PUT",
+    body: JSON.stringify({ offering_id: offeringId, assessments }),
+  });
+}
+
+export function saveAssessmentUloWeights(token: string, offeringId: number, weights: AssessmentUloWeightInput[]) {
+  return apiFetch<{ status: string }>("/assessment-ulo-weights", token, {
+    method: "PUT",
+    body: JSON.stringify({ offering_id: offeringId, weights }),
+  });
 }
 
 export function createHandbookImport(token: string, offeringId: number) {
@@ -277,6 +314,14 @@ export function updateAdminPeriod(
   payload: { start_date: string | null; end_date: string | null; status: "planning" | "active" | "archived" },
 ) {
   return apiFetch<{ status: string }>(`/admin/periods/${semesterId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function deactivateAdminPeriod(token: string, semesterId: number) {
+  return apiFetch<{ status: string; archived_semester_id: number; next_semester_id: number; next_year: number; next_period: "S1" | "S2" }>(
+    `/admin/periods/${semesterId}/deactivate`,
+    token,
+    { method: "POST" },
+  );
 }
 
 export type OfferingInput = {

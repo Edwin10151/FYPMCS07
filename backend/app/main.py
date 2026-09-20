@@ -82,6 +82,18 @@ class MappingUpdate(BaseModel):
     mappings: list[dict[str, int]]
 
 
+class AssessmentRowInput(BaseModel):
+    assessment_id: int | None = None
+    assessment_name: str
+    weight: Decimal
+    ulo_codes: list[str] = []
+
+
+class AssessmentsUpdate(BaseModel):
+    offering_id: int
+    assessments: list[AssessmentRowInput]
+
+
 class HandbookImportConfirmation(BaseModel):
     handbook_import_id: int
 
@@ -229,7 +241,10 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
     """
     rows = fetch_all(query, params)
     for row in rows:
-        row["can_edit"] = user["role_name"] == "management" or row["coordinator_id"] == user["user_id"]
+        # Management has view-only access to every unit unless it is literally
+        # the assigned coordinator for that offering (admin workflows live in
+        # the Admin Portal, not the per-unit workspace).
+        row["can_edit"] = row["coordinator_id"] == user["user_id"]
         del row["coordinator_id"]
     return {"offerings": rows}
 
@@ -591,7 +606,131 @@ def assessments(user: Annotated[dict, Depends(require_offering_access())], offer
         """,
         (offering_id,),
     )
-    return {"assessments": rows}
+    all_ulos = fetch_all(
+        "SELECT offering_ulo_id, ulo_code FROM offering_ulo WHERE offering_id = %s ORDER BY ulo_code",
+        (offering_id,),
+    )
+    return {"assessments": rows, "all_ulos": all_ulos}
+
+
+@app.put("/api/assessments")
+def save_assessments(
+    payload: AssessmentsUpdate,
+    user: Annotated[dict, Depends(require_permission(20))],
+):
+    ensure_offering_access(user, payload.offering_id, min_permission_level=20)
+    if not payload.assessments:
+        raise HTTPException(status_code=422, detail="At least one assessment is required")
+
+    names = [item.assessment_name.strip() for item in payload.assessments]
+    if any(not name for name in names):
+        raise HTTPException(status_code=422, detail="Every assessment needs a name")
+    if len(names) != len(set(names)):
+        raise HTTPException(status_code=422, detail="Assessment names must be unique")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT offering_ulo_id, ulo_code FROM offering_ulo WHERE offering_id = %s",
+                (payload.offering_id,),
+            )
+            ulo_ids = {row["ulo_code"]: row["offering_ulo_id"] for row in cur.fetchall()}
+
+            cur.execute("SELECT assessment_id FROM assessment WHERE offering_id = %s", (payload.offering_id,))
+            existing_ids = {row["assessment_id"] for row in cur.fetchall()}
+            keep_ids = {item.assessment_id for item in payload.assessments if item.assessment_id is not None}
+            remove_ids = existing_ids - keep_ids
+            if remove_ids:
+                cur.execute(
+                    "DELETE FROM assessment WHERE offering_id = %s AND assessment_id = ANY(%s)",
+                    (payload.offering_id, list(remove_ids)),
+                )
+
+            for order, item in enumerate(payload.assessments, start=1):
+                name = item.assessment_name.strip()
+                if item.assessment_id is not None and item.assessment_id in existing_ids:
+                    cur.execute(
+                        """
+                        UPDATE assessment
+                        SET assessment_name = %s, weight = %s, assessment_order = %s,
+                            source = CASE WHEN source = 'handbook' THEN 'manual' ELSE source END,
+                            confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP
+                        WHERE assessment_id = %s AND offering_id = %s
+                        """,
+                        (name, item.weight, order, user["user_id"], item.assessment_id, payload.offering_id),
+                    )
+                    assessment_id = item.assessment_id
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO assessment (
+                            offering_id, assessment_name, weight, assessment_order,
+                            source, confirmed_by, confirmed_at
+                        )
+                        VALUES (%s, %s, %s, %s, 'manual', %s, CURRENT_TIMESTAMP)
+                        RETURNING assessment_id
+                        """,
+                        (payload.offering_id, name, item.weight, order, user["user_id"]),
+                    )
+                    assessment_id = cur.fetchone()["assessment_id"]
+
+                cur.execute(
+                    "SELECT offering_ulo_id, allocated_weight FROM assessment_ulo WHERE assessment_id = %s",
+                    (assessment_id,),
+                )
+                existing_links = {row["offering_ulo_id"]: row["allocated_weight"] for row in cur.fetchall()}
+                cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
+
+                linked_ulo_ids = [ulo_ids[code] for code in item.ulo_codes if code in ulo_ids]
+                # New LO links default to an even split of 100% (the LO-contribution
+                # convention, independent of the assessment's own weight). A link that
+                # already existed keeps whatever contribution percentage a coordinator
+                # set for it in the Assessment coverage editor.
+                default_shares = split_weight(Decimal(100), linked_ulo_ids)
+                for offering_ulo_id, default_share in default_shares.items():
+                    allocated_weight = existing_links.get(offering_ulo_id, default_share)
+                    cur.execute(
+                        """
+                        INSERT INTO assessment_ulo (
+                            offering_id, assessment_id, offering_ulo_id, source, is_confirmed,
+                            allocated_weight, confirmed_by, confirmed_at
+                        )
+                        VALUES (%s, %s, %s, 'manual', TRUE, %s, %s, CURRENT_TIMESTAMP)
+                        """,
+                        (payload.offering_id, assessment_id, offering_ulo_id, allocated_weight, user["user_id"]),
+                    )
+    return {"status": "saved"}
+
+
+class AssessmentUloWeightInput(BaseModel):
+    assessment_id: int
+    offering_ulo_id: int
+    allocated_weight: Decimal
+
+
+class AssessmentUloWeightsUpdate(BaseModel):
+    offering_id: int
+    weights: list[AssessmentUloWeightInput]
+
+
+@app.put("/api/assessment-ulo-weights")
+def save_assessment_ulo_weights(
+    payload: AssessmentUloWeightsUpdate,
+    user: Annotated[dict, Depends(require_permission(20))],
+):
+    ensure_offering_access(user, payload.offering_id, min_permission_level=20)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for item in payload.weights:
+                cur.execute(
+                    """
+                    UPDATE assessment_ulo
+                    SET allocated_weight = %s, is_confirmed = TRUE, confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP
+                    WHERE offering_id = %s AND assessment_id = %s AND offering_ulo_id = %s
+                    """,
+                    (item.allocated_weight, user["user_id"], payload.offering_id, item.assessment_id, item.offering_ulo_id),
+                )
+    return {"status": "saved"}
 
 
 @app.get("/api/admin/users")
@@ -1032,6 +1171,52 @@ def update_admin_period(
                 (payload.start_date, payload.end_date, payload.status, semester_id),
             )
     return {"status": "updated"}
+
+
+def _next_period(year: int, period: str) -> tuple[int, str]:
+    """Each year has two semesters: S1 rolls to S2 the same year, S2 rolls to S1 the next year."""
+    if period == "S1":
+        return year, "S2"
+    return year + 1, "S1"
+
+
+@app.post("/api/admin/periods/{semester_id}/deactivate")
+def deactivate_admin_period(
+    semester_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT year, period, status FROM semester WHERE semester_id = %s FOR UPDATE", (semester_id,))
+            current = cur.fetchone()
+            if not current:
+                raise HTTPException(status_code=404, detail="Academic period not found")
+            if current["status"] != "active":
+                raise HTTPException(status_code=409, detail="Only the active semester can be deactivated")
+
+            cur.execute("UPDATE semester SET status = 'archived' WHERE semester_id = %s", (semester_id,))
+
+            next_year, next_period = _next_period(current["year"], current["period"])
+            cur.execute("SELECT semester_id FROM semester WHERE year = %s AND period = %s", (next_year, next_period))
+            existing_next = cur.fetchone()
+            if existing_next:
+                # A future period was already pre-created (e.g. via Academic Periods) — promote it
+                # instead of failing on the (year, period) uniqueness constraint.
+                cur.execute("UPDATE semester SET status = 'active' WHERE semester_id = %s", (existing_next["semester_id"],))
+                next_semester_id = existing_next["semester_id"]
+            else:
+                cur.execute(
+                    "INSERT INTO semester (year, period, status) VALUES (%s, %s, 'active') RETURNING semester_id",
+                    (next_year, next_period),
+                )
+                next_semester_id = cur.fetchone()["semester_id"]
+    return {
+        "status": "deactivated",
+        "archived_semester_id": semester_id,
+        "next_semester_id": next_semester_id,
+        "next_year": next_year,
+        "next_period": next_period,
+    }
 
 
 @app.post("/api/admin/offerings", status_code=201)
