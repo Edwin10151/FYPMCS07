@@ -31,6 +31,10 @@ type Status = {
   unmatched_units: UnmatchedUnit[];
 };
 
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function UnmatchedUnitsPanel({ unmatched, onAddClick, canAdd }: { unmatched: UnmatchedUnit[]; onAddClick: () => void; canAdd: boolean }) {
   const [expanded, setExpanded] = useState(false);
   if (unmatched.length === 0) return null;
@@ -56,6 +60,7 @@ export default function AdminTutors() {
   const { session, data, error, loading, reload } = useAdminContext();
 
   const [file, setFile] = useState<File | null>(null);
+  const [replacing, setReplacing] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [inspectResult, setInspectResult] = useState<{ units_in_file: number; matched_offerings: number; unmatched_units: UnmatchedUnit[] } | null>(null);
   const [committing, setCommitting] = useState(false);
@@ -68,6 +73,7 @@ export default function AdminTutors() {
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [coordinatorByUnit, setCoordinatorByUnit] = useState<Record<string, string>>({});
+  const [programIdsByUnit, setProgramIdsByUnit] = useState<Record<string, number[]>>({});
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
 
@@ -81,6 +87,7 @@ export default function AdminTutors() {
   const active = data?.periods.find((period) => period.status === "active") ?? null;
   const offeringsThisSemester = data?.offerings.filter((offering) => offering.semester_id === active?.semester_id && offering.status !== "discontinued") ?? [];
   const coordinators = data?.staff.filter((staff) => staff.role_name === "coordinator" && staff.is_active) ?? [];
+  const programs = data?.programs ?? [];
 
   useEffect(() => {
     if (staffingOfferingId || !offeringsThisSemester.length) return;
@@ -124,6 +131,7 @@ export default function AdminTutors() {
   const chooseFile = async (selectedFile: File) => {
     if (!active) return;
     setFile(selectedFile);
+    setReplacing(false);
     setInspectResult(null);
     setCommitResult(null);
     setUploadError("");
@@ -158,13 +166,15 @@ export default function AdminTutors() {
     }
   };
 
-  const replaceFile = () => { setFile(null); setInspectResult(null); setCommitResult(null); setUploadError(""); };
+  const resetUploadState = () => { setFile(null); setInspectResult(null); setCommitResult(null); setUploadError(""); };
+  const startReplacing = () => { resetUploadState(); setReplacing(true); };
 
   const currentUnmatched = commitResult?.unmatched_units ?? inspectResult?.unmatched_units ?? (!file ? status?.unmatched_units ?? [] : []);
 
   const openAddModal = () => {
     setSelected(new Set());
     setCoordinatorByUnit({});
+    setProgramIdsByUnit({});
     setAddError("");
     setAddOpen(true);
   };
@@ -174,6 +184,14 @@ export default function AdminTutors() {
       const next = new Set(previous);
       if (next.has(unitCode)) next.delete(unitCode); else next.add(unitCode);
       return next;
+    });
+  };
+
+  const toggleUnitProgram = (unitCode: string, programId: number) => {
+    setProgramIdsByUnit((previous) => {
+      const current = previous[unitCode] ?? [];
+      const next = current.includes(programId) ? current.filter((id) => id !== programId) : [...current, programId];
+      return { ...previous, [unitCode]: next };
     });
   };
 
@@ -188,11 +206,13 @@ export default function AdminTutors() {
           unit_code: unit.unit_code,
           unit_name: unit.unit_name,
           programme_codes: unit.programme_codes,
+          program_ids: programIdsByUnit[unit.unit_code] ?? [],
           coordinator_id: coordinatorByUnit[unit.unit_code] ? Number(coordinatorByUnit[unit.unit_code]) : null,
         }));
       const result = await createOfferingsFromRoster(session.access_token, active.semester_id, items);
       setAddOpen(false);
-      replaceFile();
+      resetUploadState();
+      setReplacing(false);
       await Promise.all([loadStatus(active.semester_id), reload()]);
       if (result.warnings.length) setUploadError(result.warnings.join(" "));
     } catch (err) {
@@ -227,7 +247,19 @@ export default function AdminTutors() {
 
           <div className="adm-card">
             <div className="adm-card-head"><div><h4>Upload Tutor List</h4><div className="h-sub">Use the .xlsx roster export — column headers stay the same each semester.</div></div></div>
-            {!file ? (
+            {file ? (
+              <div className="adm-file-card">
+                <div className="icn">XLS</div>
+                <div><div className="nm">{file.name}</div><div className="sub">{formatFileSize(file.size)}</div></div>
+                <button className="btn" disabled={inspecting || committing} onClick={startReplacing}>Replace file</button>
+              </div>
+            ) : status && !replacing ? (
+              <div className="adm-file-card">
+                <div className="icn">XLS</div>
+                <div><div className="nm">{status.source_filename}</div><div className="sub">Uploaded {formatDateTime(status.imported_at)}</div></div>
+                <button className="btn" onClick={startReplacing}>Replace file</button>
+              </div>
+            ) : (
               <div style={{ padding: 20 }}>
                 <label className="adm-drop">
                   <div className="icn">XLS</div>
@@ -235,12 +267,6 @@ export default function AdminTutors() {
                   <div className="s">.xlsx workbook only. The first sheet is read; each unit block may span several staff rows.</div>
                   <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={!active} onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} />
                 </label>
-              </div>
-            ) : (
-              <div className="adm-file-card">
-                <div className="icn">XLS</div>
-                <div><div className="nm">{file.name}</div><div className="sub">{formatFileSize(file.size)}</div></div>
-                <button className="btn" disabled={inspecting || committing} onClick={replaceFile}>Replace file</button>
               </div>
             )}
           </div>
@@ -279,9 +305,8 @@ export default function AdminTutors() {
           )}
 
           {/* Persisted state: what was already imported, shown even without re-uploading. */}
-          {!file && !statusLoading && status && (
+          {!file && !replacing && !statusLoading && status && (
             <>
-              <div className="us-section-label">Last uploaded — {status.source_filename}</div>
               <div className="adm-stats">
                 <div className="adm-stat navy"><div className="lbl"><span className="b" />Units in file</div><div className="v">{status.units_in_file}</div><div className="sub">Rows read from the roster</div></div>
                 <div className="adm-stat ok"><div className="lbl"><span className="b" />Matched offerings</div><div className="v">{status.matched_offerings}</div><div className="sub">Linked to a unit offering</div></div>
@@ -335,7 +360,7 @@ export default function AdminTutors() {
         <div className="adm-modal-overlay" onClick={() => !adding && setAddOpen(false)}>
           <div className="adm-modal wide" onClick={(event) => event.stopPropagation()}>
             <h3>Add units to the database</h3>
-            <div className="adm-modal-sub">Select the units to add for {active ? `${active.year} ${active.period}` : "this semester"}. A coordinator is optional — units left unassigned show a warning on the Unit Offerings page until one is set.</div>
+            <div className="adm-modal-sub">Select the units to add for {active ? `${active.year} ${active.period}` : "this semester"}. A coordinator is optional — units left unassigned show a warning on the Unit Offerings page until one is set. Tick a programme so this unit's PLOs show up on the mapping page — the roster's own programme text ({"BCS, BCSDS"} etc.) is shown for reference but isn't linked automatically.</div>
             {addError && <div className="banner"><div className="ico">!</div><div className="body">{addError}</div></div>}
             <div className="add-units-list">
               {currentUnmatched.map((unit) => (
@@ -343,7 +368,21 @@ export default function AdminTutors() {
                   <input type="checkbox" checked={selected.has(unit.unit_code)} onChange={() => toggleSelected(unit.unit_code)} />
                   <div className="add-units-info">
                     <div className="mono">{unit.unit_code}</div>
-                    <div className="muted">{unit.unit_name || "—"} · {unit.programme_codes.join(", ") || "No programme listed"}</div>
+                    <div className="muted">{unit.unit_name || "—"} · roster says: {unit.programme_codes.join(", ") || "no programme listed"}</div>
+                    {programs.length > 0 && (
+                      <div className="add-units-programs">
+                        {programs.map((program) => (
+                          <button
+                            type="button"
+                            key={program.program_id}
+                            className={`program-chip${(programIdsByUnit[unit.unit_code] ?? []).includes(program.program_id) ? " on" : ""}`}
+                            onClick={(event) => { event.preventDefault(); toggleUnitProgram(unit.unit_code, program.program_id); }}
+                          >
+                            {program.program_code}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <select
                     value={coordinatorByUnit[unit.unit_code] ?? ""}

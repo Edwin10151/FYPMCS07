@@ -373,7 +373,7 @@ export function deleteAdminOffering(token: string, offeringId: number) {
 
 export type UnmatchedUnit = { unit_code: string; unit_name: string; programme_codes: string[] };
 
-export type RosterOfferingInput = { unit_code: string; unit_name: string; programme_codes: string[]; coordinator_id: number | null };
+export type RosterOfferingInput = { unit_code: string; unit_name: string; programme_codes: string[]; program_ids: number[]; coordinator_id: number | null };
 
 export function createOfferingsFromRoster(token: string, semesterId: number, offerings: RosterOfferingInput[]) {
   return apiFetch<{ created: Array<{ offering_id: number; unit_code: string }>; warnings: string[] }>("/admin/offerings/bulk-from-roster", token, {
@@ -472,15 +472,17 @@ export function inspectEnrolmentUpload(token: string, file: File) {
   return uploadForm(token, "/admin/enrolments/inspect", {}, file) as Promise<CsvInspection>;
 }
 
-export function previewEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File) {
+export function previewEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
   return uploadForm(token, "/admin/enrolments/preview", {
     offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+    ...(givenNameColumn ? { given_name_column: givenNameColumn } : {}),
   }, file) as Promise<{ filename: string; row_count: number; accepted_count: number; issues: UploadIssue[]; status: "valid" | "needs_review" }>;
 }
 
-export function commitEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File) {
+export function commitEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
   return uploadForm(token, "/admin/enrolments/commit", {
     offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+    ...(givenNameColumn ? { given_name_column: givenNameColumn } : {}),
   }, file) as Promise<{ status: string; batch_id: number; accepted_count: number }>;
 }
 

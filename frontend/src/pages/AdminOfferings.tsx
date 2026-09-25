@@ -10,7 +10,7 @@ export default function AdminOfferings() {
   const { session, data, error, loading, reload } = useAdminContext();
   const [semesterId, setSemesterId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ unit_code: "", unit_name: "", programme_codes: "", coordinator_id: "" });
+  const [form, setForm] = useState<{ unit_code: string; unit_name: string; program_ids: number[]; coordinator_id: string }>({ unit_code: "", unit_name: "", program_ids: [], coordinator_id: "" });
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState("");
   const [flashError, setFlashError] = useState("");
@@ -30,9 +30,16 @@ export default function AdminOfferings() {
   const coordinators = data?.staff.filter((staff) => staff.role_name === "coordinator" && staff.is_active) ?? [];
 
   const openAdd = () => {
-    setForm({ unit_code: "", unit_name: "", programme_codes: "", coordinator_id: "" });
+    setForm({ unit_code: "", unit_name: "", program_ids: [], coordinator_id: "" });
     setFlashError("");
     setAddOpen(true);
+  };
+
+  const toggleFormProgram = (programId: number) => {
+    setForm((previous) => ({
+      ...previous,
+      program_ids: previous.program_ids.includes(programId) ? previous.program_ids.filter((id) => id !== programId) : [...previous.program_ids, programId],
+    }));
   };
 
   const canAdd = /^[A-Za-z]{3}\d{4}/.test(form.unit_code.trim()) && form.unit_name.trim().length > 2;
@@ -45,7 +52,8 @@ export default function AdminOfferings() {
       const result = await createOfferingsFromRoster(session.access_token, semesterId, [{
         unit_code: form.unit_code.trim(),
         unit_name: form.unit_name.trim(),
-        programme_codes: form.programme_codes.split(",").map((code) => code.trim()).filter(Boolean),
+        programme_codes: [],
+        program_ids: form.program_ids,
         coordinator_id: form.coordinator_id ? Number(form.coordinator_id) : null,
       }]);
       if (result.created.length === 0) {
@@ -126,7 +134,7 @@ export default function AdminOfferings() {
         <div className="adm-modal-overlay" onClick={() => !saving && setAddOpen(false)}>
           <div className="adm-modal" onClick={(event) => event.stopPropagation()}>
             <h3>Add unit to {period ? `${period.year} ${period.period}` : "this semester"}</h3>
-            <div className="adm-modal-sub">Programmes are matched by code against the programs already on file — unmatched codes are skipped with a warning, not blocked.</div>
+            <div className="adm-modal-sub">Linking a programme here is what makes this unit's PLOs available on the LO ↔ PLO mapping page — without one, the mapping matrix has nothing to map against.</div>
             <div className="adm-form">
               <div className="adm-form-2">
                 <label className="adm-field mono"><span className="lbl">Unit code</span><input value={form.unit_code} onChange={(event) => setForm({ ...form, unit_code: event.target.value.toUpperCase() })} placeholder="FIT1008" /></label>
@@ -138,7 +146,19 @@ export default function AdminOfferings() {
                 </label>
               </div>
               <label className="adm-field"><span className="lbl">Unit name</span><input value={form.unit_name} onChange={(event) => setForm({ ...form, unit_name: event.target.value })} placeholder="Fundamentals of algorithms" /></label>
-              <label className="adm-field"><span className="lbl">Programmes</span><input value={form.programme_codes} onChange={(event) => setForm({ ...form, programme_codes: event.target.value })} placeholder="BCS, BCSDS" /><span className="hint">Comma-separated programme codes.</span></label>
+              <div className="adm-field">
+                <span className="lbl">Programmes</span>
+                {(data?.programs ?? []).length === 0 ? <span className="hint">No programmes are on file yet.</span> : (
+                  <div className="program-checklist">
+                    {(data?.programs ?? []).map((program) => (
+                      <label key={program.program_id} className="program-check">
+                        <input type="checkbox" checked={form.program_ids.includes(program.program_id)} onChange={() => toggleFormProgram(program.program_id)} />
+                        <span className="mono">{program.program_code}</span> {program.program_name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="adm-modal-actions">
               <button className="btn" disabled={saving} onClick={() => setAddOpen(false)}>Cancel</button>

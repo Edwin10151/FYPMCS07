@@ -44,3 +44,7 @@
 .add-units-info { min-width: 0; font-size: 12.5px; }
 .add-units-info .mono { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--navy); font-size: 12px; }
 .add-units-row select { height: 32px; border: 1px solid var(--line); border-radius: 6px; background: white; font-family: inherit; font-size: 12px; color: var(--ink); padding: 0 8px; outline: none; }
+.add-units-programs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+.program-chip { height: 22px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--line); background: white; font-size: 10.5px; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--ink-3); cursor: pointer; }
+.program-chip:hover { border-color: var(--navy-3); }
+.program-chip.on { background: var(--navy); border-color: var(--navy); color: white; }

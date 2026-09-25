@@ -144,6 +144,7 @@ class RosterOfferingCreate(BaseModel):
     unit_code: str
     unit_name: str
     programme_codes: list[str] = []
+    program_ids: list[int] = []
     coordinator_id: int | None = None
 
 
@@ -224,8 +225,8 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             o.offering_id,
             u.unit_code,
             u.unit_name,
-            ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code) AS program_codes,
-            ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names,
+            ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code), NULL) AS program_codes,
+            ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name), NULL) AS program_names,
             s.year,
             s.period,
             s.status AS semester_status,
@@ -234,8 +235,8 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             o.last_scraped_at
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN offering_program op ON op.offering_id = o.offering_id
-        JOIN program p ON p.program_id = op.program_id
+        LEFT JOIN offering_program op ON op.offering_id = o.offering_id
+        LEFT JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
     """
     if user["role_name"] == "coordinator":
@@ -473,11 +474,11 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
     offering = fetch_one(
         """
         SELECT o.offering_id, u.unit_code, u.unit_name, s.year, s.period,
-               ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names
+               ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name), NULL) AS program_names
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN offering_program op ON op.offering_id = o.offering_id
-        JOIN program p ON p.program_id = op.program_id
+        LEFT JOIN offering_program op ON op.offering_id = o.offering_id
+        LEFT JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
         WHERE o.offering_id = %s
         GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period
@@ -1487,6 +1488,17 @@ def create_offerings_from_roster(
                     (unit_id, payload.semester_id, item.coordinator_id),
                 )
                 offering_id = cur.fetchone()["offering_id"]
+                if item.program_ids:
+                    cur.execute("SELECT program_id FROM program WHERE program_id = ANY(%s)", (list(set(item.program_ids)),))
+                    valid_program_ids = {row["program_id"] for row in cur.fetchall()}
+                    for program_id in item.program_ids:
+                        if program_id not in valid_program_ids:
+                            warnings.append(f"{unit_code}: program {program_id} not found")
+                            continue
+                        cur.execute(
+                            "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (offering_id, program_id),
+                        )
                 if item.programme_codes:
                     cleaned_codes = [code.strip().upper() for code in item.programme_codes if code.strip()]
                     cur.execute(
@@ -1507,17 +1519,28 @@ def create_offerings_from_roster(
     return {"created": created, "warnings": warnings}
 
 
+def _combined_full_name(row: dict[str, str], full_name_column: str, given_name_column: str | None) -> str:
+    """Some official exports split the name into a surname column and a separate given-names
+    column (e.g. Monash's enrolment extract) rather than one pre-combined full-name column."""
+    surname = row[full_name_column].strip()
+    if not given_name_column:
+        return surname
+    given = row.get(given_name_column, "").strip()
+    return f"{given} {surname}".strip()
+
+
 def _validate_enrolment_rows(
     rows: list[tuple[int, dict[str, str]]],
     student_code_column: str,
     full_name_column: str,
+    given_name_column: str | None = None,
 ) -> tuple[list[dict], int]:
     issues: list[dict] = []
     accepted_count = 0
     seen_codes: set[str] = set()
     for row_number, row in rows:
         student_code = row[student_code_column].strip().replace(" ", "")
-        full_name = row[full_name_column].strip()
+        full_name = _combined_full_name(row, full_name_column, given_name_column)
         if not student_code:
             issues.append({"row": row_number, "severity": "error", "message": "Missing student ID"})
         elif not _STUDENT_CODE_PATTERN.fullmatch(student_code):
@@ -1549,13 +1572,16 @@ async def preview_enrolment_upload(
     offering_id: int = Form(...),
     student_code_column: str = Form(...),
     full_name_column: str = Form(...),
+    given_name_column: str | None = Form(None),
     file: UploadFile = File(...),
 ):
     if not fetch_one("SELECT 1 FROM unit_offering WHERE offering_id = %s", (offering_id,)):
         raise HTTPException(status_code=404, detail="Unit offering not found")
     filename, headers, rows = await _read_csv_upload(file)
     _require_columns(headers, student_code_column, full_name_column)
-    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column)
+    if given_name_column:
+        _require_columns(headers, given_name_column)
+    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
     return {
         "filename": filename,
         "row_count": len(rows),
@@ -1571,11 +1597,14 @@ async def commit_enrolment_upload(
     offering_id: int = Form(...),
     student_code_column: str = Form(...),
     full_name_column: str = Form(...),
+    given_name_column: str | None = Form(None),
     file: UploadFile = File(...),
 ):
     filename, headers, rows = await _read_csv_upload(file)
     _require_columns(headers, student_code_column, full_name_column)
-    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column)
+    if given_name_column:
+        _require_columns(headers, given_name_column)
+    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
     if any(issue["severity"] == "error" for issue in issues):
         raise HTTPException(status_code=422, detail="Fix all student-list errors before committing")
     with get_conn() as conn:
@@ -1593,7 +1622,7 @@ async def commit_enrolment_upload(
             student_program_id = offering_program_ids[0] if len(offering_program_ids) == 1 else None
             for _, row in rows:
                 student_code = row[student_code_column].strip().replace(" ", "")
-                full_name = row[full_name_column].strip()
+                full_name = _combined_full_name(row, full_name_column, given_name_column)
                 cur.execute(
                     """
                     INSERT INTO student (student_code, full_name, program_id)
