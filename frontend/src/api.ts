@@ -25,6 +25,7 @@ export type Offering = {
   program_names: string[];
   year: number;
   period: string;
+  semester_status: "planning" | "active" | "archived";
   can_edit: boolean;
   handbook_url: string | null;
   last_scraped_at: string | null;
@@ -61,6 +62,17 @@ export type DashboardPayload = {
   learning_outcomes: LearningOutcome[];
   assessments: DashboardAssessment[];
   report: { report_id: number; ai_summary: string; coordinator_comment: string; is_finalized: boolean } | null;
+};
+
+export type Report = {
+  report_id: number;
+  ai_summary: string | null;
+  coordinator_comment: string | null;
+  is_finalized: boolean;
+  generated_by: number | null;
+  generated_at: string;
+  finalized_by: number | null;
+  finalized_at: string | null;
 };
 
 export type MappingPayload = {
@@ -149,8 +161,8 @@ export type AdminOffering = {
   semester_id: number;
   program_ids: number[];
   unit_id: number;
-  coordinator_id: number;
-  coordinator_name: string;
+  coordinator_id: number | null;
+  coordinator_name: string | null;
   lecturer_ids: number[];
   status: "draft" | "active" | "discontinued";
   handbook_url: string | null;
@@ -249,6 +261,17 @@ export function getDashboard(token: string, offeringId: number) {
   return apiFetch<DashboardPayload>(`/dashboard?offering_id=${offeringId}`, token);
 }
 
+export function getReport(token: string, offeringId: number) {
+  return apiFetch<{ report: Report | null }>(`/reports?offering_id=${offeringId}`, token);
+}
+
+export function saveReport(token: string, offeringId: number, aiSummary: string, finalize: boolean) {
+  return apiFetch<{ report_id: number; status: string }>("/reports", token, {
+    method: "PUT",
+    body: JSON.stringify({ offering_id: offeringId, ai_summary: aiSummary, finalize }),
+  });
+}
+
 export function getMappings(token: string, offeringId: number) {
   return apiFetch<MappingPayload>(`/mappings?offering_id=${offeringId}`, token);
 }
@@ -329,7 +352,7 @@ export type OfferingInput = {
   program_ids: number[];
   unit_code: string;
   unit_name: string;
-  coordinator_id: number;
+  coordinator_id: number | null;
   lecturer_ids: number[];
   status: "draft" | "active" | "discontinued";
   replacement_unit_code?: string | null;
@@ -342,6 +365,21 @@ export function createAdminOffering(token: string, payload: OfferingInput) {
 
 export function updateAdminOffering(token: string, offeringId: number, payload: Omit<OfferingInput, "semester_id">) {
   return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function deleteAdminOffering(token: string, offeringId: number) {
+  return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "DELETE" });
+}
+
+export type UnmatchedUnit = { unit_code: string; unit_name: string; programme_codes: string[] };
+
+export type RosterOfferingInput = { unit_code: string; unit_name: string; programme_codes: string[]; program_ids: number[]; coordinator_id: number | null };
+
+export function createOfferingsFromRoster(token: string, semesterId: number, offerings: RosterOfferingInput[]) {
+  return apiFetch<{ created: Array<{ offering_id: number; unit_code: string }>; warnings: string[] }>("/admin/offerings/bulk-from-roster", token, {
+    method: "POST",
+    body: JSON.stringify({ semester_id: semesterId, offerings }),
+  });
 }
 
 export type OfferingStaffingRow = {
@@ -357,15 +395,36 @@ export function getOfferingStaffing(token: string, offeringId: number) {
   return apiFetch<{ staffing: OfferingStaffingRow[] }>(`/offerings/${offeringId}/staffing`, token);
 }
 
+export function inspectStaffingRoster(token: string, semesterId: number, file: File) {
+  return uploadForm(token, "/admin/staffing/roster-inspect", { semester_id: String(semesterId) }, file) as Promise<{
+    units_in_file: number;
+    matched_offerings: number;
+    unmatched_units: UnmatchedUnit[];
+  }>;
+}
+
 export function importStaffingRoster(token: string, semesterId: number, file: File) {
   return uploadForm(token, "/admin/staffing/roster-import", { semester_id: String(semesterId) }, file) as Promise<{
     status: string;
     units_in_file: number;
     matched_offerings: number;
     staffing_rows_created: number;
-    unmatched_units: Array<{ unit_code: string; unit_name: string; programme_codes: string[] }>;
+    unmatched_units: UnmatchedUnit[];
     warnings: string[];
   }>;
+}
+
+export function getStaffingStatus(token: string, semesterId: number) {
+  return apiFetch<{
+    snapshot: {
+      source_filename: string;
+      imported_at: string;
+      units_in_file: number;
+      matched_offerings: number;
+      staffing_rows_created: number;
+      unmatched_units: UnmatchedUnit[];
+    } | null;
+  }>(`/admin/staffing/status?semester_id=${semesterId}`, token);
 }
 
 export function createAdminUser(
@@ -413,16 +472,25 @@ export function inspectEnrolmentUpload(token: string, file: File) {
   return uploadForm(token, "/admin/enrolments/inspect", {}, file) as Promise<CsvInspection>;
 }
 
-export function previewEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File) {
+export function previewEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
   return uploadForm(token, "/admin/enrolments/preview", {
     offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+    ...(givenNameColumn ? { given_name_column: givenNameColumn } : {}),
   }, file) as Promise<{ filename: string; row_count: number; accepted_count: number; issues: UploadIssue[]; status: "valid" | "needs_review" }>;
 }
 
-export function commitEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File) {
+export function commitEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
   return uploadForm(token, "/admin/enrolments/commit", {
     offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+    ...(givenNameColumn ? { given_name_column: givenNameColumn } : {}),
   }, file) as Promise<{ status: string; batch_id: number; accepted_count: number }>;
+}
+
+export type OfferingEnrollment = { student_id: number; student_code: string; full_name: string };
+export type EnrollmentBatch = { original_filename: string; row_count: number; accepted_count: number; issue_count: number; status: string; uploaded_at: string };
+
+export function getOfferingEnrollments(token: string, offeringId: number) {
+  return apiFetch<{ students: OfferingEnrollment[]; latest_batch: EnrollmentBatch | null }>(`/admin/offerings/${offeringId}/enrollments`, token);
 }
 
 export function inspectGradeUpload(token: string, offeringId: number, file: File, sheetName = "") {
