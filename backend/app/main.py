@@ -1650,6 +1650,33 @@ async def commit_enrolment_upload(
     return {"status": "committed", "batch_id": batch_id, "accepted_count": accepted_count}
 
 
+@app.get("/api/admin/offerings/{offering_id}/enrollments")
+def admin_offering_enrollments(
+    offering_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    students = fetch_all(
+        """
+        SELECT s.student_id, s.student_code, s.full_name
+        FROM enrollment e JOIN student s ON s.student_id = e.student_id
+        WHERE e.offering_id = %s
+        ORDER BY s.full_name
+        """,
+        (offering_id,),
+    )
+    latest_batch = fetch_one(
+        """
+        SELECT original_filename, row_count, accepted_count, issue_count, status, uploaded_at
+        FROM enrollment_upload_batch
+        WHERE offering_id = %s
+        ORDER BY uploaded_at DESC
+        LIMIT 1
+        """,
+        (offering_id,),
+    )
+    return {"students": students, "latest_batch": latest_batch}
+
+
 def _grade_column_mappings(raw_mapping: str, headers: list[str], assessment_by_id: dict[int, dict]) -> list[dict]:
     try:
         parsed = json.loads(raw_mapping)

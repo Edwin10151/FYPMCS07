@@ -486,6 +486,13 @@ export function commitEnrolmentUpload(token: string, offeringId: number, student
   }, file) as Promise<{ status: string; batch_id: number; accepted_count: number }>;
 }
 
+export type OfferingEnrollment = { student_id: number; student_code: string; full_name: string };
+export type EnrollmentBatch = { original_filename: string; row_count: number; accepted_count: number; issue_count: number; status: string; uploaded_at: string };
+
+export function getOfferingEnrollments(token: string, offeringId: number) {
+  return apiFetch<{ students: OfferingEnrollment[]; latest_batch: EnrollmentBatch | null }>(`/admin/offerings/${offeringId}/enrollments`, token);
+}
+
 export function inspectGradeUpload(token: string, offeringId: number, file: File, sheetName = "") {
   return uploadForm(token, "/grade-uploads/inspect", {
     offering_id: String(offeringId), ...(sheetName ? { sheet_name: sheetName } : {}),
