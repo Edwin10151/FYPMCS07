@@ -16,7 +16,32 @@ GET  /api/assessments?offering_id={id}
 ```
 
 `/api/dashboard` returns only database-backed offering, assessment, enrolment,
-and calculated ULO data. AI generation is intentionally not part of phase one.
+and calculated ULO data.
+
+## CQI Report Draft Generation
+
+```text
+POST /api/reports/generate-draft?offering_id={id}
+```
+
+Assigned lecturers and coordinators can generate an editable CQI narrative
+after every ULO has calculated cohort attainment. The backend sends only
+aggregate ULO, assessment-coverage, cohort-size, and previous-offering evidence
+to the configured provider. It never sends student records or raw marks.
+
+The response contains three structured sections plus a combined plain-text
+version: attainment analysis, previous-cohort outcomes, and the next-cohort
+action plan. `LLM_PROVIDER=mock` is deterministic for development;
+`LLM_PROVIDER=ollama` calls the configured local Ollama server and validates
+its JSON response. Generation does not save, submit, approve, or finalize a
+report.
+
+The supplied CQI PDF also shows an attainment-grade label and a narrative about
+outcomes from the previous action plan. Those values are not inferred by the
+LLM: grade labels require an approved grade-band rule, and action-plan outcomes
+require the previous report to store a structured action plan and follow-up.
+Until those sources exist, the generated draft reports only verified percentage
+comparisons and states when prior evidence is unavailable.
 
 ## Handbook Import
 

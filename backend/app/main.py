@@ -30,6 +30,14 @@ from app.seed import seed_demo_data
 from app.services.calculation import split_weight
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
+from app.services.report_generation import (
+    AssessmentEvidence,
+    LearningOutcomeEvidence,
+    PreviousOfferingEvidence,
+    ReportEvidence,
+    ReportGenerationError,
+    generate_report,
+)
 
 
 @asynccontextmanager
@@ -530,6 +538,125 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
         )["count"],
     }
     return {"offering": offering, "stats": stats, "learning_outcomes": los, "assessments": assessments, "report": report}
+
+
+def _build_report_evidence(offering_id: int) -> ReportEvidence:
+    offering = fetch_one(
+        """
+        SELECT o.offering_id, o.unit_id, u.unit_code, u.unit_name, s.year, s.period
+        FROM unit_offering o
+        JOIN unit u ON u.unit_id = o.unit_id
+        JOIN semester s ON s.semester_id = o.semester_id
+        WHERE o.offering_id = %s
+        """,
+        (offering_id,),
+    )
+    if not offering:
+        raise HTTPException(status_code=404, detail="Offering not found")
+
+    outcome_rows = fetch_all(
+        """
+        SELECT ou.ulo_code AS code, ou.description,
+               c.average_attainment_pct, c.pass_rate_pct, c.enrolled_count, c.achieved_count
+        FROM offering_ulo ou
+        LEFT JOIN cohort_ulo_attainment c
+          ON c.offering_id = ou.offering_id AND c.offering_ulo_id = ou.offering_ulo_id
+        WHERE ou.offering_id = %s
+        ORDER BY ou.ulo_code
+        """,
+        (offering_id,),
+    )
+    incomplete_codes = [row["code"] for row in outcome_rows if row["average_attainment_pct"] is None]
+    if not outcome_rows or incomplete_codes:
+        detail = "Calculate cohort attainment before generating the report"
+        if incomplete_codes:
+            detail += f"; missing results for {', '.join(incomplete_codes)}"
+        raise HTTPException(status_code=409, detail=detail)
+
+    assessment_rows = fetch_all(
+        """
+        SELECT a.assessment_name AS name, a.weight,
+               ARRAY_REMOVE(ARRAY_AGG(ou.ulo_code ORDER BY ou.ulo_code), NULL) AS ulo_codes
+        FROM assessment a
+        LEFT JOIN assessment_ulo au ON au.assessment_id = a.assessment_id
+        LEFT JOIN offering_ulo ou ON ou.offering_ulo_id = au.offering_ulo_id
+        WHERE a.offering_id = %s
+        GROUP BY a.assessment_id
+        ORDER BY a.assessment_order
+        """,
+        (offering_id,),
+    )
+
+    previous_row = fetch_one(
+        """
+        SELECT previous.offering_id, s.year, s.period
+        FROM unit_offering previous
+        JOIN semester s ON s.semester_id = previous.semester_id
+        WHERE previous.unit_id = %s
+          AND (s.year < %s OR (s.year = %s AND s.period < %s))
+          AND EXISTS (
+              SELECT 1 FROM cohort_ulo_attainment c WHERE c.offering_id = previous.offering_id
+          )
+        ORDER BY s.year DESC, s.period DESC
+        LIMIT 1
+        """,
+        (offering["unit_id"], offering["year"], offering["year"], offering["period"]),
+    )
+    previous = None
+    if previous_row:
+        previous_outcomes = fetch_all(
+            """
+            SELECT ou.ulo_code AS code, ou.description,
+                   c.average_attainment_pct, c.pass_rate_pct, c.enrolled_count, c.achieved_count
+            FROM offering_ulo ou
+            JOIN cohort_ulo_attainment c
+              ON c.offering_id = ou.offering_id AND c.offering_ulo_id = ou.offering_ulo_id
+            WHERE ou.offering_id = %s
+            ORDER BY ou.ulo_code
+            """,
+            (previous_row["offering_id"],),
+        )
+        previous = PreviousOfferingEvidence(
+            year=previous_row["year"],
+            period=previous_row["period"],
+            student_count=max((row["enrolled_count"] for row in previous_outcomes), default=0),
+            learning_outcomes=[LearningOutcomeEvidence(**row) for row in previous_outcomes],
+        )
+
+    return ReportEvidence(
+        offering_id=offering_id,
+        unit_code=offering["unit_code"],
+        unit_name=offering["unit_name"],
+        year=offering["year"],
+        period=offering["period"],
+        student_count=max((row["enrolled_count"] for row in outcome_rows), default=0),
+        learning_outcomes=[LearningOutcomeEvidence(**row) for row in outcome_rows],
+        assessments=[AssessmentEvidence(**row) for row in assessment_rows],
+        previous_offering=previous,
+    )
+
+
+@app.post("/api/reports/generate-draft")
+def generate_report_draft(
+    user: Annotated[dict, Depends(require_offering_access())],
+    offering_id: int = 1,
+):
+    if user["role_name"] not in ("lecturer", "coordinator"):
+        raise HTTPException(status_code=403, detail="Only assigned teaching staff can generate a report draft")
+
+    evidence = _build_report_evidence(offering_id)
+    try:
+        generated = generate_report(
+            evidence=evidence,
+            provider=settings.llm_provider,
+            local_llm_url=settings.local_llm_url,
+            model=settings.llm_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+        )
+    except ReportGenerationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    return {"evidence": evidence, "generation": generated}
 
 
 @app.get("/api/mappings")
