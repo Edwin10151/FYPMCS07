@@ -92,7 +92,7 @@ export default function AdminTutors() {
           {!active && !loading && <div className="banner"><div className="ico">!</div><div className="body">No active semester was found, so a roster can't be matched yet.</div></div>}
 
           <div className="adm-card">
-            <div className="adm-card-head"><div><h4>Upload Tutor List</h4><div className="h-sub">Use the .xlsx roster export — column headers stay the same each semester. Rows are matched to unit offerings for {active ? `${active.year} ${active.period}` : "the active semester"} by unit code; unmatched units are listed after upload.</div></div></div>
+            <div className="adm-card-head"><div><h4>Upload Tutor List</h4></div></div>
             {!file ? (
               <div style={{ padding: 20 }}>
                 <label className="adm-drop">
