@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import Mapping from "./pages/Mapping";
 import Assessments from "./pages/Assessments";
 import CsvUpload from "./pages/CsvUpload";
+import Report from "./pages/Report";
 import Admin from "./pages/Admin";
 import AdminMain from "./pages/AdminMain";
 import AdminSetup from "./pages/AdminSetup";
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/assessments" element={<RequireAuth><Assessments /></RequireAuth>} />
       <Route path="/upload" element={<RequireAuth><CsvUpload /></RequireAuth>} />
       <Route path="/upload/:assessmentId" element={<Navigate to="/upload" replace />} />
+      <Route path="/report" element={<RequireAuth><Report /></RequireAuth>} />
       {/* Admin Portal lives at /admin/portal (UnitSelect's "Admin Portal" card
           links here) and fans out to Semester Setup, Tutor List and Student
           List, each using AdminSidebar. /admin, /admin/periods, /admin/units

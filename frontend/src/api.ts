@@ -63,6 +63,17 @@ export type DashboardPayload = {
   report: { report_id: number; ai_summary: string; coordinator_comment: string; is_finalized: boolean } | null;
 };
 
+export type Report = {
+  report_id: number;
+  ai_summary: string | null;
+  coordinator_comment: string | null;
+  is_finalized: boolean;
+  generated_by: number | null;
+  generated_at: string;
+  finalized_by: number | null;
+  finalized_at: string | null;
+};
+
 export type MappingPayload = {
   ulos: Array<{ offering_ulo_id: number; ulo_code: string; description: string }>;
   plos: Array<{ plo_id: number; plo_code: string; description: string }>;
@@ -247,6 +258,17 @@ export function getOfferings(token: string) {
 
 export function getDashboard(token: string, offeringId: number) {
   return apiFetch<DashboardPayload>(`/dashboard?offering_id=${offeringId}`, token);
+}
+
+export function getReport(token: string, offeringId: number) {
+  return apiFetch<{ report: Report | null }>(`/reports?offering_id=${offeringId}`, token);
+}
+
+export function saveReport(token: string, offeringId: number, aiSummary: string, finalize: boolean) {
+  return apiFetch<{ report_id: number; status: string }>("/reports", token, {
+    method: "PUT",
+    body: JSON.stringify({ offering_id: offeringId, ai_summary: aiSummary, finalize }),
+  });
 }
 
 export function getMappings(token: string, offeringId: number) {

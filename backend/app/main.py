@@ -98,6 +98,12 @@ class HandbookImportConfirmation(BaseModel):
     handbook_import_id: int
 
 
+class ReportUpdate(BaseModel):
+    offering_id: int
+    ai_summary: str
+    finalize: bool = False
+
+
 class AdminSemesterCreate(BaseModel):
     year: int
     period: str
@@ -530,6 +536,79 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
         )["count"],
     }
     return {"offering": offering, "stats": stats, "learning_outcomes": los, "assessments": assessments, "report": report}
+
+
+@app.get("/api/reports")
+def get_report(user: Annotated[dict, Depends(require_offering_access())], offering_id: int = 1):
+    report = fetch_one(
+        """
+        SELECT report_id, ai_summary, coordinator_comment, is_finalized,
+               generated_by, generated_at, finalized_by, finalized_at
+        FROM ai_report
+        WHERE offering_id = %s
+        ORDER BY generated_at DESC
+        LIMIT 1
+        """,
+        (offering_id,),
+    )
+    return {"report": report}
+
+
+@app.put("/api/reports")
+def save_report(
+    payload: ReportUpdate,
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    # Reports are drafted and sent by the unit's teaching staff, not
+    # management — management is the notified/read-only audience here (same
+    # split as the rest of the Admin Portal work).
+    if user["role_name"] not in ("lecturer", "coordinator"):
+        raise HTTPException(status_code=403, detail="Only lecturers and coordinators can edit a unit report")
+    ensure_offering_access(user, payload.offering_id, min_permission_level=10)
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT report_id, is_finalized FROM ai_report WHERE offering_id = %s ORDER BY generated_at DESC LIMIT 1",
+                (payload.offering_id,),
+            )
+            existing = cur.fetchone()
+            if existing and existing["is_finalized"]:
+                raise HTTPException(status_code=409, detail="This report has already been sent and can no longer be edited")
+
+            if existing:
+                if payload.finalize:
+                    cur.execute(
+                        """
+                        UPDATE ai_report
+                        SET ai_summary = %s, is_finalized = TRUE, finalized_by = %s, finalized_at = CURRENT_TIMESTAMP
+                        WHERE report_id = %s
+                        """,
+                        (payload.ai_summary, user["user_id"], existing["report_id"]),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE ai_report SET ai_summary = %s WHERE report_id = %s",
+                        (payload.ai_summary, existing["report_id"]),
+                    )
+                report_id = existing["report_id"]
+            elif payload.finalize:
+                cur.execute(
+                    """
+                    INSERT INTO ai_report (offering_id, generated_by, ai_summary, is_finalized, finalized_by, finalized_at)
+                    VALUES (%s, %s, %s, TRUE, %s, CURRENT_TIMESTAMP)
+                    RETURNING report_id
+                    """,
+                    (payload.offering_id, user["user_id"], payload.ai_summary, user["user_id"]),
+                )
+                report_id = cur.fetchone()["report_id"]
+            else:
+                cur.execute(
+                    "INSERT INTO ai_report (offering_id, generated_by, ai_summary) VALUES (%s, %s, %s) RETURNING report_id",
+                    (payload.offering_id, user["user_id"], payload.ai_summary),
+                )
+                report_id = cur.fetchone()["report_id"]
+    return {"report_id": report_id, "status": "finalized" if payload.finalize else "saved"}
 
 
 @app.get("/api/mappings")
