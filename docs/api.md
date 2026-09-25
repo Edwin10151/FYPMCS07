@@ -22,6 +22,10 @@ and calculated ULO data.
 
 ```text
 POST /api/reports/generate-draft?offering_id={id}
+GET  /api/reports?offering_id={id}
+PUT  /api/reports
+POST /api/reports/submit
+POST /api/reports/review
 ```
 
 Assigned lecturers and coordinators can generate an editable CQI narrative
@@ -29,19 +33,18 @@ after every ULO has calculated cohort attainment. The backend sends only
 aggregate ULO, assessment-coverage, cohort-size, and previous-offering evidence
 to the configured provider. It never sends student records or raw marks.
 
-The response contains three structured sections plus a combined plain-text
-version: attainment analysis, previous-cohort outcomes, and the next-cohort
-action plan. `LLM_PROVIDER=mock` is deterministic for development;
-`LLM_PROVIDER=ollama` calls the configured local Ollama server and validates
-its JSON response. Generation does not save, submit, approve, or finalize a
-report.
+The response contains and saves three structured, editable sections: attainment
+analysis, previous-cohort outcomes, and the next-cohort action plan.
+`LLM_PROVIDER=mock` is deterministic for development; `LLM_PROVIDER=ollama`
+calls the configured local Ollama server and validates its JSON response.
+Reports move through `draft`, `submitted`, `changes_requested`, and `approved`.
+Lecturers and coordinators edit and submit; Management reviews. Approved report
+HTML uses the browser print dialog for PDF export.
 
-The supplied CQI PDF also shows an attainment-grade label and a narrative about
-outcomes from the previous action plan. Those values are not inferred by the
-LLM: grade labels require an approved grade-band rule, and action-plan outcomes
-require the previous report to store a structured action plan and follow-up.
-Until those sources exist, the generated draft reports only verified percentage
-comparisons and states when prior evidence is unavailable.
+Attainment grades are calculated by the application using HD 80+, D 70+, C 60+,
+P 50+, and N below 50. The LLM receives the previous approved action plan and
+optional coordinator context, but states that evidence is unavailable instead
+of inventing implementation outcomes.
 
 ## Handbook Import
 

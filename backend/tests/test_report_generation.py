@@ -11,6 +11,7 @@ from app.services.report_generation import (
     ReportDraft,
     ReportEvidence,
     ReportGenerationError,
+    attainment_grade,
     generate_report,
 )
 
@@ -21,6 +22,7 @@ def evidence(previous: bool = True) -> ReportEvidence:
             code="LO1",
             description="Analyse problems",
             average_attainment_pct=Decimal("62.0"),
+            attainment_grade="C",
             pass_rate_pct=Decimal("68.0"),
             enrolled_count=100,
             achieved_count=68,
@@ -29,6 +31,7 @@ def evidence(previous: bool = True) -> ReportEvidence:
             code="LO2",
             description="Design solutions",
             average_attainment_pct=Decimal("81.0"),
+            attainment_grade="HD",
             pass_rate_pct=Decimal("88.0"),
             enrolled_count=100,
             achieved_count=88,
@@ -45,6 +48,7 @@ def evidence(previous: bool = True) -> ReportEvidence:
                     code="LO1",
                     description="Analyse problems",
                     average_attainment_pct=Decimal("58.0"),
+                    attainment_grade="P",
                     pass_rate_pct=Decimal("64.0"),
                     enrolled_count=90,
                     achieved_count=58,
@@ -53,6 +57,7 @@ def evidence(previous: bool = True) -> ReportEvidence:
                     code="LO2",
                     description="Design solutions",
                     average_attainment_pct=Decimal("84.0"),
+                    attainment_grade="HD",
                     pass_rate_pct=Decimal("90.0"),
                     enrolled_count=90,
                     achieved_count=81,
@@ -81,6 +86,10 @@ def test_mock_report_uses_current_and_previous_aggregate_evidence():
     assert "Complexity proofs" in generated.draft.next_cohort_action_plan
     assert "student_id" not in generated.model_dump_json()
     assert "email" not in generated.model_dump_json()
+
+
+def test_attainment_grade_boundaries():
+    assert [attainment_grade(Decimal(value)) for value in ("80", "70", "60", "50", "49.99")] == ["HD", "D", "C", "P", "N"]
 
 
 def test_ollama_request_enforces_schema_and_validates_response(monkeypatch):

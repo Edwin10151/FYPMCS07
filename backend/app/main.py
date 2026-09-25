@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import (
     create_access_token,
@@ -33,10 +33,14 @@ from app.services.handbook import HandbookImportError, fetch_handbook
 from app.services.report_generation import (
     AssessmentEvidence,
     LearningOutcomeEvidence,
+    PROMPT_VERSION,
     PreviousOfferingEvidence,
+    ReportDraft,
     ReportEvidence,
     ReportGenerationError,
+    attainment_grade,
     generate_report,
+    render_plain_text,
 )
 
 
@@ -104,6 +108,28 @@ class AssessmentsUpdate(BaseModel):
 
 class HandbookImportConfirmation(BaseModel):
     handbook_import_id: int
+
+
+class ReportUpdate(BaseModel):
+    offering_id: int
+    attainment_analysis: str = Field(max_length=2000)
+    previous_cohort_outcomes: str = Field(max_length=2000)
+    next_cohort_action_plan: str = Field(max_length=2000)
+    coordinator_context: str = Field(default="", max_length=4000)
+
+
+class ReportGenerateRequest(BaseModel):
+    coordinator_context: str = Field(default="", max_length=4000)
+
+
+class ReportAction(BaseModel):
+    offering_id: int
+
+
+class ReportReview(BaseModel):
+    offering_id: int
+    decision: str
+    comment: str = Field(default="", max_length=4000)
 
 
 class AdminSemesterCreate(BaseModel):
@@ -492,6 +518,8 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
         """,
         (offering_id,),
     )
+    for outcome in los:
+        outcome["attainment_grade"] = attainment_grade(outcome["average_attainment_pct"])
     assessments = fetch_all(
         """
         SELECT
@@ -540,7 +568,32 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
     return {"offering": offering, "stats": stats, "learning_outcomes": los, "assessments": assessments, "report": report}
 
 
-def _build_report_evidence(offering_id: int) -> ReportEvidence:
+def _report_row(offering_id: int):
+    return fetch_one(
+        """
+        SELECT r.report_id, r.offering_id, r.ai_summary, r.coordinator_comment, r.is_finalized,
+               r.status, r.attainment_analysis, r.previous_cohort_outcomes, r.next_cohort_action_plan,
+               r.provider, r.model, r.prompt_version, r.generated_by, r.generated_at, r.updated_at,
+               r.submitted_by, r.submitted_at, r.reviewed_by, r.reviewed_at, r.reviewer_comment,
+               r.finalized_by, r.finalized_at, reviewer.full_name AS reviewed_by_name
+        FROM ai_report r
+        LEFT JOIN app_user reviewer ON reviewer.user_id = r.reviewed_by
+        WHERE r.offering_id = %s
+        ORDER BY r.generated_at DESC
+        LIMIT 1
+        """,
+        (offering_id,),
+    )
+
+
+def _outcome_evidence(row: dict) -> LearningOutcomeEvidence:
+    return LearningOutcomeEvidence(
+        **row,
+        attainment_grade=attainment_grade(row["average_attainment_pct"]),
+    )
+
+
+def _build_report_evidence(offering_id: int, coordinator_context: str = "") -> ReportEvidence:
     offering = fetch_one(
         """
         SELECT o.offering_id, o.unit_id, u.unit_code, u.unit_name, s.year, s.period
@@ -589,9 +642,16 @@ def _build_report_evidence(offering_id: int) -> ReportEvidence:
 
     previous_row = fetch_one(
         """
-        SELECT previous.offering_id, s.year, s.period
+        SELECT previous.offering_id, s.year, s.period, report.next_cohort_action_plan
         FROM unit_offering previous
         JOIN semester s ON s.semester_id = previous.semester_id
+        LEFT JOIN LATERAL (
+            SELECT next_cohort_action_plan
+            FROM ai_report
+            WHERE offering_id = previous.offering_id AND status = 'approved'
+            ORDER BY reviewed_at DESC NULLS LAST, generated_at DESC
+            LIMIT 1
+        ) report ON TRUE
         WHERE previous.unit_id = %s
           AND (s.year < %s OR (s.year = %s AND s.period < %s))
           AND EXISTS (
@@ -620,7 +680,8 @@ def _build_report_evidence(offering_id: int) -> ReportEvidence:
             year=previous_row["year"],
             period=previous_row["period"],
             student_count=max((row["enrolled_count"] for row in previous_outcomes), default=0),
-            learning_outcomes=[LearningOutcomeEvidence(**row) for row in previous_outcomes],
+            learning_outcomes=[_outcome_evidence(row) for row in previous_outcomes],
+            next_cohort_action_plan=previous_row["next_cohort_action_plan"],
         )
 
     return ReportEvidence(
@@ -630,21 +691,32 @@ def _build_report_evidence(offering_id: int) -> ReportEvidence:
         year=offering["year"],
         period=offering["period"],
         student_count=max((row["enrolled_count"] for row in outcome_rows), default=0),
-        learning_outcomes=[LearningOutcomeEvidence(**row) for row in outcome_rows],
+        learning_outcomes=[_outcome_evidence(row) for row in outcome_rows],
         assessments=[AssessmentEvidence(**row) for row in assessment_rows],
         previous_offering=previous,
+        coordinator_context=coordinator_context.strip(),
     )
+
+
+@app.get("/api/reports")
+def get_report(user: Annotated[dict, Depends(require_offering_access())], offering_id: int = 1):
+    return {"report": _report_row(offering_id)}
 
 
 @app.post("/api/reports/generate-draft")
 def generate_report_draft(
+    payload: ReportGenerateRequest,
     user: Annotated[dict, Depends(require_offering_access())],
     offering_id: int = 1,
 ):
     if user["role_name"] not in ("lecturer", "coordinator"):
         raise HTTPException(status_code=403, detail="Only assigned teaching staff can generate a report draft")
 
-    evidence = _build_report_evidence(offering_id)
+    existing_report = _report_row(offering_id)
+    if existing_report and existing_report["status"] in ("submitted", "approved"):
+        raise HTTPException(status_code=409, detail="Submitted or approved reports cannot be regenerated")
+
+    evidence = _build_report_evidence(offering_id, payload.coordinator_context)
     try:
         generated = generate_report(
             evidence=evidence,
@@ -656,7 +728,183 @@ def generate_report_draft(
     except ReportGenerationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    return {"evidence": evidence, "generation": generated}
+    evidence_json = json.dumps(evidence.model_dump(mode="json"))
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT report_id, status FROM ai_report WHERE offering_id = %s ORDER BY generated_at DESC LIMIT 1",
+                (offering_id,),
+            )
+            existing = cur.fetchone()
+            if existing and existing["status"] in ("submitted", "approved"):
+                raise HTTPException(status_code=409, detail="Submitted or approved reports cannot be regenerated")
+            values = (
+                generated.draft.attainment_analysis,
+                generated.draft.previous_cohort_outcomes,
+                generated.draft.next_cohort_action_plan,
+                generated.plain_text,
+                evidence.coordinator_context,
+                evidence_json,
+                generated.provider,
+                generated.model,
+                PROMPT_VERSION,
+                user["user_id"],
+            )
+            if existing:
+                cur.execute(
+                    """
+                    UPDATE ai_report
+                    SET attainment_analysis = %s, previous_cohort_outcomes = %s,
+                        next_cohort_action_plan = %s, ai_summary = %s, coordinator_comment = %s,
+                        evidence_snapshot = %s, provider = %s, model = %s, prompt_version = %s,
+                        generated_by = %s, generated_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP, status = 'draft'
+                    WHERE report_id = %s
+                    """,
+                    (*values, existing["report_id"]),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO ai_report (
+                        offering_id, attainment_analysis, previous_cohort_outcomes,
+                        next_cohort_action_plan, ai_summary, coordinator_comment,
+                        evidence_snapshot, provider, model, prompt_version, generated_by
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (offering_id, *values),
+                )
+
+    return {"evidence": evidence, "generation": generated, "report": _report_row(offering_id)}
+
+
+@app.put("/api/reports")
+def save_report(payload: ReportUpdate, user: Annotated[dict, Depends(get_current_user)]):
+    if user["role_name"] not in ("lecturer", "coordinator"):
+        raise HTTPException(status_code=403, detail="Only lecturers and coordinators can edit a unit report")
+    ensure_offering_access(user, payload.offering_id, min_permission_level=10)
+    sections = (
+        payload.attainment_analysis.strip(),
+        payload.previous_cohort_outcomes.strip(),
+        payload.next_cohort_action_plan.strip(),
+    )
+    if not all(sections):
+        raise HTTPException(status_code=422, detail="Complete all three CQI sections before saving")
+    draft = ReportDraft(
+        attainment_analysis=sections[0],
+        previous_cohort_outcomes=sections[1],
+        next_cohort_action_plan=sections[2],
+    )
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT report_id, status FROM ai_report WHERE offering_id = %s ORDER BY generated_at DESC LIMIT 1",
+                (payload.offering_id,),
+            )
+            existing = cur.fetchone()
+            if existing and existing["status"] in ("submitted", "approved"):
+                raise HTTPException(status_code=409, detail="Submitted or approved reports cannot be edited")
+            values = (
+                draft.attainment_analysis,
+                draft.previous_cohort_outcomes,
+                draft.next_cohort_action_plan,
+                render_plain_text(draft),
+                payload.coordinator_context.strip(),
+            )
+            if existing:
+                cur.execute(
+                    """
+                    UPDATE ai_report
+                    SET attainment_analysis = %s, previous_cohort_outcomes = %s,
+                        next_cohort_action_plan = %s, ai_summary = %s,
+                        coordinator_comment = %s, status = 'draft', updated_at = CURRENT_TIMESTAMP
+                    WHERE report_id = %s
+                    """,
+                    (*values, existing["report_id"]),
+                )
+                report_id = existing["report_id"]
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO ai_report (
+                        offering_id, generated_by, attainment_analysis, previous_cohort_outcomes,
+                        next_cohort_action_plan, ai_summary, coordinator_comment, provider
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'manual')
+                    RETURNING report_id
+                    """,
+                    (payload.offering_id, user["user_id"], *values),
+                )
+                report_id = cur.fetchone()["report_id"]
+    return {"report_id": report_id, "status": "draft"}
+
+
+@app.post("/api/reports/submit")
+def submit_report(payload: ReportAction, user: Annotated[dict, Depends(get_current_user)]):
+    if user["role_name"] not in ("lecturer", "coordinator"):
+        raise HTTPException(status_code=403, detail="Only lecturers and coordinators can submit a report")
+    ensure_offering_access(user, payload.offering_id, min_permission_level=10)
+    report = _report_row(payload.offering_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Save a report draft before submitting")
+    if report["status"] not in ("draft", "changes_requested"):
+        raise HTTPException(status_code=409, detail="This report cannot be submitted in its current state")
+    required = (report["attainment_analysis"], report["previous_cohort_outcomes"], report["next_cohort_action_plan"])
+    if not all(value and value.strip() for value in required):
+        raise HTTPException(status_code=422, detail="Complete all three CQI sections before submitting")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE ai_report
+                SET status = 'submitted', submitted_by = %s, submitted_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE report_id = %s
+                """,
+                (user["user_id"], report["report_id"]),
+            )
+    return {"status": "submitted"}
+
+
+@app.post("/api/reports/review")
+def review_report(payload: ReportReview, user: Annotated[dict, Depends(require_permission(30))]):
+    if payload.decision not in ("approved", "changes_requested"):
+        raise HTTPException(status_code=422, detail="Decision must be approved or changes_requested")
+    if payload.decision == "changes_requested" and not payload.comment.strip():
+        raise HTTPException(status_code=422, detail="A comment is required when requesting changes")
+    report = _report_row(payload.offering_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report["status"] != "submitted":
+        raise HTTPException(status_code=409, detail="Only submitted reports can be reviewed")
+
+    approved = payload.decision == "approved"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE ai_report
+                SET status = %s, reviewer_comment = %s, reviewed_by = %s,
+                    reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
+                    is_finalized = %s,
+                    finalized_by = CASE WHEN %s THEN %s ELSE NULL END,
+                    finalized_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END
+                WHERE report_id = %s
+                """,
+                (
+                    payload.decision,
+                    payload.comment.strip(),
+                    user["user_id"],
+                    approved,
+                    approved,
+                    user["user_id"],
+                    approved,
+                    report["report_id"],
+                ),
+            )
+    return {"status": payload.decision}
 
 
 @app.get("/api/mappings")

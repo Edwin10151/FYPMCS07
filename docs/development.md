@@ -47,7 +47,7 @@ and runs the Docker Compose stack.
 
 ## Report Generation
 
-The development stack uses deterministic report drafts by default:
+The development stack uses deterministic, editable CQI report drafts by default:
 
 ```text
 LLM_PROVIDER=mock
@@ -56,9 +56,10 @@ LLM_PROVIDER=mock
 To use a local Ollama server, set `LLM_PROVIDER=ollama`, `LLM_MODEL` to an
 installed model name, and `LOCAL_LLM_URL` to its internal URL. The backend
 validates a fixed three-section CQI response and does not send student-level
-data to the model.
+data to the model. The Report page supports draft saving, QAG submission,
+change requests, approval, and browser-based PDF export.
 
 ## Deferred Scope
 
-PDF export, CP/CA commentary, SFIA mapping, and the report approval interface
-remain deferred until their source data and workflow are confirmed.
+CP/CA commentary and SFIA mapping remain deferred until their source data is
+confirmed. CP/CA is shown as `None` in the current report template.

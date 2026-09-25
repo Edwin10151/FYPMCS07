@@ -37,7 +37,7 @@ Owns:
 - Handbook scraper integration
 - CSV inspection, validation, reconciliation, and commit rules
 - ULO calculation service
-- PDF export endpoint later
+- Approved report print layout for browser PDF export
 
 ## Database
 
