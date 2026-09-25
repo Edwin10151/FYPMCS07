@@ -215,6 +215,7 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names,
             s.year,
             s.period,
+            s.status AS semester_status,
             o.coordinator_id,
             o.handbook_url,
             o.last_scraped_at
@@ -241,7 +242,7 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
     else:
         raise HTTPException(status_code=403, detail="Unknown role")
     query += """
-        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period,
+        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period, s.status,
                  o.coordinator_id, o.handbook_url, o.last_scraped_at
         ORDER BY s.year DESC, s.period, u.unit_code
     """

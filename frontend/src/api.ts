@@ -25,6 +25,7 @@ export type Offering = {
   program_names: string[];
   year: number;
   period: string;
+  semester_status: "planning" | "active" | "archived";
   can_edit: boolean;
   handbook_url: string | null;
   last_scraped_at: string | null;
