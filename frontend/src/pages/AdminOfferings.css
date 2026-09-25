@@ -1,0 +1,4 @@
+.row-tools { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.row-tools .ic { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: white; display: grid; place-items: center; color: var(--ink-3); cursor: pointer; font-size: 12px; }
+.row-tools .ic:hover { color: var(--ink); }
+.row-tools .ic.danger:hover { color: var(--risk); border-color: #F2D8CC; background: var(--risk-bg); }

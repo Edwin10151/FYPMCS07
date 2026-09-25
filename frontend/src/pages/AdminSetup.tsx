@@ -50,7 +50,7 @@ export default function AdminSetup() {
           {loading ? <div className="panel">Loading semester data...</div> : !active ? (
             <div className="panel">
               <h4>No active semester</h4>
-              <p>The database has no semester with status "active". Create or activate one from Academic Periods before continuing.</p>
+              <p>The database has no semester with status "active". One is created automatically whenever a semester is deactivated — if none exists yet, it needs to be created directly in the database.</p>
             </div>
           ) : (
             <div className="current-sem-card">

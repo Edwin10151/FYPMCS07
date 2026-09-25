@@ -80,7 +80,7 @@ CREATE TABLE unit_offering (
     offering_id        SERIAL PRIMARY KEY,
     unit_id            INT          NOT NULL REFERENCES unit(unit_id),
     semester_id        INT          NOT NULL REFERENCES semester(semester_id),
-    coordinator_id     INT          NOT NULL REFERENCES app_user(user_id),
+    coordinator_id     INT          REFERENCES app_user(user_id),
     handbook_location  VARCHAR(50)  NOT NULL DEFAULT 'Malaysia'
         CHECK (handbook_location = 'Malaysia'),
     handbook_url       VARCHAR(500),
@@ -388,6 +388,21 @@ CREATE TABLE handbook_import_snapshot (
 );
 
 CREATE INDEX idx_handbook_import_offering ON handbook_import_snapshot(offering_id, imported_at DESC);
+
+-- 28. STAFFING_IMPORT_SNAPSHOT
+-- Raw parsed Tutor List roster per semester, kept so matched/unmatched units
+-- can be recomputed live against current unit_offering data (e.g. after a
+-- unit is added or deleted) instead of only living in the upload response.
+CREATE TABLE staffing_import_snapshot (
+    staffing_import_id SERIAL PRIMARY KEY,
+    semester_id         INT          NOT NULL REFERENCES semester(semester_id) ON DELETE CASCADE,
+    source_filename      VARCHAR(255) NOT NULL,
+    payload              JSONB        NOT NULL,
+    imported_by          INT          REFERENCES app_user(user_id),
+    imported_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_staffing_import_semester ON staffing_import_snapshot(semester_id, imported_at DESC);
 
 -- INDEXES
 CREATE INDEX idx_unit_offering_semester      ON unit_offering(semester_id);

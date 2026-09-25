@@ -5,7 +5,6 @@ import "./AdminNav.css";
 // routes that are a prefix of the others so they don't stay highlighted.
 const ADMIN_TABS = [
   { to: "/admin/setup", label: "Semester Setup" },
-  { to: "/admin/periods", label: "Academic Periods" },
   { to: "/admin/enrolments", label: "Student Enrolments" },
   { to: "/admin/staff", label: "Staff Records" },
   { to: "/admin", label: "People & Roles", end: true },

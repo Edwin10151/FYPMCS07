@@ -10,7 +10,9 @@ export default function Admin() {
   if (!session) return null;
   const assignments = new Map<number, string[]>();
   for (const offering of data?.offerings ?? []) {
-    assignments.set(offering.coordinator_id, [...(assignments.get(offering.coordinator_id) ?? []), `${offering.unit_code} (coordinator)`]);
+    if (offering.coordinator_id !== null) {
+      assignments.set(offering.coordinator_id, [...(assignments.get(offering.coordinator_id) ?? []), `${offering.unit_code} (coordinator)`]);
+    }
     offering.lecturer_ids.forEach((id) => assignments.set(id, [...(assignments.get(id) ?? []), offering.unit_code]));
   }
   const roleCounts = {

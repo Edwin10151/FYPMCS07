@@ -161,8 +161,8 @@ export type AdminOffering = {
   semester_id: number;
   program_ids: number[];
   unit_id: number;
-  coordinator_id: number;
-  coordinator_name: string;
+  coordinator_id: number | null;
+  coordinator_name: string | null;
   lecturer_ids: number[];
   status: "draft" | "active" | "discontinued";
   handbook_url: string | null;
@@ -352,7 +352,7 @@ export type OfferingInput = {
   program_ids: number[];
   unit_code: string;
   unit_name: string;
-  coordinator_id: number;
+  coordinator_id: number | null;
   lecturer_ids: number[];
   status: "draft" | "active" | "discontinued";
   replacement_unit_code?: string | null;
@@ -365,6 +365,21 @@ export function createAdminOffering(token: string, payload: OfferingInput) {
 
 export function updateAdminOffering(token: string, offeringId: number, payload: Omit<OfferingInput, "semester_id">) {
   return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function deleteAdminOffering(token: string, offeringId: number) {
+  return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "DELETE" });
+}
+
+export type UnmatchedUnit = { unit_code: string; unit_name: string; programme_codes: string[] };
+
+export type RosterOfferingInput = { unit_code: string; unit_name: string; programme_codes: string[]; coordinator_id: number | null };
+
+export function createOfferingsFromRoster(token: string, semesterId: number, offerings: RosterOfferingInput[]) {
+  return apiFetch<{ created: Array<{ offering_id: number; unit_code: string }>; warnings: string[] }>("/admin/offerings/bulk-from-roster", token, {
+    method: "POST",
+    body: JSON.stringify({ semester_id: semesterId, offerings }),
+  });
 }
 
 export type OfferingStaffingRow = {
@@ -380,15 +395,36 @@ export function getOfferingStaffing(token: string, offeringId: number) {
   return apiFetch<{ staffing: OfferingStaffingRow[] }>(`/offerings/${offeringId}/staffing`, token);
 }
 
+export function inspectStaffingRoster(token: string, semesterId: number, file: File) {
+  return uploadForm(token, "/admin/staffing/roster-inspect", { semester_id: String(semesterId) }, file) as Promise<{
+    units_in_file: number;
+    matched_offerings: number;
+    unmatched_units: UnmatchedUnit[];
+  }>;
+}
+
 export function importStaffingRoster(token: string, semesterId: number, file: File) {
   return uploadForm(token, "/admin/staffing/roster-import", { semester_id: String(semesterId) }, file) as Promise<{
     status: string;
     units_in_file: number;
     matched_offerings: number;
     staffing_rows_created: number;
-    unmatched_units: Array<{ unit_code: string; unit_name: string; programme_codes: string[] }>;
+    unmatched_units: UnmatchedUnit[];
     warnings: string[];
   }>;
+}
+
+export function getStaffingStatus(token: string, semesterId: number) {
+  return apiFetch<{
+    snapshot: {
+      source_filename: string;
+      imported_at: string;
+      units_in_file: number;
+      matched_offerings: number;
+      staffing_rows_created: number;
+      unmatched_units: UnmatchedUnit[];
+    } | null;
+  }>(`/admin/staffing/status?semester_id=${semesterId}`, token);
 }
 
 export function createAdminUser(
