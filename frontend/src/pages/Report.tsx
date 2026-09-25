@@ -236,7 +236,9 @@ export default function Report() {
               <ReportSection title="Action plan for next Cohort (offering)" value={sections.next_cohort_action_plan} editable={canEdit} onChange={(value) => setSections((current) => ({ ...current, next_cohort_action_plan: value }))} />
 
               <div className="cqi-heading">CP, CA CQI Plan</div>
-              <section className="cqi-section cqi-none"><h3>Analysis and action plans</h3><p>None</p></section>
+              <section className="cqi-section cqi-none"><h3>Analysis of CP, CA attainment levels</h3><p>None</p></section>
+              <section className="cqi-section cqi-none"><h3>Action plan / outcomes from previous Cohort</h3><p>None</p></section>
+              <section className="cqi-section cqi-none"><h3>Action plan for next Cohort (offering)</h3><p>None</p></section>
 
               <footer className="approval-footer">
                 <div><span>CQI Plan Current Status</span><strong>{statusLabel(report?.status)}</strong></div>

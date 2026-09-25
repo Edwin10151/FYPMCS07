@@ -17,3 +17,9 @@ venv/
 
 *.log
 tmp/
+.playwright-cli/
+output/
+
+# Local reference files may contain student or unrelated project data.
+important_attachment/
+/Hashed MCS07.xlsx
