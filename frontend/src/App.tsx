@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
-import AuthCallback from "./pages/AuthCallback";
 import UnitSelect from "./pages/UnitSelect";
 import Dashboard from "./pages/Dashboard";
 import Mapping from "./pages/Mapping";
@@ -38,7 +37,6 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to={loadSession() ? "/units" : "/login"} replace />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/change-password" element={<RequireAuth allowPasswordChange><ChangePassword /></RequireAuth>} />
       <Route path="/units" element={<RequireAuth><UnitSelect /></RequireAuth>} />
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />

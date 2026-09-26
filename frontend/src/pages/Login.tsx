@@ -1,62 +1,76 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
-import {
-  errorMessage,
-  getAuthConfig,
-  login,
-  saveSession,
-  startSso,
-  type AuthConfig,
-} from "../api";
+import { errorMessage, login, saveSession, type Session } from "../api";
 import "./Login.css";
 
-/**
- * Sign-in is delegated to Monash single sign-on: the browser leaves for the
- * identity provider, authenticates there, and returns to /auth/callback with a
- * dashboard session. No Monash password is ever typed into this app.
- *
- * The local password form below is a break-glass path for faculty admins, kept
- * so a provider outage cannot lock everyone out. The backend decides whether it
- * is available at all (LOCAL_LOGIN_ENABLED) and who may use it.
- */
+// Browser-only accounts keep visual frontend work moving when the local API is
+// intentionally stopped. They are never available in a production build.
+const DEMO_USERS: Record<string, { full_name: string; role_name: string; permission_level: number }> = {
+  "elise.chen@monash.edu": { full_name: "Dr. Elise Chen", role_name: "coordinator", permission_level: 20 },
+  "aaron.lim@monash.edu": { full_name: "Aaron Lim", role_name: "lecturer", permission_level: 10 },
+  "maya.rao@monash.edu": { full_name: "Maya Rao", role_name: "management", permission_level: 30 },
+};
+
+function mockSession(email: string): Session {
+  const demo = DEMO_USERS[email.trim().toLowerCase()];
+  if (!demo) throw new Error("Use one of the local development accounts.");
+  return {
+    access_token: "dev-bypass-token",
+    token_type: "bearer",
+    user: { user_id: 1, staff_id: null, email, must_change_password: false, ...demo },
+  };
+}
+
 export default function Login() {
-  const [config, setConfig] = useState<AuthConfig | null>(null);
-  const [showLocal, setShowLocal] = useState(false);
-  const [email, setEmail] = useState("");
+  const [step, setStep] = useState<"email" | "password">("email");
+  const [email, setEmail] = useState("elise.chen@monash.edu");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // A backend that cannot be reached leaves config null; the SSO button still
-    // works because it is a plain navigation to a known backend path.
-    getAuthConfig().then(setConfig).catch(() => setConfig(null));
-  }, []);
-
-  const handleSso = () => {
-    setBusy(true);
-    startSso(config);
+  const handleNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (email.trim()) {
+      setStep("password");
+      setError("");
+    }
   };
 
-  const handleLocalLogin = async (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!password.trim()) {
+      setError("Enter a password to continue.");
+      return;
+    }
+
     setBusy(true);
     setError("");
     try {
+      // Prefer the real API when the backend is up…
       const session = await login(email.trim(), password);
       saveSession(session, remember);
       navigate(session.user.must_change_password ? "/change-password" : "/units");
     } catch (err) {
-      setError(errorMessage(err));
+      // A network failure is allowed to use the restricted browser-only demo in
+      // Vite development. Invalid API credentials stay invalid everywhere.
+      if (import.meta.env.DEV && err instanceof TypeError) {
+      try {
+        const session = mockSession(email.trim());
+        saveSession(session, remember);
+        navigate("/units");
+      } catch (err) {
+          setError(errorMessage(err));
+        }
+      } else {
+        setError(errorMessage(err));
+      }
     } finally {
       setBusy(false);
     }
   };
-
-  const localAvailable = config === null || config.local_login_enabled;
 
   return (
     <div className="login-bg">
@@ -66,58 +80,13 @@ export default function Login() {
         </div>
 
         <div className="signin">
-          <div className="eye">Sign in</div>
-          <h2>Welcome back.</h2>
-          <p className="deck">
-            Use your Monash account to open the Academic Performance Dashboard.
-          </p>
-
-          {!showLocal ? (
+          {step === "email" ? (
             <>
-              <button type="button" className="primary sso-button" onClick={handleSso} disabled={busy}>
-                {busy ? "Redirecting…" : "Sign in with your Monash account"}
-              </button>
+              <div className="eye">Sign in</div>
+              <h2>Welcome back.</h2>
+              <p className="deck">Sign in with your Monash email address</p>
 
-              <p className="sso-note">
-                You will be taken to the Monash sign-in page to enter your credentials and
-                complete multi-factor authentication, then returned here automatically.
-              </p>
-
-              {config?.auth_mode === "dev" && (
-                <p className="demo-hint">
-                  Development mode: a stand-in sign-in page is served locally instead of
-                  Monash SSO. Set <code>AUTH_MODE=oidc</code> for the real provider.
-                </p>
-              )}
-
-              {error && (
-                <p className="login-error" role="alert">
-                  {error}
-                </p>
-              )}
-
-              {localAvailable && (
-                <div className="form-foot">
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setShowLocal(true);
-                      setError("");
-                    }}
-                  >
-                    Faculty admin sign-in
-                  </a>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <p className="sso-note">
-                For faculty admins only, when single sign-on is unavailable.
-              </p>
-
-              <form onSubmit={handleLocalLogin}>
+              <form onSubmit={handleNext}>
                 <label className="field">
                   <span className="lbl">Email address</span>
                   <input
@@ -126,10 +95,44 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoFocus
-                    required
                   />
                 </label>
 
+                <div className="between">
+                  <span className="remember-check" onClick={() => setRemember((r) => !r)} style={{ cursor: "pointer" }}>
+                    <span className={`remember-box${remember ? " on" : ""}`}>{remember ? "✓" : ""}</span>
+                    Keep me signed in
+                  </span>
+                </div>
+
+                <button type="submit" className="primary">
+                  Next
+                </button>
+              </form>
+
+              <div className="form-foot">
+                <a href="#">Can't login</a>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="verify-avatar">
+                <span className="lock-ic">🔒</span>
+              </div>
+
+              <div className="eye" style={{ textAlign: "center" }}>
+                Sign in
+              </div>
+              <h2 style={{ textAlign: "center" }}>Welcome back.</h2>
+              <p className="deck" style={{ textAlign: "center" }}>
+                Verify with your password
+              </p>
+              <div className="email-chip">
+                <span className="person-ic">◉</span>
+                {email}
+              </div>
+
+              <form onSubmit={handleVerify}>
                 <label className="field">
                   <span className="lbl">Password</span>
                   <input
@@ -137,44 +140,42 @@ export default function Login() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoFocus
                     required
                   />
                 </label>
 
-                {error && (
-                  <p className="login-error" role="alert">
-                    {error}
-                  </p>
-                )}
+                {error && <p className="login-error" role="alert">{error}</p>}
 
                 <div className="between">
-                  <span
-                    className="remember-check"
-                    onClick={() => setRemember((r) => !r)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <span className={`remember-box${remember ? " on" : ""}`}>
-                      {remember ? "✓" : ""}
-                    </span>
-                    Keep me signed in
-                  </span>
+                  <a href="#" className="link">
+                    Forgot password?
+                  </a>
                 </div>
 
                 <button type="submit" className="primary" disabled={busy}>
-                  {busy ? "Verifying…" : "Sign in"}
+                  {busy ? "Verifying…" : "Verify"}
                 </button>
               </form>
 
-              <div className="form-foot">
+              {import.meta.env.DEV && (
+                <p className="demo-hint">
+                  Local UI mode: if the API is stopped, use <code>elise.chen@monash.edu</code>.
+                </p>
+              )}
+
+              <div className="form-foot-links">
+                <a href="#">Can't login</a>
+                <a href="#">Lost or new phone? Reset your MFA</a>
                 <a
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    setShowLocal(false);
+                    setStep("email");
                     setError("");
                   }}
                 >
-                  Back to Monash sign-in
+                  Back to sign in
                 </a>
               </div>
             </>
