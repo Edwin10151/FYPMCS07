@@ -22,7 +22,7 @@ export default function AdminSetup() {
   const [working, setWorking] = useState(false);
   const [flash, setFlash] = useState("");
   const [flashError, setFlashError] = useState("");
-  const [staffingSnapshot, setStaffingSnapshot] = useState<{ unmatched_units: UnmatchedUnit[] } | null>(null);
+  const [staffingSnapshot, setStaffingSnapshot] = useState<{ committed: boolean; unmatched_units: UnmatchedUnit[] } | null>(null);
   const [staffingLoaded, setStaffingLoaded] = useState(false);
 
   const active = data?.periods.find((period) => period.status === "active") ?? null;
@@ -40,7 +40,7 @@ export default function AdminSetup() {
 
   const tutorListStatus: TaskStatus = !staffingLoaded || !staffingSnapshot
     ? "not_started"
-    : staffingSnapshot.unmatched_units.length > 0
+    : !staffingSnapshot.committed || staffingSnapshot.unmatched_units.length > 0
     ? "working"
     : "done";
 

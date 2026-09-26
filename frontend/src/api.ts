@@ -403,7 +403,7 @@ export type OfferingInput = {
 };
 
 export function createAdminOffering(token: string, payload: OfferingInput) {
-  return apiFetch<{ offering_id: number; status: string }>("/admin/offerings", token, { method: "POST", body: JSON.stringify(payload) });
+  return apiFetch<{ offering_id: number; status: string; staffing_rows_synced: number; accounts_created: NewStaffAccount[] }>("/admin/offerings", token, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function updateAdminOffering(token: string, offeringId: number, payload: Omit<OfferingInput, "semester_id">) {
@@ -419,7 +419,7 @@ export type UnmatchedUnit = { unit_code: string; unit_name: string; programme_co
 export type RosterOfferingInput = { unit_code: string; unit_name: string; programme_codes: string[]; program_ids: number[]; coordinator_id: number | null };
 
 export function createOfferingsFromRoster(token: string, semesterId: number, offerings: RosterOfferingInput[]) {
-  return apiFetch<{ created: Array<{ offering_id: number; unit_code: string }>; warnings: string[] }>("/admin/offerings/bulk-from-roster", token, {
+  return apiFetch<{ created: Array<{ offering_id: number; unit_code: string; staffing_rows_synced: number; accounts_created: NewStaffAccount[] }>; warnings: string[] }>("/admin/offerings/bulk-from-roster", token, {
     method: "POST",
     body: JSON.stringify({ semester_id: semesterId, offerings }),
   });
@@ -441,20 +441,42 @@ export function getOfferingStaffing(token: string, offeringId: number) {
 export function inspectStaffingRoster(token: string, semesterId: number, file: File) {
   return uploadForm(token, "/admin/staffing/roster-inspect", { semester_id: String(semesterId) }, file) as Promise<{
     units_in_file: number;
-    matched_offerings: number;
-    unmatched_units: UnmatchedUnit[];
   }>;
 }
 
-export function importStaffingRoster(token: string, semesterId: number, file: File) {
-  return uploadForm(token, "/admin/staffing/roster-import", { semester_id: String(semesterId) }, file) as Promise<{
-    status: string;
+export type NewStaffAccount = { email: string; full_name: string };
+
+export type RosterPersonOption = { name: string; email: string | null; role_type: "lecture" | "tutorial" | "laboratory" };
+
+export type ReviewUnit = UnmatchedUnit & {
+  staffing: RosterPersonOption[];
+  prefilled_coordinator: { name: string; email: string } | null;
+  // Only present when the roster lists no staff at all for this unit (e.g. a placement unit) —
+  // Handbook-published coordinators to choose from instead, not corroborated by the roster.
+  coordinator_candidates?: { name: string; email: string }[];
+};
+
+export function reviewStaffingRoster(token: string, semesterId: number, file: File) {
+  return uploadForm(token, "/admin/staffing/roster-review", { semester_id: String(semesterId) }, file) as Promise<{
     units_in_file: number;
     matched_offerings: number;
-    staffing_rows_created: number;
-    unmatched_units: UnmatchedUnit[];
+    unmatched_units: ReviewUnit[];
     warnings: string[];
   }>;
+}
+
+export function commitStaffingRoster(token: string, semesterId: number, coordinators: Record<string, string | null>) {
+  return apiFetch<{
+    status: string;
+    offerings_created: number;
+    matched_offerings: number;
+    staffing_rows_created: number;
+    accounts_created: NewStaffAccount[];
+    warnings: string[];
+  }>("/admin/staffing/roster-commit", token, {
+    method: "POST",
+    body: JSON.stringify({ semester_id: semesterId, coordinators }),
+  });
 }
 
 export function getStaffingStatus(token: string, semesterId: number) {
@@ -462,10 +484,11 @@ export function getStaffingStatus(token: string, semesterId: number) {
     snapshot: {
       source_filename: string;
       imported_at: string;
+      committed: boolean;
       units_in_file: number;
       matched_offerings: number;
       staffing_rows_created: number;
-      unmatched_units: UnmatchedUnit[];
+      unmatched_units: ReviewUnit[];
     } | null;
   }>(`/admin/staffing/status?semester_id=${semesterId}`, token);
 }

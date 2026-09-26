@@ -48,3 +48,19 @@
 .program-chip { height: 22px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--line); background: white; font-size: 10.5px; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--ink-3); cursor: pointer; }
 .program-chip:hover { border-color: var(--navy-3); }
 .program-chip.on { background: var(--navy); border-color: var(--navy); color: white; }
+
+/* Coordinator review (Tutor List Submit -> Commit) */
+.coord-review-row {
+  display: grid; grid-template-columns: 1fr 220px; gap: 12px; align-items: center;
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--paper-2);
+}
+.coord-review-row select { height: 32px; width: 100%; border: 1px solid var(--line); border-radius: 6px; background: white; font-family: inherit; font-size: 12px; color: var(--ink); padding: 0 8px; outline: none; }
+.coord-prefilled-tag { display: block; margin-top: 5px; font-size: 10.5px; color: var(--ok); font-weight: 600; }
+.coord-prefilled-tag.muted { color: var(--ink-3); font-weight: 500; }
+
+/* Coordinator highlight in "Tutor info by unit" */
+tr.row-coordinator { background: var(--navy-tint); }
+.coordinator-pill {
+  display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+  background: var(--navy); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle;
+}

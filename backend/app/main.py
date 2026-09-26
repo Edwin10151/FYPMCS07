@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
 import psycopg
 from pydantic import BaseModel, EmailStr, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import (
     create_access_token,
@@ -31,6 +32,7 @@ from app.seed import seed_demo_data
 from app.services.calculation import split_weight
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
+from app.services.unit_coordinator import fetch_unit_coordinators_for_units
 from app.services.report_generation import (
     AssessmentEvidence,
     LearningOutcomeEvidence,
@@ -1657,7 +1659,8 @@ def create_admin_offering(
             offering_id = cur.fetchone()["offering_id"]
             _save_offering_programs(cur, offering_id, program_ids)
             _save_offering_staff(cur, offering_id, payload.coordinator_id, lecturer_ids)
-    return {"offering_id": offering_id, "status": "created"}
+            staffing_rows_synced, accounts_created = _sync_staffing_from_latest_snapshot(cur, payload.semester_id, unit_code, offering_id)
+    return {"offering_id": offering_id, "status": "created", "staffing_rows_synced": staffing_rows_synced, "accounts_created": accounts_created}
 
 
 @app.patch("/api/admin/offerings/{offering_id}")
@@ -1784,6 +1787,7 @@ def create_offerings_from_roster(
                     (unit_id, payload.semester_id, item.coordinator_id),
                 )
                 offering_id = cur.fetchone()["offering_id"]
+                staffing_rows_synced, accounts_created = _sync_staffing_from_latest_snapshot(cur, payload.semester_id, unit_code, offering_id)
                 if item.program_ids:
                     cur.execute("SELECT program_id FROM program WHERE program_id = ANY(%s)", (list(set(item.program_ids)),))
                     valid_program_ids = {row["program_id"] for row in cur.fetchall()}
@@ -1811,7 +1815,7 @@ def create_offerings_from_roster(
                             "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                             (offering_id, program["program_id"]),
                         )
-                created.append({"offering_id": offering_id, "unit_code": unit_code})
+                created.append({"offering_id": offering_id, "unit_code": unit_code, "staffing_rows_synced": staffing_rows_synced, "accounts_created": accounts_created})
     return {"created": created, "warnings": warnings}
 
 
@@ -2359,6 +2363,29 @@ def _roster_cell(row: tuple, index: int) -> str:
     return str(row[index]).strip()
 
 
+def _validate_roster_headers(sheet) -> None:
+    """Sanity-check the two-row header (group labels, then Name/Email sub-labels) before
+    trusting the fixed-position parser below — catches an unrelated file or a reshuffled
+    template with a clear error instead of silently parsing garbage into the wrong columns."""
+    header_rows = list(sheet.iter_rows(min_row=2, max_row=3, values_only=True))
+    if len(header_rows) < 2:
+        raise HTTPException(status_code=422, detail="This doesn't look like a Tutor List roster — the header rows are missing.")
+    group_row, sub_row = header_rows
+    checks = [
+        ("Programme", "programme" in _roster_cell(group_row, 1).lower() or "program" in _roster_cell(group_row, 1).lower()),
+        ("Unit Code", "unit code" in _roster_cell(group_row, 2).lower()),
+        ("Lecture", "lecture" in _roster_cell(group_row, 4).lower()),
+        ("Lecturer Name", "name" in _roster_cell(sub_row, 4).lower()),
+        ("Lecturer Email", "email" in _roster_cell(sub_row, 5).lower()),
+    ]
+    missing = [label for label, ok in checks if not ok]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"This doesn't look like a Tutor List roster — expected columns not found: {', '.join(missing)}.",
+        )
+
+
 def _parse_staffing_roster(content: bytes) -> list[dict]:
     """Parse a block-structured roster: one unit spans 1+ rows, later rows in
     the same block leave 'Unit Code' blank and only add more staff."""
@@ -2367,6 +2394,7 @@ def _parse_staffing_roster(content: bytes) -> list[dict]:
     except Exception as exc:
         raise HTTPException(status_code=422, detail="Could not read the roster spreadsheet") from exc
     sheet = workbook.worksheets[0]
+    _validate_roster_headers(sheet)
     units: list[dict] = []
     current: dict | None = None
     for row in sheet.iter_rows(min_row=4, values_only=True):
@@ -2391,24 +2419,81 @@ def _parse_staffing_roster(content: bytes) -> list[dict]:
     return units
 
 
+def _split_unit_codes(raw_unit_code: str) -> list[str]:
+    """A roster row is usually one unit code, but a co-taught/cross-listed unit can list two
+    in one cell (e.g. "FIT3199/\\nENG0002" for a shared Industry Work Experience placement).
+    Split on '/' and newlines and only accept it if every resulting piece is a real-looking
+    unit code — a genuinely garbled cell (a stray note, a merged multi-unit list) still isn't
+    something to build an offering out of."""
+    parts = [part.strip() for part in re.split(r"[/\n]+", raw_unit_code) if part.strip()]
+    if not parts or not all(re.fullmatch(r"[A-Z]{3}\d{4}", part) for part in parts):
+        return []
+    return parts
+
+
 def _unmatched_units(units: list[dict], semester_id: int) -> tuple[set[str], list[dict]]:
-    """Which of these parsed roster units don't have a unit_offering for this semester yet."""
-    unit_codes = [unit["unit_code"] for unit in units]
+    """Which of these parsed roster units don't have a unit_offering for this semester yet —
+    a unit that splits into more than one real code (see _split_unit_codes) counts as unmatched
+    until *every* one of its codes has an offering.
+
+    Returns the same dict objects passed in (not copies) so a caller can attach extra keys
+    (e.g. "prefilled_coordinator") to a unit and have it reflected in `units` for persistence."""
+    all_codes = {code for unit in units for code in _split_unit_codes(unit["unit_code"])}
     matched_rows = fetch_all(
         """
         SELECT u.unit_code FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
         WHERE o.semester_id = %s AND u.unit_code = ANY(%s)
         """,
-        (semester_id, unit_codes),
+        (semester_id, list(all_codes)),
     )
     matched_codes = {row["unit_code"] for row in matched_rows}
-    unmatched = [
-        {"unit_code": unit["unit_code"], "unit_name": unit["unit_name"], "programme_codes": unit["programme_codes"]}
-        for unit in units
-        if unit["unit_code"] not in matched_codes
-    ]
+
+    def _fully_matched(unit: dict) -> bool:
+        codes = _split_unit_codes(unit["unit_code"])
+        return bool(codes) and all(code in matched_codes for code in codes)
+
+    unmatched = [unit for unit in units if not _fully_matched(unit)]
     return matched_codes, unmatched
+
+
+def _normalize_person_name(name: str) -> str:
+    return re.sub(r"\s+", " ", name or "").strip().lower()
+
+
+def _match_prefill_coordinator(unit: dict, scrape_result: dict | None) -> dict | None:
+    """Match the Handbook's published unit coordinator against this unit's own roster
+    entries — by email first, falling back to a normalised name comparison — so the
+    prefill is always someone who is actually listed as staff on this unit's roster."""
+    if not scrape_result:
+        return None
+    handbook_coordinators = [c for c in scrape_result.get("coordinators", []) if c["role"] == "unit_coordinator"]
+    if not handbook_coordinators:
+        return None
+
+    by_email = {entry["email"]: entry for entry in unit["staffing"] if entry["email"]}
+    by_name = {_normalize_person_name(entry["name"]): entry for entry in unit["staffing"] if entry["name"]}
+
+    for coordinator in handbook_coordinators:
+        entry = by_email.get(coordinator["email"]) if coordinator.get("email") else None
+        if not entry:
+            entry = by_name.get(_normalize_person_name(coordinator["name"]))
+        if entry and entry["email"]:
+            return {"name": entry["name"], "email": entry["email"]}
+    return None
+
+
+def _handbook_coordinator_candidates(scrape_results: list[dict]) -> list[dict]:
+    """When a unit's roster row lists no staff at all (e.g. a placement/WIL unit with only a
+    coordinator and no lecturers), there's nothing to auto-match against — but the admin still
+    needs *someone* to choose from. Fall back to whoever the Handbook itself publishes as
+    Unit Coordinator, deduplicated by email, across every real code this row covers."""
+    candidates: dict[str, str] = {}
+    for result in scrape_results:
+        for contact in result.get("coordinators", []):
+            if contact["role"] == "unit_coordinator" and contact.get("email"):
+                candidates.setdefault(contact["email"], contact["name"])
+    return [{"name": name, "email": email} for email, name in candidates.items()]
 
 
 async def _read_roster_upload(semester_id: int, file: UploadFile) -> list[dict]:
@@ -2425,92 +2510,243 @@ async def _read_roster_upload(semester_id: int, file: UploadFile) -> list[dict]:
     return units
 
 
+def _ensure_staff_account(cur, full_name: str, email: str) -> int:
+    """Auto-provision a login for a roster-listed staff member who has no account yet.
+    Uses the shared default password until SSO replaces password auth entirely."""
+    cur.execute("SELECT role_id FROM role WHERE role_name = 'lecturer'")
+    lecturer_role_id = cur.fetchone()["role_id"]
+    cur.execute(
+        """
+        INSERT INTO app_user (full_name, email, password_hash, role_id)
+        VALUES (%s, %s, %s, %s)
+        RETURNING user_id
+        """,
+        (full_name, email, hash_password(settings.demo_password), lecturer_role_id),
+    )
+    return cur.fetchone()["user_id"]
+
+
+def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[str], unit_code: str | None = None) -> tuple[int, list[dict]]:
+    """Link one parsed roster unit's programmes and staffing rows onto an offering. Anyone in the
+    roster without an existing login gets one auto-created and is granted dashboard access to this
+    offering (offering_lecturer) — unless they're already this offering's coordinator, whose
+    coordinator-level access takes precedence over the roster's lecturer-level access.
+
+    `unit_code` labels warnings for this specific offering — a roster row can cover more than
+    one real unit code (see _split_unit_codes), so it may differ from unit["unit_code"]."""
+    unit_code = unit_code or unit["unit_code"]
+    if unit["programme_codes"]:
+        cur.execute(
+            "SELECT program_id, program_code FROM program WHERE UPPER(program_code) = ANY(%s)",
+            (unit["programme_codes"],),
+        )
+        found_programs = cur.fetchall()
+        found_codes = {row["program_code"].upper() for row in found_programs}
+        for code in unit["programme_codes"]:
+            if code not in found_codes:
+                warnings.append(f"{unit_code}: no matching program for '{code}'")
+        for program in found_programs:
+            cur.execute(
+                "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (offering_id, program["program_id"]),
+            )
+
+    cur.execute("SELECT coordinator_id FROM unit_offering WHERE offering_id = %s", (offering_id,))
+    coordinator_id = cur.fetchone()["coordinator_id"]
+    if coordinator_id is not None:
+        # A coordinator assigned after roster staffing was already applied (e.g. picked manually
+        # later) must not be left with a stale lecturer-access row from an earlier import.
+        cur.execute(
+            "DELETE FROM offering_lecturer WHERE offering_id = %s AND lecturer_id = %s",
+            (offering_id, coordinator_id),
+        )
+
+    cur.execute(
+        "DELETE FROM offering_staffing WHERE offering_id = %s AND source = 'roster_import'",
+        (offering_id,),
+    )
+    staffing_rows_created = 0
+    new_accounts: list[dict] = []
+    for entry in unit["staffing"]:
+        staff_user_id = None
+        if entry["email"]:
+            cur.execute("SELECT user_id FROM app_user WHERE LOWER(email) = %s", (entry["email"],))
+            match = cur.fetchone()
+            if match:
+                staff_user_id = match["user_id"]
+            else:
+                staff_user_id = _ensure_staff_account(cur, entry["name"] or entry["email"], entry["email"])
+                new_accounts.append({"email": entry["email"], "full_name": entry["name"]})
+            if staff_user_id != coordinator_id:
+                cur.execute(
+                    "INSERT INTO offering_lecturer (offering_id, lecturer_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (offering_id, staff_user_id),
+                )
+        cur.execute(
+            """
+            INSERT INTO offering_staffing (offering_id, role_type, staff_user_id, external_name, external_email)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (offering_id, entry["role_type"], staff_user_id, entry["name"], entry["email"]),
+        )
+        staffing_rows_created += 1
+    return staffing_rows_created, new_accounts
+
+
+def _sync_staffing_from_latest_snapshot(cur, semester_id: int, unit_code: str, offering_id: int) -> tuple[int, list[dict]]:
+    """A unit offering added *after* a roster was already uploaded for this semester would
+    otherwise sit matched-but-empty forever — the roster's staffing rows for it were only ever
+    written at upload time. Re-apply the most recent snapshot's entry for this unit code now."""
+    cur.execute(
+        """
+        SELECT payload FROM staffing_import_snapshot
+        WHERE semester_id = %s
+        ORDER BY imported_at DESC
+        LIMIT 1
+        """,
+        (semester_id,),
+    )
+    snapshot = cur.fetchone()
+    if not snapshot:
+        return 0, []
+    unit = next((entry for entry in snapshot["payload"] if unit_code in _split_unit_codes(entry["unit_code"])), None)
+    if not unit:
+        return 0, []
+    return _apply_staffing_for_unit(cur, offering_id, unit, [], unit_code=unit_code)
+
+
+def _resolve_coordinator_user_id(cur, unit: dict, email: str) -> int:
+    """Find-or-create the login for a coordinator chosen either from this unit's own roster
+    list, or — when the roster lists no staff at all for it (e.g. a placement unit with only
+    a coordinator and no lecturers) — from its Handbook-published candidates instead. Promotes
+    a lecturer-role account to coordinator (never demoting an existing coordinator or
+    management account) so the offering's coordinator_id assignment is actually valid."""
+    entry = next((item for item in unit["staffing"] if item["email"] == email), None)
+    if not entry:
+        entry = next((item for item in unit.get("coordinator_candidates", []) if item["email"] == email), None)
+    if not entry:
+        raise HTTPException(status_code=422, detail=f"{unit['unit_code']}: chosen coordinator is not in this unit's roster or Handbook candidate list")
+
+    cur.execute("SELECT role_id FROM role WHERE role_name = 'coordinator'")
+    coordinator_role_id = cur.fetchone()["role_id"]
+
+    cur.execute("SELECT u.user_id, r.role_name FROM app_user u JOIN role r ON r.role_id = u.role_id WHERE LOWER(u.email) = %s", (email,))
+    match = cur.fetchone()
+    if match:
+        if match["role_name"] == "lecturer":
+            cur.execute("UPDATE app_user SET role_id = %s WHERE user_id = %s", (coordinator_role_id, match["user_id"]))
+        return match["user_id"]
+
+    cur.execute(
+        """
+        INSERT INTO app_user (full_name, email, password_hash, role_id)
+        VALUES (%s, %s, %s, %s)
+        RETURNING user_id
+        """,
+        (entry["name"], email, hash_password(settings.demo_password), coordinator_role_id),
+    )
+    return cur.fetchone()["user_id"]
+
+
+def _create_offering_for_unit(cur, semester_id: int, unit_code: str, unit: dict, coordinator_user_id: int | None) -> int:
+    cur.execute(
+        """
+        INSERT INTO unit (unit_code, unit_name)
+        VALUES (%s, %s)
+        ON CONFLICT (unit_code) DO UPDATE SET unit_name = EXCLUDED.unit_name
+        RETURNING unit_id
+        """,
+        (unit_code, unit["unit_name"] or unit_code),
+    )
+    unit_id = cur.fetchone()["unit_id"]
+    cur.execute(
+        """
+        INSERT INTO unit_offering (unit_id, semester_id, coordinator_id, status)
+        VALUES (%s, %s, %s, 'active')
+        RETURNING offering_id
+        """,
+        (unit_id, semester_id, coordinator_user_id),
+    )
+    return cur.fetchone()["offering_id"]
+
+
 @app.post("/api/admin/staffing/roster-inspect")
 async def inspect_staffing_roster(
     user: Annotated[dict, Depends(require_permission(30))],
     semester_id: int = Form(...),
     file: UploadFile = File(...),
 ):
-    """Dry run: parse and match the roster against current offerings without writing anything."""
+    """Validate the file only — a valid .xlsx with the expected roster columns. Matching
+    against offerings and the coordinator prefill happen at Submit (roster-review)."""
     units = await _read_roster_upload(semester_id, file)
-    matched_codes, unmatched_units = _unmatched_units(units, semester_id)
-    return {
-        "units_in_file": len(units),
-        "matched_offerings": len(matched_codes),
-        "unmatched_units": unmatched_units,
-    }
+    return {"units_in_file": len(units)}
 
 
-@app.post("/api/admin/staffing/roster-import")
-async def import_staffing_roster(
+@app.post("/api/admin/staffing/roster-review")
+async def review_staffing_roster(
     user: Annotated[dict, Depends(require_permission(30))],
     semester_id: int = Form(...),
     file: UploadFile = File(...),
 ):
+    """Submit: match the roster against current offerings, and for any unmatched unit, look
+    up its Handbook-published coordinator and try to match them against that unit's own
+    roster entries, so the review screen can pre-fill a coordinator choice. Nothing is
+    written to offering_staffing/offering_lecturer/app_user until Commit."""
     units = await _read_roster_upload(semester_id, file)
+    matched_codes, unmatched_units = _unmatched_units(units, semester_id)
 
-    warnings: list[str] = []
-    unmatched_units: list[dict] = []
-    matched_offerings = 0
-    staffing_rows_created = 0
+    # A roster row can hold something that isn't a real unit code at all (a stray note, a
+    # garbled cell) — see _split_unit_codes for the co-taught "A/B" case, which *is* kept.
+    scrape_warnings: list[str] = [
+        f"{unit['unit_code']!r}: not a valid unit code, will be skipped"
+        for unit in unmatched_units
+        if not _split_unit_codes(unit["unit_code"])
+    ]
+    reviewable_units = [unit for unit in unmatched_units if _split_unit_codes(unit["unit_code"])]
 
+    if reviewable_units:
+        # The Handbook page is keyed by year only — it has no semester/period query param.
+        # Filtering its contacts down to "this period, this campus" client-side just risks
+        # discarding the coordinator that actually matches the roster being reviewed (a unit's
+        # S1 and S2 coordinator can differ, or S2 may not publish one at all even when the
+        # roster's own name is right there). Take whichever coordinator the Handbook currently
+        # publishes for the unit and let the roster-name/email match decide, not the period.
+        semester = fetch_one("SELECT year FROM semester WHERE semester_id = %s", (semester_id,))
+        all_codes = sorted({code for unit in reviewable_units for code in _split_unit_codes(unit["unit_code"])})
+        scrape_outcome = await run_in_threadpool(
+            fetch_unit_coordinators_for_units,
+            all_codes,
+            semester["year"],
+        )
+        for unit in reviewable_units:
+            scrape_results = []
+            for code in _split_unit_codes(unit["unit_code"]):
+                scrape_result = scrape_outcome["results"].get(code)
+                if scrape_result is None:
+                    failure = scrape_outcome["failures"].get(code)
+                    if failure:
+                        scrape_warnings.append(f"{code}: could not look up the Handbook coordinator ({failure})")
+                else:
+                    scrape_results.append(scrape_result)
+
+            unit["prefilled_coordinator"] = None
+            for scrape_result in scrape_results:
+                match = _match_prefill_coordinator(unit, scrape_result)
+                if match:
+                    unit["prefilled_coordinator"] = match
+                    break
+
+            # No roster staff at all to offer as dropdown options (e.g. a placement unit) —
+            # fall back to whoever the Handbook publishes, so there's still something to pick.
+            if not any(entry["email"] for entry in unit["staffing"]):
+                candidates = _handbook_coordinator_candidates(scrape_results)
+                if candidates:
+                    unit["coordinator_candidates"] = candidates
+    unmatched_units = reviewable_units
+
+    # Persist so the review survives a refresh and Commit acts on exactly what was reviewed.
     with get_conn() as conn:
         with conn.cursor() as cur:
-            for unit in units:
-                cur.execute(
-                    """
-                    SELECT o.offering_id FROM unit_offering o
-                    JOIN unit u ON u.unit_id = o.unit_id
-                    WHERE u.unit_code = %s AND o.semester_id = %s
-                    """,
-                    (unit["unit_code"], semester_id),
-                )
-                offering = cur.fetchone()
-                if not offering:
-                    unmatched_units.append(
-                        {"unit_code": unit["unit_code"], "unit_name": unit["unit_name"], "programme_codes": unit["programme_codes"]}
-                    )
-                    continue
-                offering_id = offering["offering_id"]
-                matched_offerings += 1
-
-                if unit["programme_codes"]:
-                    cur.execute(
-                        "SELECT program_id, program_code FROM program WHERE UPPER(program_code) = ANY(%s)",
-                        (unit["programme_codes"],),
-                    )
-                    found_programs = cur.fetchall()
-                    found_codes = {row["program_code"].upper() for row in found_programs}
-                    for code in unit["programme_codes"]:
-                        if code not in found_codes:
-                            warnings.append(f"{unit['unit_code']}: no matching program for '{code}'")
-                    for program in found_programs:
-                        cur.execute(
-                            "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                            (offering_id, program["program_id"]),
-                        )
-
-                cur.execute(
-                    "DELETE FROM offering_staffing WHERE offering_id = %s AND source = 'roster_import'",
-                    (offering_id,),
-                )
-                for entry in unit["staffing"]:
-                    staff_user_id = None
-                    if entry["email"]:
-                        cur.execute("SELECT user_id FROM app_user WHERE LOWER(email) = %s", (entry["email"],))
-                        match = cur.fetchone()
-                        staff_user_id = match["user_id"] if match else None
-                    cur.execute(
-                        """
-                        INSERT INTO offering_staffing (offering_id, role_type, staff_user_id, external_name, external_email)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (offering_id, entry["role_type"], staff_user_id, entry["name"], entry["email"]),
-                    )
-                    staffing_rows_created += 1
-
-            # Persist the raw parsed roster so unmatched units survive a page refresh and stay
-            # accurate as offerings are later added or deleted (see /api/admin/staffing/status).
             cur.execute(
                 """
                 INSERT INTO staffing_import_snapshot (semester_id, source_filename, payload, imported_by)
@@ -2520,11 +2756,92 @@ async def import_staffing_roster(
             )
 
     return {
-        "status": "imported",
         "units_in_file": len(units),
+        "matched_offerings": len(matched_codes),
+        "unmatched_units": unmatched_units,
+        "warnings": scrape_warnings,
+    }
+
+
+class RosterCommitRequest(BaseModel):
+    semester_id: int
+    coordinators: dict[str, str | None] = {}  # unit_code -> chosen coordinator email, or None/absent for unassigned
+
+
+@app.post("/api/admin/staffing/roster-commit")
+def commit_staffing_roster(
+    payload: RosterCommitRequest,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    """Commit: create an offering for each still-unmatched unit (with the reviewed
+    coordinator, if one was chosen) and write every unit's staffing — matched and
+    newly-created alike — from the most recently reviewed, not-yet-committed snapshot."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT staffing_import_id, payload FROM staffing_import_snapshot
+                WHERE semester_id = %s AND committed_at IS NULL
+                ORDER BY imported_at DESC LIMIT 1
+                """,
+                (payload.semester_id,),
+            )
+            snapshot = cur.fetchone()
+            if not snapshot:
+                raise HTTPException(status_code=409, detail="No reviewed roster is waiting to be committed for this semester — upload and submit one first.")
+            units = snapshot["payload"]
+
+            offerings_created = 0
+            matched_offerings = 0
+            staffing_rows_created = 0
+            accounts_created: list[dict] = []
+            warnings: list[str] = []
+
+            for unit in units:
+                codes = _split_unit_codes(unit["unit_code"])
+                if not codes:
+                    # A genuinely garbled cell — not even a co-taught "A/B" pair — so there is
+                    # nothing valid to create an offering for.
+                    warnings.append(f"{unit['unit_code']!r}: not a valid unit code, skipped")
+                    continue
+
+                # One coordinator choice covers every real code this row represents (a co-taught
+                # unit shares the same teaching arrangement across both codes), so resolve it once.
+                chosen_email = (payload.coordinators.get(unit["unit_code"]) or "").strip().lower() or None
+                coordinator_user_id = _resolve_coordinator_user_id(cur, unit, chosen_email) if chosen_email else None
+
+                for code in codes:
+                    cur.execute(
+                        """
+                        SELECT o.offering_id FROM unit_offering o
+                        JOIN unit u ON u.unit_id = o.unit_id
+                        WHERE u.unit_code = %s AND o.semester_id = %s
+                        """,
+                        (code, payload.semester_id),
+                    )
+                    existing = cur.fetchone()
+                    if existing:
+                        offering_id = existing["offering_id"]
+                        matched_offerings += 1
+                    else:
+                        offering_id = _create_offering_for_unit(cur, payload.semester_id, code, unit, coordinator_user_id)
+                        offerings_created += 1
+
+                    created_rows, new_accounts = _apply_staffing_for_unit(cur, offering_id, unit, warnings, unit_code=code)
+                    staffing_rows_created += created_rows
+                    accounts_created.extend(new_accounts)
+
+            cur.execute(
+                "UPDATE staffing_import_snapshot SET committed_at = CURRENT_TIMESTAMP WHERE staffing_import_id = %s",
+                (snapshot["staffing_import_id"],),
+            )
+
+    return {
+        "status": "committed",
+        "offerings_created": offerings_created,
         "matched_offerings": matched_offerings,
         "staffing_rows_created": staffing_rows_created,
-        "unmatched_units": unmatched_units,
+        "accounts_created": accounts_created,
         "warnings": warnings,
     }
 
@@ -2536,7 +2853,7 @@ def staffing_status(
 ):
     snapshot = fetch_one(
         """
-        SELECT source_filename, payload, imported_at
+        SELECT source_filename, payload, imported_at, committed_at
         FROM staffing_import_snapshot
         WHERE semester_id = %s
         ORDER BY imported_at DESC
@@ -2561,6 +2878,7 @@ def staffing_status(
         "snapshot": {
             "source_filename": snapshot["source_filename"],
             "imported_at": snapshot["imported_at"],
+            "committed": snapshot["committed_at"] is not None,
             "units_in_file": len(units),
             "matched_offerings": len(matched_codes),
             "staffing_rows_created": staffing_rows_created,
