@@ -23,6 +23,9 @@ export default function UnitSelect() {
 
   if (!session) return null;
 
+  const activeOfferings = offerings.filter((offering) => offering.semester_status !== "archived");
+  const archivedOfferings = offerings.filter((offering) => offering.semester_status === "archived");
+
   const openOffering = async (offering: Offering) => {
     setCurrentOfferingId(offering.offering_id);
     try {
@@ -68,15 +71,38 @@ export default function UnitSelect() {
         </div>
 
         {error && <div className="banner"><div className="ico">!</div><div className="body">{error}</div></div>}
+
+        {session.user.permission_level >= 30 && (
+          <button className="admin-portal-banner" onClick={() => navigate("/admin/setup")}>
+            <div className="admin-portal-banner-left">
+              <div className="admin-portal-banner-badge">ADMIN</div>
+              <div>
+                <h3>Admin Portal</h3>
+                <div className="admin-portal-banner-sub">Semester Setup · Tutor List · Student List</div>
+              </div>
+            </div>
+            <div className="admin-portal-banner-cta">Open Admin Portal <span className="unit-arrow">→</span></div>
+          </button>
+        )}
+
         {loading ? <div className="panel">Loading your unit offerings...</div> : (
           <>
-            <div className="us-section-label">Available offerings <span className="us-count">{offerings.length}</span></div>
-            {offerings.length === 0 ? (
+            <div className="us-section-label">Available offerings <span className="us-count">{activeOfferings.length}</span></div>
+            {activeOfferings.length === 0 ? (
               <div className="panel">No unit offerings have been assigned to this account yet.</div>
             ) : (
               <div className="us-grid">
-                {offerings.map((offering) => <OfferingCard key={offering.offering_id} offering={offering} role={offering.can_edit ? roleLabel(session.user.role_name) : "Read-only access"} onOpen={openOffering} />)}
+                {activeOfferings.map((offering) => <OfferingCard key={offering.offering_id} offering={offering} role={offering.can_edit ? roleLabel(session.user.role_name) : "Read-only access"} onOpen={openOffering} />)}
               </div>
+            )}
+
+            {archivedOfferings.length > 0 && (
+              <>
+                <div className="us-section-label" style={{ marginTop: 32 }}>Archived Offerings <span className="us-count">{archivedOfferings.length}</span></div>
+                <div className="us-grid">
+                  {archivedOfferings.map((offering) => <OfferingCard key={offering.offering_id} offering={offering} role={offering.can_edit ? roleLabel(session.user.role_name) : "Read-only access"} onOpen={openOffering} archived />)}
+                </div>
+              </>
             )}
           </>
         )}
@@ -99,10 +125,10 @@ export default function UnitSelect() {
   );
 }
 
-function OfferingCard({ offering, role, onOpen }: { offering: Offering; role: string; onOpen: (offering: Offering) => void }) {
+function OfferingCard({ offering, role, onOpen, archived }: { offering: Offering; role: string; onOpen: (offering: Offering) => void; archived?: boolean }) {
   const handbookStatus = offering.last_scraped_at ? "Handbook record stored" : "Handbook not imported";
   return (
-    <button className="unit-card" onClick={() => onOpen(offering)}>
+    <button className={`unit-card${archived ? " past" : ""}`} onClick={() => onOpen(offering)}>
       <div className="unit-card-top">
         <div className="unit-code-badge">{offering.unit_code}</div>
         <span className="role-pill coord">{role}</span>

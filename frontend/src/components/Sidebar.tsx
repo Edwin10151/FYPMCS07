@@ -7,15 +7,14 @@ const NAV_MAIN = [
   { to: "/mapping", label: "LO ↔ PLO mapping", ic: "i-map" },
   { to: "/assessments", label: "Assessments", ic: "i-ass" },
   { to: "/upload", label: "Grade upload", ic: "i-up" },
+  { to: "/report", label: "Report", ic: "i-rep" },
 ];
 
-const NAV_ADMIN = [
-  // Semester setup is the admin hub — periods, units, staff assignment,
-  // enrolments and unit-code edits all hang off that checklist.
-  { to: "/admin/setup", label: "Semester setup", ic: "i-sync" },
-  { to: "/admin", label: "People & roles", ic: "i-users", end: true },
-  { to: "/settings", label: "Settings", ic: "i-set" },
-];
+// Semester setup, People & roles and Settings now live behind the Admin
+// Portal (see UnitSelect's "Admin Portal" card + AdminSidebar), not here.
+// Left empty rather than removed so the Administration section is easy to
+// bring back to this sidebar later.
+const NAV_ADMIN: Array<{ to: string; label: string; ic: string; end?: boolean }> = [];
 
 export default function Sidebar({ user }: { user: SessionUser }) {
   return (
@@ -42,7 +41,6 @@ export default function Sidebar({ user }: { user: SessionUser }) {
 
       {user.permission_level >= 30 && (
         <>
-          <div className="sec">Administration</div>
           <nav>
             {NAV_ADMIN.map(({ to, label, ic, end }) => (
               <NavLink key={label} to={to} end={end} className={({ isActive }) => (isActive ? "active" : "")}>

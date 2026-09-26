@@ -1,52 +1,86 @@
-/* Semester setup hub — checklist of the tasks that open, run and
-   close a teaching period. */
+/* Semester setup — rebuilt: current semester status + deactivate,
+   plus entry points into the Tutor List and Student List uploads. */
 
-.setup-period-lbl { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.unit-banner-right { display: flex; align-items: center; gap: 14px; }
 
-/* Progress header */
-.setup-progress-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px 20px; margin-bottom: 24px; }
-.setup-progress-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 14px; flex-wrap: wrap; }
-.setup-period { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.setup-period-sub { font-size: 12px; color: var(--ink-3); margin-top: 7px; }
-.setup-progress-num { text-align: right; white-space: nowrap; }
-.setup-progress-num .n { font-family: 'Newsreader', serif; font-size: 30px; font-weight: 500; color: var(--navy); letter-spacing: -0.02em; }
-.setup-progress-num .d { font-size: 12px; color: var(--ink-3); margin-left: 6px; }
+.current-sem-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px 26px; margin-bottom: 8px; }
+.current-sem-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.current-sem-eye { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.current-sem-title { font-family: 'Newsreader', serif; font-size: 30px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; margin-bottom: 10px; }
+.current-sem-stats { display: flex; gap: 32px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line-2); }
+.current-sem-stat { display: flex; flex-direction: column; gap: 3px; }
+.current-sem-stat .v { font-family: 'Newsreader', serif; font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; }
+.current-sem-stat .l { font-size: 11.5px; color: var(--ink-3); }
 
-.adm-progress { height: 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-.adm-progress .fill { height: 100%; background: linear-gradient(90deg, var(--navy-3), var(--navy)); border-radius: 999px; transition: width .25s ease; }
-
-/* Task groups */
-.setup-group { margin-bottom: 26px; }
-.setup-group-head { margin-bottom: 12px; }
-.setup-group-head h3 { font-family: 'Newsreader', serif; font-size: 19px; font-weight: 500; color: var(--ink); margin: 0; letter-spacing: -0.01em; }
-.setup-group-head p { font-size: 12px; color: var(--ink-3); margin: 5px 0 0; line-height: 1.5; }
-
-.setup-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-
-.setup-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px 18px; display: flex; flex-direction: column; transition: border-color .12s, box-shadow .12s, transform .12s; }
-.setup-card:hover { border-color: var(--navy-3); box-shadow: 0 6px 18px rgba(0, 27, 43, 0.07); transform: translateY(-1px); }
-.setup-card.locked { background: var(--paper-2); }
-.setup-card.locked:hover { transform: none; box-shadow: none; border-color: var(--line); }
-
-.setup-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-.setup-n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; background: var(--paper); border: 1px solid var(--line); color: var(--ink-3); flex-shrink: 0; }
-.setup-card.done .setup-n { background: var(--ok); border-color: var(--ok); color: white; }
-.setup-card.progress .setup-n { background: var(--navy); border-color: var(--navy); color: white; }
-
-.setup-pill { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); color: var(--ink-3); white-space: nowrap; }
-.setup-pill.done { background: var(--ok-bg); border-color: var(--ok-bg-2); color: var(--ok); }
-.setup-pill.progress { background: var(--warn-bg); border-color: #F1D9B5; color: var(--warn); }
-.setup-pill.todo { background: var(--navy-tint); border-color: #DBE3F0; color: var(--navy); }
-
-.setup-title { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35; }
-.setup-desc { font-size: 12px; color: var(--ink-2); line-height: 1.55; margin: 6px 0 0; }
-.setup-detail { font-size: 11.5px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; line-height: 1.5; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-2); }
-
-.setup-cta { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; font-size: 12.5px; font-weight: 600; color: var(--navy); align-self: flex-start; }
-.setup-cta .arr { transition: transform .12s; }
-.setup-cta:hover .arr { transform: translateX(3px); }
-.setup-cta.disabled { color: var(--ink-4); font-weight: 500; cursor: default; }
-
-@media (max-width: 1240px) {
-  .setup-grid { grid-template-columns: repeat(2, 1fr); }
+/* Tutor List / Student List entry tiles */
+.admin-portal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
 }
+
+.admin-portal-tile {
+  text-align: left;
+  background: var(--card, #FFFEFB);
+  border: 1px solid var(--line, #E4E0D6);
+  border-radius: 12px;
+  padding: 24px 26px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.admin-portal-tile:hover {
+  border-color: var(--monash-mid);
+  box-shadow: 0 12px 28px -12px rgba(0, 75, 117, 0.28);
+  transform: translateY(-2px);
+}
+
+.admin-portal-tile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.admin-portal-tile-icon {
+  width: 40px; height: 40px;
+  border-radius: 9px;
+  background: var(--monash-navy);
+  background-image: linear-gradient(135deg, var(--monash-mid), var(--monash-dark));
+  color: white;
+  display: grid; place-items: center;
+  font-size: 18px;
+}
+
+.admin-portal-tile h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink, #232017);
+}
+
+.admin-portal-tile p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3, #8A8578);
+  line-height: 1.55;
+  flex: 1;
+}
+
+.admin-portal-tile-cta {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2, #ECE8DC);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--monash-mid);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.admin-portal-tile:hover .admin-portal-tile-cta { color: var(--monash-dark); }
+.admin-portal-tile:hover .unit-arrow { transform: translateX(3px); }

@@ -1,0 +1,3 @@
+/* AdminMain.tsx is now a pass-through redirect to /admin/setup, so this file
+   is intentionally empty. The section-tile grid it used to hold moved to
+   AdminSetup.css, which is where it's actually used now. */
