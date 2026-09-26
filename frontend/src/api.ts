@@ -36,6 +36,7 @@ export type LearningOutcome = {
   ulo_code: string;
   description: string;
   average_attainment_pct: string;
+  attainment_grade: "HD" | "D" | "C" | "P" | "N";
   pass_rate_pct: string;
   enrolled_count: number;
   achieved_count: number;
@@ -66,13 +67,34 @@ export type DashboardPayload = {
 
 export type Report = {
   report_id: number;
+  offering_id: number;
   ai_summary: string | null;
   coordinator_comment: string | null;
   is_finalized: boolean;
+  status: "draft" | "submitted" | "changes_requested" | "approved";
+  attainment_analysis: string | null;
+  previous_cohort_outcomes: string | null;
+  next_cohort_action_plan: string | null;
+  provider: string | null;
+  model: string | null;
+  prompt_version: string | null;
   generated_by: number | null;
   generated_at: string;
+  updated_at: string;
+  submitted_by: number | null;
+  submitted_at: string | null;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  reviewer_comment: string | null;
   finalized_by: number | null;
   finalized_at: string | null;
+};
+
+export type ReportSections = {
+  attainment_analysis: string;
+  previous_cohort_outcomes: string;
+  next_cohort_action_plan: string;
 };
 
 export type MappingPayload = {
@@ -265,10 +287,31 @@ export function getReport(token: string, offeringId: number) {
   return apiFetch<{ report: Report | null }>(`/reports?offering_id=${offeringId}`, token);
 }
 
-export function saveReport(token: string, offeringId: number, aiSummary: string, finalize: boolean) {
+export function generateReportDraft(token: string, offeringId: number, coordinatorContext: string) {
+  return apiFetch<{ report: Report }>(`/reports/generate-draft?offering_id=${offeringId}`, token, {
+    method: "POST",
+    body: JSON.stringify({ coordinator_context: coordinatorContext }),
+  });
+}
+
+export function saveReport(token: string, offeringId: number, sections: ReportSections, coordinatorContext: string) {
   return apiFetch<{ report_id: number; status: string }>("/reports", token, {
     method: "PUT",
-    body: JSON.stringify({ offering_id: offeringId, ai_summary: aiSummary, finalize }),
+    body: JSON.stringify({ offering_id: offeringId, ...sections, coordinator_context: coordinatorContext }),
+  });
+}
+
+export function submitReport(token: string, offeringId: number) {
+  return apiFetch<{ status: string }>("/reports/submit", token, {
+    method: "POST",
+    body: JSON.stringify({ offering_id: offeringId }),
+  });
+}
+
+export function reviewReport(token: string, offeringId: number, decision: "approved" | "changes_requested", comment: string) {
+  return apiFetch<{ status: string }>("/reports/review", token, {
+    method: "POST",
+    body: JSON.stringify({ offering_id: offeringId, decision, comment }),
   });
 }
 

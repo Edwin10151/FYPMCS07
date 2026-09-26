@@ -20,9 +20,10 @@ class Settings(BaseModel):
     ]
     llm_provider: str = os.getenv("LLM_PROVIDER", "mock")
     local_llm_url: str = os.getenv("LOCAL_LLM_URL", "http://localhost:11434")
+    llm_model: str = os.getenv("LLM_MODEL", "")
+    llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

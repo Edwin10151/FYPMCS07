@@ -45,9 +45,21 @@ docker compose run --rm -T -e PYTHONPATH=/app -v "$PWD/backend/tests:/app/tests:
 Push to `main` triggers GitHub Actions. The Droplet deploy script pulls `main`
 and runs the Docker Compose stack.
 
+## Report Generation
+
+The development stack uses deterministic, editable CQI report drafts by default:
+
+```text
+LLM_PROVIDER=mock
+```
+
+To use a local Ollama server, set `LLM_PROVIDER=ollama`, `LLM_MODEL` to an
+installed model name, and `LOCAL_LLM_URL` to its internal URL. The backend
+validates a fixed three-section CQI response and does not send student-level
+data to the model. The Report page supports draft saving, QAG submission,
+change requests, approval, and browser-based PDF export.
+
 ## Deferred Scope
 
-Local-LLM summaries and PDF export are intentionally not exposed in phase one.
-They can be added after the Handbook, mapping, administration, enrolment, grade
-validation, and calculated-attainment workflows have been reviewed with the
-supervisor.
+CP/CA commentary and SFIA mapping remain deferred until their source data is
+confirmed. CP/CA is shown as `None` in the current report template.
