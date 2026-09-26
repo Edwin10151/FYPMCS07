@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import csv
+import logging
 import io
 import json
 import re
@@ -24,19 +25,29 @@ from app.auth import (
     require_permission,
     verify_password,
 )
-from app.config import get_settings
+from app.config import deployment_warnings, get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
+from app.provision import provision_project_accounts
 from app.seed import seed_demo_data
 from app.services.calculation import split_weight
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
+from app.sso import router as sso_router
+
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    for warning in deployment_warnings():
+        logger.warning("INSECURE CONFIGURATION: %s", warning)
     run_migrations()
     seed_demo_data()
+    # Runs after seeding, and on every startup, so databases created before
+    # single sign-on pick up the team accounts too.
+    provision_project_accounts()
     yield
 
 
@@ -50,6 +61,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(sso_router)
 
 
 class LoginRequest(BaseModel):
@@ -164,8 +177,28 @@ def db_health():
     return {"status": "ok", "database": row["ok"] == 1}
 
 
+@app.get("/api/auth/config")
+def auth_config():
+    """Tells the login page which sign-in paths this deployment offers."""
+    return {
+        "auth_mode": settings.auth_mode,
+        "sso_login_url": "/api/auth/sso/login",
+        "local_login_enabled": settings.local_login_enabled,
+        "local_login_management_only": settings.local_login_management_only,
+    }
+
+
 @app.post("/api/auth/login")
 def login(payload: LoginRequest):
+    """Break-glass local password sign-in.
+
+    Single sign-on is the normal way in. This path stays so a provider outage
+    cannot lock faculty admins out of the dashboard, and is limited to
+    management accounts unless LOCAL_LOGIN_MANAGEMENT_ONLY is turned off.
+    """
+    if not settings.local_login_enabled:
+        raise HTTPException(status_code=403, detail="Sign in with your Monash account")
+
     user = fetch_one(
         """
         SELECT u.user_id, u.staff_id, u.full_name, u.email, u.password_hash, u.is_active,
@@ -178,6 +211,11 @@ def login(payload: LoginRequest):
     )
     if not user or not user["is_active"] or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if settings.local_login_management_only and user["permission_level"] < 30:
+        raise HTTPException(
+            status_code=403,
+            detail="This account must sign in with its Monash account",
+        )
 
     public_user = {
         key: user[key]
@@ -850,8 +888,14 @@ def _admin_user_values(payload: AdminUserCreate) -> tuple[str, str, str, str]:
         raise HTTPException(status_code=422, detail="Staff ID must be exactly seven digits")
     if len(full_name) < 3:
         raise HTTPException(status_code=422, detail="Full name is required")
-    if not email.endswith("@monash.edu"):
-        raise HTTPException(status_code=422, detail="Use a Monash staff email address")
+    # The address is the link key for single sign-on: whatever the identity
+    # provider releases for this person must match it exactly.
+    domains = settings.allowed_email_domains
+    if not any(email.endswith("@" + domain) for domain in domains):
+        raise HTTPException(
+            status_code=422,
+            detail="Use a Monash email address (" + ", ".join("@" + d for d in domains) + ")",
+        )
     return staff_id, full_name, email, role_name
 
 
