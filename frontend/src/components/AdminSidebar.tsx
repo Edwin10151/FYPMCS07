@@ -6,6 +6,7 @@ import { avatarClass, initials, roleLabel, type SessionUser } from "../api";
 // pages live in a separate nav since they aren't scoped to one offering.
 const NAV_ADMIN = [
   { to: "/admin/setup", label: "Semester Setup", ic: "i-sync", end: true },
+  { to: "/admin/offerings", label: "Unit Offerings", ic: "i-units" },
   { to: "/admin/tutors", label: "Tutor List", ic: "i-users" },
   { to: "/admin/enrolments", label: "Student List", ic: "i-up" },
 ];
@@ -13,7 +14,7 @@ const NAV_ADMIN = [
 export default function AdminSidebar({ user }: { user: SessionUser }) {
   return (
     <aside className="side">
-      <Link to="/admin/units" className="brand">
+      <Link to="/units" className="brand">
         <div className="mark">M</div>
         <div className="name">
           Admin

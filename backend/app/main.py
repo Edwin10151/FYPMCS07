@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
+import psycopg
 from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import (
@@ -151,7 +152,7 @@ class AdminOfferingCreate(BaseModel):
     program_ids: list[int]
     unit_code: str
     unit_name: str
-    coordinator_id: int
+    coordinator_id: int | None = None
     lecturer_ids: list[int] = []
     status: str = "draft"
 
@@ -160,11 +161,24 @@ class AdminOfferingUpdate(BaseModel):
     unit_code: str
     unit_name: str
     program_ids: list[int]
-    coordinator_id: int
+    coordinator_id: int | None = None
     lecturer_ids: list[int] = []
     status: str
     replacement_unit_code: str | None = None
     replacement_unit_name: str | None = None
+
+
+class RosterOfferingCreate(BaseModel):
+    unit_code: str
+    unit_name: str
+    programme_codes: list[str] = []
+    program_ids: list[int] = []
+    coordinator_id: int | None = None
+
+
+class RosterOfferingsBulkCreate(BaseModel):
+    semester_id: int
+    offerings: list[RosterOfferingCreate]
 
 
 @app.get("/api/health")
@@ -239,17 +253,18 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             o.offering_id,
             u.unit_code,
             u.unit_name,
-            ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code) AS program_codes,
-            ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names,
+            ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code), NULL) AS program_codes,
+            ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name), NULL) AS program_names,
             s.year,
             s.period,
+            s.status AS semester_status,
             o.coordinator_id,
             o.handbook_url,
             o.last_scraped_at
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN offering_program op ON op.offering_id = o.offering_id
-        JOIN program p ON p.program_id = op.program_id
+        LEFT JOIN offering_program op ON op.offering_id = o.offering_id
+        LEFT JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
     """
     if user["role_name"] == "coordinator":
@@ -269,7 +284,7 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
     else:
         raise HTTPException(status_code=403, detail="Unknown role")
     query += """
-        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period,
+        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period, s.status,
                  o.coordinator_id, o.handbook_url, o.last_scraped_at
         ORDER BY s.year DESC, s.period, u.unit_code
     """
@@ -487,11 +502,11 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
     offering = fetch_one(
         """
         SELECT o.offering_id, u.unit_code, u.unit_name, s.year, s.period,
-               ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names
+               ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name), NULL) AS program_names
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN offering_program op ON op.offering_id = o.offering_id
-        JOIN program p ON p.program_id = op.program_id
+        LEFT JOIN offering_program op ON op.offering_id = o.offering_id
+        LEFT JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
         WHERE o.offering_id = %s
         GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period
@@ -1365,9 +1380,9 @@ def _admin_context_payload() -> dict:
         SELECT o.offering_id, o.semester_id, o.unit_id, o.coordinator_id, o.status,
                o.handbook_url, o.last_scraped_at,
                u.unit_code, u.unit_name, replacement.unit_code AS replacement_unit_code,
-               ARRAY_AGG(DISTINCT p.program_id) AS program_ids,
-               ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code) AS program_codes,
-               ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name) AS program_names,
+               ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_id), NULL) AS program_ids,
+               ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_code ORDER BY p.program_code), NULL) AS program_codes,
+               ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name), NULL) AS program_names,
                s.year, s.period,
                coordinator.full_name AS coordinator_name,
                ARRAY(SELECT ol.lecturer_id FROM offering_lecturer ol
@@ -1377,10 +1392,10 @@ def _admin_context_payload() -> dict:
                 WHERE b.offering_id = o.offering_id AND b.status = 'committed') AS committed_grade_upload_count
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
-        JOIN offering_program op ON op.offering_id = o.offering_id
-        JOIN program p ON p.program_id = op.program_id
+        LEFT JOIN offering_program op ON op.offering_id = o.offering_id
+        LEFT JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
-        JOIN app_user coordinator ON coordinator.user_id = o.coordinator_id
+        LEFT JOIN app_user coordinator ON coordinator.user_id = o.coordinator_id
         LEFT JOIN unit replacement ON replacement.unit_id = o.replaced_by_unit_id
         GROUP BY o.offering_id, o.semester_id, o.unit_id, o.coordinator_id, o.status,
                  o.handbook_url, o.last_scraped_at, u.unit_code, u.unit_name,
@@ -1433,8 +1448,8 @@ def _validate_offering_status(status: str) -> None:
         raise HTTPException(status_code=422, detail="Offering status must be draft, active, or discontinued")
 
 
-def _validate_offering_staff(cur, coordinator_id: int, lecturer_ids: list[int]) -> list[int]:
-    staff_ids = [coordinator_id, *lecturer_ids]
+def _validate_offering_staff(cur, coordinator_id: int | None, lecturer_ids: list[int]) -> list[int]:
+    staff_ids = [*([coordinator_id] if coordinator_id is not None else []), *lecturer_ids]
     rows = []
     if staff_ids:
         cur.execute(
@@ -1447,9 +1462,10 @@ def _validate_offering_staff(cur, coordinator_id: int, lecturer_ids: list[int]) 
         )
         rows = cur.fetchall()
     staff_by_id = {row["user_id"]: row for row in rows}
-    coordinator = staff_by_id.get(coordinator_id)
-    if not coordinator or not coordinator["is_active"] or coordinator["role_name"] != "coordinator":
-        raise HTTPException(status_code=422, detail="Coordinator must be an active coordinator account")
+    if coordinator_id is not None:
+        coordinator = staff_by_id.get(coordinator_id)
+        if not coordinator or not coordinator["is_active"] or coordinator["role_name"] != "coordinator":
+            raise HTTPException(status_code=422, detail="Coordinator must be an active coordinator account")
     cleaned_lecturers = list(dict.fromkeys(lecturer_id for lecturer_id in lecturer_ids if lecturer_id != coordinator_id))
     for lecturer_id in cleaned_lecturers:
         lecturer = staff_by_id.get(lecturer_id)
@@ -1697,17 +1713,130 @@ def update_admin_offering(
     return {"status": "updated"}
 
 
+@app.delete("/api/admin/offerings/{offering_id}")
+def delete_admin_offering(
+    offering_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM unit_offering WHERE offering_id = %s", (offering_id,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Unit offering not found")
+                cur.execute("DELETE FROM unit_offering WHERE offering_id = %s", (offering_id,))
+    except psycopg.errors.ForeignKeyViolation:
+        raise HTTPException(status_code=409, detail="This offering has enrolled students or committed grades and can't be deleted")
+    return {"status": "deleted"}
+
+
+@app.post("/api/admin/offerings/bulk-from-roster", status_code=201)
+def create_offerings_from_roster(
+    payload: RosterOfferingsBulkCreate,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    if not payload.offerings:
+        raise HTTPException(status_code=422, detail="Select at least one unit to add")
+    created: list[dict] = []
+    warnings: list[str] = []
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (payload.semester_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=422, detail="Academic period not found")
+            for item in payload.offerings:
+                unit_code = item.unit_code.strip().upper()
+                unit_name = item.unit_name.strip() or unit_code
+                if item.coordinator_id is not None:
+                    cur.execute(
+                        """
+                        SELECT u.is_active, r.role_name FROM app_user u JOIN role r ON r.role_id = u.role_id
+                        WHERE u.user_id = %s
+                        """,
+                        (item.coordinator_id,),
+                    )
+                    coordinator = cur.fetchone()
+                    if not coordinator or not coordinator["is_active"] or coordinator["role_name"] != "coordinator":
+                        raise HTTPException(status_code=422, detail=f"{unit_code}: coordinator must be an active coordinator account")
+                cur.execute(
+                    """
+                    INSERT INTO unit (unit_code, unit_name)
+                    VALUES (%s, %s)
+                    ON CONFLICT (unit_code) DO UPDATE SET unit_name = EXCLUDED.unit_name
+                    RETURNING unit_id
+                    """,
+                    (unit_code, unit_name),
+                )
+                unit_id = cur.fetchone()["unit_id"]
+                cur.execute(
+                    "SELECT 1 FROM unit_offering WHERE unit_id = %s AND semester_id = %s",
+                    (unit_id, payload.semester_id),
+                )
+                if cur.fetchone():
+                    warnings.append(f"{unit_code}: already has an offering this semester, skipped")
+                    continue
+                cur.execute(
+                    """
+                    INSERT INTO unit_offering (unit_id, semester_id, coordinator_id, status)
+                    VALUES (%s, %s, %s, 'active')
+                    RETURNING offering_id
+                    """,
+                    (unit_id, payload.semester_id, item.coordinator_id),
+                )
+                offering_id = cur.fetchone()["offering_id"]
+                if item.program_ids:
+                    cur.execute("SELECT program_id FROM program WHERE program_id = ANY(%s)", (list(set(item.program_ids)),))
+                    valid_program_ids = {row["program_id"] for row in cur.fetchall()}
+                    for program_id in item.program_ids:
+                        if program_id not in valid_program_ids:
+                            warnings.append(f"{unit_code}: program {program_id} not found")
+                            continue
+                        cur.execute(
+                            "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (offering_id, program_id),
+                        )
+                if item.programme_codes:
+                    cleaned_codes = [code.strip().upper() for code in item.programme_codes if code.strip()]
+                    cur.execute(
+                        "SELECT program_id, program_code FROM program WHERE UPPER(program_code) = ANY(%s)",
+                        (cleaned_codes,),
+                    )
+                    found_programs = cur.fetchall()
+                    found_codes = {row["program_code"].upper() for row in found_programs}
+                    for code in cleaned_codes:
+                        if code not in found_codes:
+                            warnings.append(f"{unit_code}: no matching program for '{code}'")
+                    for program in found_programs:
+                        cur.execute(
+                            "INSERT INTO offering_program (offering_id, program_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (offering_id, program["program_id"]),
+                        )
+                created.append({"offering_id": offering_id, "unit_code": unit_code})
+    return {"created": created, "warnings": warnings}
+
+
+def _combined_full_name(row: dict[str, str], full_name_column: str, given_name_column: str | None) -> str:
+    """Some official exports split the name into a surname column and a separate given-names
+    column (e.g. Monash's enrolment extract) rather than one pre-combined full-name column."""
+    surname = row[full_name_column].strip()
+    if not given_name_column:
+        return surname
+    given = row.get(given_name_column, "").strip()
+    return f"{given} {surname}".strip()
+
+
 def _validate_enrolment_rows(
     rows: list[tuple[int, dict[str, str]]],
     student_code_column: str,
     full_name_column: str,
+    given_name_column: str | None = None,
 ) -> tuple[list[dict], int]:
     issues: list[dict] = []
     accepted_count = 0
     seen_codes: set[str] = set()
     for row_number, row in rows:
         student_code = row[student_code_column].strip().replace(" ", "")
-        full_name = row[full_name_column].strip()
+        full_name = _combined_full_name(row, full_name_column, given_name_column)
         if not student_code:
             issues.append({"row": row_number, "severity": "error", "message": "Missing student ID"})
         elif not _STUDENT_CODE_PATTERN.fullmatch(student_code):
@@ -1739,13 +1868,16 @@ async def preview_enrolment_upload(
     offering_id: int = Form(...),
     student_code_column: str = Form(...),
     full_name_column: str = Form(...),
+    given_name_column: str | None = Form(None),
     file: UploadFile = File(...),
 ):
     if not fetch_one("SELECT 1 FROM unit_offering WHERE offering_id = %s", (offering_id,)):
         raise HTTPException(status_code=404, detail="Unit offering not found")
     filename, headers, rows = await _read_csv_upload(file)
     _require_columns(headers, student_code_column, full_name_column)
-    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column)
+    if given_name_column:
+        _require_columns(headers, given_name_column)
+    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
     return {
         "filename": filename,
         "row_count": len(rows),
@@ -1761,11 +1893,14 @@ async def commit_enrolment_upload(
     offering_id: int = Form(...),
     student_code_column: str = Form(...),
     full_name_column: str = Form(...),
+    given_name_column: str | None = Form(None),
     file: UploadFile = File(...),
 ):
     filename, headers, rows = await _read_csv_upload(file)
     _require_columns(headers, student_code_column, full_name_column)
-    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column)
+    if given_name_column:
+        _require_columns(headers, given_name_column)
+    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
     if any(issue["severity"] == "error" for issue in issues):
         raise HTTPException(status_code=422, detail="Fix all student-list errors before committing")
     with get_conn() as conn:
@@ -1783,7 +1918,7 @@ async def commit_enrolment_upload(
             student_program_id = offering_program_ids[0] if len(offering_program_ids) == 1 else None
             for _, row in rows:
                 student_code = row[student_code_column].strip().replace(" ", "")
-                full_name = row[full_name_column].strip()
+                full_name = _combined_full_name(row, full_name_column, given_name_column)
                 cur.execute(
                     """
                     INSERT INTO student (student_code, full_name, program_id)
@@ -1809,6 +1944,33 @@ async def commit_enrolment_upload(
             )
             batch_id = cur.fetchone()["enrollment_upload_batch_id"]
     return {"status": "committed", "batch_id": batch_id, "accepted_count": accepted_count}
+
+
+@app.get("/api/admin/offerings/{offering_id}/enrollments")
+def admin_offering_enrollments(
+    offering_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    students = fetch_all(
+        """
+        SELECT s.student_id, s.student_code, s.full_name
+        FROM enrollment e JOIN student s ON s.student_id = e.student_id
+        WHERE e.offering_id = %s
+        ORDER BY s.full_name
+        """,
+        (offering_id,),
+    )
+    latest_batch = fetch_one(
+        """
+        SELECT original_filename, row_count, accepted_count, issue_count, status, uploaded_at
+        FROM enrollment_upload_batch
+        WHERE offering_id = %s
+        ORDER BY uploaded_at DESC
+        LIMIT 1
+        """,
+        (offering_id,),
+    )
+    return {"students": students, "latest_batch": latest_batch}
 
 
 def _grade_column_mappings(raw_mapping: str, headers: list[str], assessment_by_id: dict[int, dict]) -> list[dict]:
@@ -2229,12 +2391,27 @@ def _parse_staffing_roster(content: bytes) -> list[dict]:
     return units
 
 
-@app.post("/api/admin/staffing/roster-import")
-async def import_staffing_roster(
-    user: Annotated[dict, Depends(require_permission(30))],
-    semester_id: int = Form(...),
-    file: UploadFile = File(...),
-):
+def _unmatched_units(units: list[dict], semester_id: int) -> tuple[set[str], list[dict]]:
+    """Which of these parsed roster units don't have a unit_offering for this semester yet."""
+    unit_codes = [unit["unit_code"] for unit in units]
+    matched_rows = fetch_all(
+        """
+        SELECT u.unit_code FROM unit_offering o
+        JOIN unit u ON u.unit_id = o.unit_id
+        WHERE o.semester_id = %s AND u.unit_code = ANY(%s)
+        """,
+        (semester_id, unit_codes),
+    )
+    matched_codes = {row["unit_code"] for row in matched_rows}
+    unmatched = [
+        {"unit_code": unit["unit_code"], "unit_name": unit["unit_name"], "programme_codes": unit["programme_codes"]}
+        for unit in units
+        if unit["unit_code"] not in matched_codes
+    ]
+    return matched_codes, unmatched
+
+
+async def _read_roster_upload(semester_id: int, file: UploadFile) -> list[dict]:
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=422, detail="Upload an .xlsx roster file")
     content = await file.read()
@@ -2243,6 +2420,34 @@ async def import_staffing_roster(
     units = _parse_staffing_roster(content)
     if not units:
         raise HTTPException(status_code=422, detail="No units were found in this roster file")
+    if not fetch_one("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,)):
+        raise HTTPException(status_code=422, detail="Academic period not found")
+    return units
+
+
+@app.post("/api/admin/staffing/roster-inspect")
+async def inspect_staffing_roster(
+    user: Annotated[dict, Depends(require_permission(30))],
+    semester_id: int = Form(...),
+    file: UploadFile = File(...),
+):
+    """Dry run: parse and match the roster against current offerings without writing anything."""
+    units = await _read_roster_upload(semester_id, file)
+    matched_codes, unmatched_units = _unmatched_units(units, semester_id)
+    return {
+        "units_in_file": len(units),
+        "matched_offerings": len(matched_codes),
+        "unmatched_units": unmatched_units,
+    }
+
+
+@app.post("/api/admin/staffing/roster-import")
+async def import_staffing_roster(
+    user: Annotated[dict, Depends(require_permission(30))],
+    semester_id: int = Form(...),
+    file: UploadFile = File(...),
+):
+    units = await _read_roster_upload(semester_id, file)
 
     warnings: list[str] = []
     unmatched_units: list[dict] = []
@@ -2251,9 +2456,6 @@ async def import_staffing_roster(
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,))
-            if not cur.fetchone():
-                raise HTTPException(status_code=422, detail="Academic period not found")
             for unit in units:
                 cur.execute(
                     """
@@ -2307,6 +2509,16 @@ async def import_staffing_roster(
                     )
                     staffing_rows_created += 1
 
+            # Persist the raw parsed roster so unmatched units survive a page refresh and stay
+            # accurate as offerings are later added or deleted (see /api/admin/staffing/status).
+            cur.execute(
+                """
+                INSERT INTO staffing_import_snapshot (semester_id, source_filename, payload, imported_by)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (semester_id, file.filename, json.dumps(units), user["user_id"]),
+            )
+
     return {
         "status": "imported",
         "units_in_file": len(units),
@@ -2314,6 +2526,46 @@ async def import_staffing_roster(
         "staffing_rows_created": staffing_rows_created,
         "unmatched_units": unmatched_units,
         "warnings": warnings,
+    }
+
+
+@app.get("/api/admin/staffing/status")
+def staffing_status(
+    user: Annotated[dict, Depends(require_permission(30))],
+    semester_id: int = 1,
+):
+    snapshot = fetch_one(
+        """
+        SELECT source_filename, payload, imported_at
+        FROM staffing_import_snapshot
+        WHERE semester_id = %s
+        ORDER BY imported_at DESC
+        LIMIT 1
+        """,
+        (semester_id,),
+    )
+    if not snapshot:
+        return {"snapshot": None}
+
+    units = snapshot["payload"]
+    matched_codes, unmatched_units = _unmatched_units(units, semester_id)
+    staffing_rows_created = fetch_one(
+        """
+        SELECT COUNT(*) AS count FROM offering_staffing s
+        JOIN unit_offering o ON o.offering_id = s.offering_id
+        WHERE o.semester_id = %s AND s.source = 'roster_import'
+        """,
+        (semester_id,),
+    )["count"]
+    return {
+        "snapshot": {
+            "source_filename": snapshot["source_filename"],
+            "imported_at": snapshot["imported_at"],
+            "units_in_file": len(units),
+            "matched_offerings": len(matched_codes),
+            "staffing_rows_created": staffing_rows_created,
+            "unmatched_units": unmatched_units,
+        }
     }
 
 

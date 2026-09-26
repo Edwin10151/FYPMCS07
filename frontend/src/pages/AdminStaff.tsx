@@ -32,7 +32,9 @@ export default function AdminStaff() {
     const map = new Map<number, string[]>();
     for (const offering of data?.offerings ?? []) {
       const code = `${offering.unit_code} ${offering.year}${offering.period}`;
-      map.set(offering.coordinator_id, [...(map.get(offering.coordinator_id) ?? []), code]);
+      if (offering.coordinator_id !== null) {
+        map.set(offering.coordinator_id, [...(map.get(offering.coordinator_id) ?? []), code]);
+      }
       offering.lecturer_ids.forEach((id) => map.set(id, [...(map.get(id) ?? []), code]));
     }
     return map;

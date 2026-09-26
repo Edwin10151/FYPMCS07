@@ -1,6 +1,8 @@
 /* Semester setup — rebuilt: current semester status + deactivate,
    plus entry points into the Tutor List and Student List uploads. */
 
+.unit-banner-right { display: flex; align-items: center; gap: 14px; }
+
 .current-sem-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px 26px; margin-bottom: 8px; }
 .current-sem-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .current-sem-eye { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
@@ -37,6 +39,13 @@
   transform: translateY(-2px);
 }
 
+.admin-portal-tile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
 .admin-portal-tile-icon {
   width: 40px; height: 40px;
   border-radius: 9px;
@@ -45,7 +54,6 @@
   color: white;
   display: grid; place-items: center;
   font-size: 18px;
-  margin-bottom: 16px;
 }
 
 .admin-portal-tile h3 {
