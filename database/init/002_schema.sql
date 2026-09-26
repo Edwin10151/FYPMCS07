@@ -399,7 +399,10 @@ CREATE TABLE staffing_import_snapshot (
     source_filename      VARCHAR(255) NOT NULL,
     payload              JSONB        NOT NULL,
     imported_by          INT          REFERENCES app_user(user_id),
-    imported_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+    imported_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- NULL until the admin reviews the scraped coordinator prefill and clicks Commit;
+    -- a page refresh before then resumes the review instead of showing "already done".
+    committed_at         TIMESTAMP
 );
 
 CREATE INDEX idx_staffing_import_semester ON staffing_import_snapshot(semester_id, imported_at DESC);

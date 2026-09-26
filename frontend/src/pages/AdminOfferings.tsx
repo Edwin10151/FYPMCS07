@@ -60,7 +60,11 @@ export default function AdminOfferings() {
         setFlashError(result.warnings.join(" ") || "This unit already has an offering this semester.");
         return;
       }
-      setFlash(`${form.unit_code.trim().toUpperCase()} added${result.warnings.length ? ` — ${result.warnings.join(" ")}` : "."}`);
+      const synced = result.created[0]?.staffing_rows_synced ?? 0;
+      const newAccounts = result.created[0]?.accounts_created ?? [];
+      const syncNote = synced > 0 ? ` ${synced} tutor roster row${synced === 1 ? "" : "s"} matched automatically.` : "";
+      const accountsNote = newAccounts.length > 0 ? ` ${newAccounts.length} new staff account${newAccounts.length === 1 ? "" : "s"} created (default password).` : "";
+      setFlash(`${form.unit_code.trim().toUpperCase()} added${result.warnings.length ? ` — ${result.warnings.join(" ")}` : "."}${syncNote}${accountsNote}`);
       setAddOpen(false);
       await reload();
     } catch (err) {
