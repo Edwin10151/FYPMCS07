@@ -204,6 +204,26 @@ export async function apiFetch<T>(path: string, token?: string, init: RequestIni
   return response.json() as Promise<T>;
 }
 
+export type AuthConfig = {
+  auth_mode: string;
+  sso_login_url: string;
+  local_login_enabled: boolean;
+  local_login_management_only: boolean;
+};
+
+export function getAuthConfig() {
+  return apiFetch<AuthConfig>("/auth/config");
+}
+
+/** Hands the browser to the identity provider; it comes back at /auth/callback. */
+export function startSso(config: AuthConfig | null) {
+  window.location.assign(config?.sso_login_url || "/api/auth/sso/login");
+}
+
+export function getMe(token: string) {
+  return apiFetch<{ user: SessionUser }>("/me", token);
+}
+
 export function login(email: string, password: string) {
   return apiFetch<Session>("/auth/login", undefined, {
     method: "POST",
