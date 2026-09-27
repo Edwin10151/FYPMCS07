@@ -83,6 +83,8 @@ def test_mock_report_uses_current_and_previous_aggregate_evidence():
     assert generated.provider == "mock"
     assert "LO1" in generated.draft.attainment_analysis
     assert "S2 2025" in generated.draft.previous_cohort_outcomes
+    assert "4.0 percentage points" in generated.draft.previous_cohort_outcomes
+    assert "% percentage points" not in generated.draft.previous_cohort_outcomes
     assert "Complexity proofs" in generated.draft.next_cohort_action_plan
     assert "student_id" not in generated.model_dump_json()
     assert "email" not in generated.model_dump_json()

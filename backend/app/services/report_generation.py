@@ -145,10 +145,11 @@ def _mock_draft(evidence: ReportEvidence) -> ReportDraft:
 
             def describe_change(item: tuple[str, Decimal]) -> str:
                 code, change = item
+                points = change.copy_abs().quantize(Decimal("0.1"))
                 if change > 0:
-                    return f"{code} increased by {_pct(change)} percentage points"
+                    return f"{code} increased by {points} percentage points"
                 if change < 0:
-                    return f"{code} decreased by {_pct(abs(change))} percentage points"
+                    return f"{code} decreased by {points} percentage points"
                 return f"{code} was unchanged"
 
             previous_cohort_outcomes = (
