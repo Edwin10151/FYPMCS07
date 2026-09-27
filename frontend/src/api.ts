@@ -495,7 +495,7 @@ export function getStaffingStatus(token: string, semesterId: number) {
 
 export function createAdminUser(
   token: string,
-  payload: { staff_id: string; full_name: string; email: string; role_name: "management" | "coordinator" | "lecturer" },
+  payload: { staff_id: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" },
 ) {
   return apiFetch<{ user: AdminUser; temporary_password: string }>("/admin/users", token, {
     method: "POST",
@@ -505,7 +505,7 @@ export function createAdminUser(
 
 export function createAdminUsers(
   token: string,
-  users: Array<{ staff_id: string; full_name: string; email: string; role_name: "management" | "coordinator" | "lecturer" }>,
+  users: Array<{ staff_id: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" }>,
 ) {
   return apiFetch<{ accounts: Array<{ user: AdminUser; temporary_password: string }> }>("/admin/users/bulk", token, {
     method: "POST",
@@ -520,7 +520,7 @@ export function setAdminUserActive(token: string, userId: number, isActive: bool
   });
 }
 
-export function setAdminUserRole(token: string, userId: number, roleName: "management" | "coordinator" | "lecturer") {
+export function setAdminUserRole(token: string, userId: number, roleName: "super_admin" | "management" | "coordinator" | "lecturer") {
   return apiFetch<{ status: string }>(`/admin/users/${userId}`, token, {
     method: "PATCH",
     body: JSON.stringify({ role_name: roleName }),
@@ -639,5 +639,6 @@ export function roleLabel(roleName: string) {
   if (roleName === "coordinator") return "Unit Coordinator";
   if (roleName === "lecturer") return "Lecturer";
   if (roleName === "management") return "Management";
+  if (roleName === "super_admin") return "Super Admin";
   return roleName;
 }

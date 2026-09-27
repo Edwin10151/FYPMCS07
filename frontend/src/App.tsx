@@ -17,17 +17,15 @@ import { loadSession } from "./api";
 import Settings from "./pages/Settings";
 import ChangePassword from "./pages/ChangePassword";
 
-function RequireAuth({ children, allowPasswordChange = false }: { children: React.ReactNode; allowPasswordChange?: boolean }) {
+function RequireAuth({ children }: { children: React.ReactNode }) {
   const session = loadSession();
   if (!session) return <Navigate to="/login" replace />;
-  if (session.user.must_change_password && !allowPasswordChange) return <Navigate to="/change-password" replace />;
   return <>{children}</>;
 }
 
 function RequireManagement({ children }: { children: React.ReactNode }) {
   const session = loadSession();
   if (!session) return <Navigate to="/login" replace />;
-  if (session.user.must_change_password) return <Navigate to="/change-password" replace />;
   if (session.user.permission_level < 30) return <Navigate to="/units" replace />;
   return <>{children}</>;
 }
@@ -37,7 +35,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to={loadSession() ? "/units" : "/login"} replace />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/change-password" element={<RequireAuth allowPasswordChange><ChangePassword /></RequireAuth>} />
+      <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
       <Route path="/units" element={<RequireAuth><UnitSelect /></RequireAuth>} />
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
       <Route path="/mapping" element={<RequireAuth><Mapping /></RequireAuth>} />
