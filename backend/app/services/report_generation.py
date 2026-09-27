@@ -1,4 +1,5 @@
 import json
+import re
 from decimal import Decimal
 
 import httpx
@@ -139,18 +140,24 @@ def _mock_draft(evidence: ReportEvidence) -> ReportDraft:
                 "so a direct comparison is not available."
             )
         else:
-            largest_gain = max(changes, key=lambda item: item[1])
-            largest_decline = min(changes, key=lambda item: item[1])
+            strongest = max(changes, key=lambda item: item[1])
+            weakest = min(changes, key=lambda item: item[1])
+
+            def describe_change(item: tuple[str, Decimal]) -> str:
+                code, change = item
+                if change > 0:
+                    return f"{code} increased by {_pct(change)} percentage points"
+                if change < 0:
+                    return f"{code} decreased by {_pct(abs(change))} percentage points"
+                return f"{code} was unchanged"
+
             previous_cohort_outcomes = (
-                f"Compared with {previous.period} {previous.year}, {largest_gain[0]} had the largest change "
-                f"({_pct(largest_gain[1])}). {largest_decline[0]} had the weakest change "
-                f"({_pct(largest_decline[1])}). These differences should be reviewed with the prior teaching team "
+                f"Compared with {previous.period} {previous.year}, {describe_change(strongest)}. "
+                f"{describe_change(weakest)}. These differences should be reviewed with the prior teaching team "
                 "before attributing them to a specific intervention."
             )
         if previous.next_cohort_action_plan:
             previous_cohort_outcomes += f" The previous approved action plan proposed: {previous.next_cohort_action_plan}"
-    if evidence.coordinator_context:
-        previous_cohort_outcomes += f" Coordinator context: {evidence.coordinator_context}"
 
     mapped_assessments = [
         assessment.name for assessment in evidence.assessments if lowest.code in assessment.ulo_codes
@@ -192,6 +199,25 @@ def _ollama_draft(
         raise ReportGenerationError("LLM_MODEL must be configured when LLM_PROVIDER=ollama", 500)
 
     verified = _mock_draft(evidence)
+    weakest = min(evidence.learning_outcomes, key=lambda item: item.average_attainment_pct)
+    mapped_assessments = [
+        assessment.name for assessment in evidence.assessments if weakest.code in assessment.ulo_codes
+    ]
+    action_evidence = {
+        "unit_code": evidence.unit_code,
+        "weakest_outcome": {
+            "code": weakest.code,
+            "description": weakest.description,
+            "met_target": weakest.average_attainment_pct >= evidence.attainment_target_pct,
+        },
+        "mapped_assessments": mapped_assessments,
+        "previous_approved_action": (
+            evidence.previous_offering.next_cohort_action_plan
+            if evidence.previous_offering
+            else None
+        ),
+        "coordinator_context": evidence.coordinator_context,
+    }
     try:
         response = httpx.post(
             f"{base_url.rstrip('/')}/api/chat",
@@ -209,7 +235,7 @@ def _ollama_draft(
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": json.dumps(evidence.model_dump(mode="json"), separators=(",", ":")),
+                        "content": json.dumps(action_evidence, separators=(",", ":")),
                     },
                 ],
             },
@@ -222,8 +248,11 @@ def _ollama_draft(
     try:
         content = response.json()["message"]["content"]
         suggestion = ActionPlanSuggestion.model_validate_json(content)
+        action = suggestion.next_cohort_action_plan
+        if re.search(r"\d+(?:\.\d+)?\s*%", action) or weakest.code.lower() not in action.lower():
+            return verified
         return verified.model_copy(
-            update={"next_cohort_action_plan": suggestion.next_cohort_action_plan}
+            update={"next_cohort_action_plan": action}
         )
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise ReportGenerationError("The local LLM returned an invalid report draft") from exc

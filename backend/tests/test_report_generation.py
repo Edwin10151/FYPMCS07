@@ -120,9 +120,26 @@ def test_ollama_request_enforces_schema_and_validates_response(monkeypatch):
     }
     assert captured["json"]["keep_alive"] == "10m"
     prompt = captured["json"]["messages"][1]["content"]
-    assert json.loads(prompt)["student_count"] == 100
+    prompt_data = json.loads(prompt)
+    assert prompt_data["weakest_outcome"]["code"] == "LO1"
+    assert "student_count" not in prompt_data
     assert "student_id" not in prompt
     assert "email" not in prompt
+
+
+def test_ollama_falls_back_when_action_invents_a_percentage(monkeypatch):
+    def fake_post(url, **kwargs):
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            json={"message": {"content": '{"next_cohort_action_plan":"Raise LO1 to 99%."}'}},
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    generated = generate_report(evidence(False), "ollama", "http://ollama:11434", "test-model", 30)
+
+    assert "99%" not in generated.draft.next_cohort_action_plan
+    assert "LO1" in generated.draft.next_cohort_action_plan
 
 
 def test_ollama_rejects_an_invalid_structured_response(monkeypatch):
