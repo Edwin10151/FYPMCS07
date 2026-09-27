@@ -63,10 +63,11 @@ docker compose exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M
 
 The Ollama service is private to the Compose network, runs one request at a
 time, and is limited to 6 GB RAM and six CPU cores so the dashboard and
-database remain responsive. The backend
-validates a fixed three-section CQI response and does not send student-level
-data to the model. The Report page supports draft saving, QAG submission,
-change requests, approval, and browser-based PDF export.
+database remain responsive. The backend calculates the factual attainment and
+historical sections deterministically; Ollama proposes only the next-cohort
+action. Student-level data is never sent to the model. The Report page supports
+draft saving, QAG submission, change requests, approval, and browser-based PDF
+export.
 
 ## Deferred Scope
 

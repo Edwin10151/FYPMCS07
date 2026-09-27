@@ -5,10 +5,10 @@ import httpx
 import pytest
 
 from app.services.report_generation import (
+    ActionPlanSuggestion,
     AssessmentEvidence,
     LearningOutcomeEvidence,
     PreviousOfferingEvidence,
-    ReportDraft,
     ReportEvidence,
     ReportGenerationError,
     attainment_grade,
@@ -93,9 +93,7 @@ def test_attainment_grade_boundaries():
 
 
 def test_ollama_request_enforces_schema_and_validates_response(monkeypatch):
-    expected = ReportDraft(
-        attainment_analysis="LO1 is the lowest relative result.",
-        previous_cohort_outcomes="LO1 improved from the previous offering.",
+    expected = ActionPlanSuggestion(
         next_cohort_action_plan="Add a formative proof exercise for LO1.",
     )
     captured = {}
@@ -111,8 +109,10 @@ def test_ollama_request_enforces_schema_and_validates_response(monkeypatch):
     monkeypatch.setattr(httpx, "post", fake_post)
     generated = generate_report(evidence(False), "ollama", "http://ollama:11434", "test-model", 30)
 
-    assert generated.draft == expected
-    assert captured["json"]["format"] == ReportDraft.model_json_schema()
+    assert "LO2" in generated.draft.attainment_analysis
+    assert "No verified previous-offering" in generated.draft.previous_cohort_outcomes
+    assert generated.draft.next_cohort_action_plan == expected.next_cohort_action_plan
+    assert captured["json"]["format"] == ActionPlanSuggestion.model_json_schema()
     assert captured["json"]["options"] == {
         "temperature": 0,
         "num_ctx": 4096,
