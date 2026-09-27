@@ -32,6 +32,7 @@ from app.seed import seed_demo_data
 from app.services.calculation import split_weight
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
+from app.services.email_notification import send_reminders
 from app.services.unit_coordinator import fetch_unit_coordinators_for_units
 from app.services.report_generation import (
     AssessmentEvidence,
@@ -90,6 +91,12 @@ class AdminUserUpdate(BaseModel):
 
 class AdminUserBulkCreate(BaseModel):
     users: list[AdminUserCreate]
+
+
+class EmailReminderSend(BaseModel):
+    semester_id: int
+    subject: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=4000)
 
 
 class MappingUpdate(BaseModel):
@@ -1253,6 +1260,116 @@ def update_admin_user_status(
             values.append(user_id)
             cur.execute(f"UPDATE app_user SET {', '.join(updates)} WHERE user_id = %s", values)
     return {"status": "updated"}
+
+
+@app.post("/api/admin/users/{user_id}/reset-password")
+def reset_admin_user_password(
+    user_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    if user_id == user["user_id"]:
+        raise HTTPException(status_code=409, detail="You cannot reset your own password here")
+    temporary_password = generate_temporary_password()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE app_user
+                SET password_hash = %s, must_change_password = TRUE
+                WHERE user_id = %s
+                RETURNING full_name
+                """,
+                (hash_password(temporary_password), user_id),
+            )
+            account = cur.fetchone()
+            if not account:
+                raise HTTPException(status_code=404, detail="Staff account not found")
+    return {"full_name": account["full_name"], "temporary_password": temporary_password}
+
+
+def _email_reminder_preview(semester_id: int) -> dict:
+    semester = fetch_one(
+        "SELECT semester_id, year, period, status FROM semester WHERE semester_id = %s",
+        (semester_id,),
+    )
+    if not semester:
+        raise HTTPException(status_code=404, detail="Semester not found")
+    recipients = fetch_all(
+        """
+        SELECT staff.user_id, staff.full_name, staff.email,
+               STRING_AGG(DISTINCT unit.unit_code, ', ' ORDER BY unit.unit_code) AS units
+        FROM unit_offering offering
+        JOIN unit ON unit.unit_id = offering.unit_id
+        JOIN app_user staff ON staff.user_id = offering.coordinator_id
+        WHERE offering.semester_id = %s
+          AND offering.status <> 'discontinued'
+          AND staff.is_active = TRUE
+        GROUP BY staff.user_id, staff.full_name, staff.email
+        ORDER BY staff.full_name
+        """,
+        (semester_id,),
+    )
+    label = f"{semester['year']} {semester['period']}"
+    return {
+        "semester": semester,
+        "configured": settings.email_configured,
+        "sender": settings.email_from or None,
+        "recipients": recipients,
+        "subject": f"Action required: complete OBE setup for {label}",
+        "body": (
+            f"The MCS07 Curriculum Analytics dashboard is ready for {label}. "
+            "Please sign in and complete the OBE setup and reporting workflow for your assigned unit(s)."
+        ),
+    }
+
+
+@app.get("/api/admin/email-reminders/preview")
+def email_reminder_preview(
+    semester_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    return _email_reminder_preview(semester_id)
+
+
+@app.post("/api/admin/email-reminders/send")
+def send_email_reminder(
+    payload: EmailReminderSend,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    preview = _email_reminder_preview(payload.semester_id)
+    if not preview["configured"]:
+        raise HTTPException(status_code=503, detail="Email delivery is not configured")
+    if not preview["recipients"]:
+        raise HTTPException(status_code=422, detail="No active unit coordinators are assigned")
+    try:
+        deliveries = send_reminders(settings, preview["recipients"], payload.subject, payload.body)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for delivery in deliveries:
+                cur.execute(
+                    """
+                    INSERT INTO email_notification_delivery
+                        (semester_id, sent_by, recipient_user_id, recipient_email, subject, status, error_message)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        payload.semester_id,
+                        user["user_id"],
+                        delivery["user_id"],
+                        delivery["email"],
+                        payload.subject,
+                        delivery["status"],
+                        delivery["error"],
+                    ),
+                )
+    return {
+        "sent": sum(item["status"] == "sent" for item in deliveries),
+        "failed": sum(item["status"] == "failed" for item in deliveries),
+        "deliveries": deliveries,
+    }
 
 
 _SEMESTER_STATUSES = {"planning", "active", "archived"}

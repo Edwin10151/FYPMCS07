@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { deactivateAdminPeriod, errorMessage, getStaffingStatus, resetAdminPeriod, type UnmatchedUnit } from "../api";
+import { deactivateAdminPeriod, errorMessage, getEmailReminderPreview, getStaffingStatus, resetAdminPeriod, sendEmailReminder, type EmailReminderPreview, type UnmatchedUnit } from "../api";
 import AdminSidebar from "../components/AdminSidebar";
 import "../components/AdminNav.css";
 import { useAdminContext } from "../useAdminContext";
@@ -26,6 +26,11 @@ export default function AdminSetup() {
   const [flashError, setFlashError] = useState("");
   const [staffingSnapshot, setStaffingSnapshot] = useState<{ committed: boolean; unmatched_units: UnmatchedUnit[] } | null>(null);
   const [staffingLoaded, setStaffingLoaded] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailPreview, setEmailPreview] = useState<EmailReminderPreview | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
 
   const active = data?.periods.find((period) => period.status === "active") ?? null;
 
@@ -99,6 +104,25 @@ export default function AdminSetup() {
     }
   };
 
+  const openEmailReminder = async () => {
+    if (!active) return;
+    setEmailBusy(true); setFlashError("");
+    try {
+      const preview = await getEmailReminderPreview(session.access_token, active.semester_id);
+      setEmailPreview(preview); setEmailSubject(preview.subject); setEmailBody(preview.body); setEmailOpen(true);
+    } catch (err) { setFlashError(errorMessage(err)); } finally { setEmailBusy(false); }
+  };
+
+  const sendReminder = async () => {
+    if (!active || !emailPreview) return;
+    setEmailBusy(true); setFlashError("");
+    try {
+      const result = await sendEmailReminder(session.access_token, active.semester_id, emailSubject.trim(), emailBody.trim());
+      setFlash(`${result.sent} reminder${result.sent === 1 ? "" : "s"} sent${result.failed ? `; ${result.failed} failed` : ""}.`);
+      setEmailOpen(false);
+    } catch (err) { setFlashError(errorMessage(err)); } finally { setEmailBusy(false); }
+  };
+
   return (
     <div className="app">
       <AdminSidebar user={session.user} />
@@ -113,10 +137,11 @@ export default function AdminSetup() {
               <button className="btn danger" disabled={!active} onClick={() => setResetConfirmOpen(true)}>Reset Data</button>
               <button
                 className="btn primary"
-                disabled={!emailReminderReady}
+                disabled={!emailReminderReady || emailBusy}
                 title={emailReminderReady ? undefined : "please ensure the tutor list and student list set up is completed"}
+                onClick={() => void openEmailReminder()}
               >
-                Send Email Reminder
+                {emailBusy ? "Loading..." : "Send Email Reminder"}
               </button>
             </div>
           </div>
@@ -196,6 +221,25 @@ export default function AdminSetup() {
             <div className="adm-modal-actions">
               <button className="btn" disabled={resetting} onClick={() => setResetConfirmOpen(false)}>Cancel</button>
               <button className="btn danger" disabled={resetting} onClick={() => void resetSemesterData()}>{resetting ? "Resetting..." : "Reset all data"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {emailOpen && active && emailPreview && (
+        <div className="adm-modal-overlay" onClick={() => !emailBusy && setEmailOpen(false)}>
+          <div className="adm-modal wide" onClick={(event) => event.stopPropagation()}>
+            <h3>Email unit coordinators</h3>
+            <div className="adm-modal-sub">{emailPreview.recipients.length} active coordinator{emailPreview.recipients.length === 1 ? "" : "s"} assigned to {active.year} {active.period}.</div>
+            {!emailPreview.configured && <div className="adm-flash" style={{ background: "var(--risk-bg)", borderColor: "#F2D8CC", color: "var(--risk)" }}>Email delivery is not configured on this server.</div>}
+            <div className="adm-card" style={{ marginBottom: 16 }}><table className="adm-tbl"><thead><tr><th>Recipient</th><th>Assigned units</th></tr></thead><tbody>{emailPreview.recipients.map((recipient) => <tr key={recipient.user_id}><td><span className="nm">{recipient.full_name}</span><span className="em">{recipient.email}</span></td><td>{recipient.units}</td></tr>)}</tbody></table>{!emailPreview.recipients.length && <div className="adm-empty">No active unit coordinators are assigned.</div>}</div>
+            <div className="adm-form">
+              <label className="adm-field"><span className="lbl">Subject</span><input value={emailSubject} maxLength={200} onChange={(event) => setEmailSubject(event.target.value)} /></label>
+              <label className="adm-field"><span className="lbl">Message</span><textarea rows={6} value={emailBody} maxLength={4000} onChange={(event) => setEmailBody(event.target.value)} /></label>
+            </div>
+            <div className="adm-modal-actions">
+              <button className="btn" disabled={emailBusy} onClick={() => setEmailOpen(false)}>Cancel</button>
+              <button className="btn primary" disabled={emailBusy || !emailPreview.configured || !emailPreview.recipients.length || !emailSubject.trim() || !emailBody.trim()} onClick={() => void sendReminder()}>{emailBusy ? "Sending..." : `Send ${emailPreview.recipients.length} reminder${emailPreview.recipients.length === 1 ? "" : "s"}`}</button>
             </div>
           </div>
         </div>

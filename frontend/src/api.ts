@@ -531,6 +531,31 @@ export function setAdminUserRole(token: string, userId: number, roleName: "manag
   });
 }
 
+export function resetAdminUserPassword(token: string, userId: number) {
+  return apiFetch<{ full_name: string; temporary_password: string }>(`/admin/users/${userId}/reset-password`, token, {
+    method: "POST",
+  });
+}
+
+export type EmailReminderPreview = {
+  configured: boolean;
+  sender: string | null;
+  recipients: Array<{ user_id: number; full_name: string; email: string; units: string }>;
+  subject: string;
+  body: string;
+};
+
+export function getEmailReminderPreview(token: string, semesterId: number) {
+  return apiFetch<EmailReminderPreview>(`/admin/email-reminders/preview?semester_id=${semesterId}`, token);
+}
+
+export function sendEmailReminder(token: string, semesterId: number, subject: string, body: string) {
+  return apiFetch<{ sent: number; failed: number }>("/admin/email-reminders/send", token, {
+    method: "POST",
+    body: JSON.stringify({ semester_id: semesterId, subject, body }),
+  });
+}
+
 function uploadForm(token: string, path: string, fields: Record<string, string>, file: File) {
   const body = new FormData();
   Object.entries(fields).forEach(([name, value]) => body.append(name, value));

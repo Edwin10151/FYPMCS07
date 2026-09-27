@@ -22,6 +22,15 @@ class Settings(BaseModel):
     local_llm_url: str = os.getenv("LOCAL_LLM_URL", "http://localhost:11434")
     llm_model: str = os.getenv("LLM_MODEL", "")
     llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_username: str = os.getenv("SMTP_USERNAME", "").strip()
+    smtp_app_password: str = os.getenv("SMTP_APP_PASSWORD", "").strip()
+    email_from: str = os.getenv("EMAIL_FROM", "").strip()
+
+    @property
+    def email_configured(self) -> bool:
+        return bool(self.smtp_username and self.smtp_app_password and self.email_from)
 
 
 @lru_cache
