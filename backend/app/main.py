@@ -1612,6 +1612,42 @@ def deactivate_admin_period(
     }
 
 
+@app.post("/api/admin/periods/{semester_id}/reset")
+def reset_admin_period(
+    semester_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    """Wipe this semester's unit offerings back to nothing — the Tutor List and Student
+    List commit flows both build on unit_offering, so deleting it here cascades to every
+    offering_staffing/offering_lecturer/offering_program row, every assessment, ULO,
+    PLO mapping, grade upload and AI report tied to those offerings for this semester.
+    Accounts are never touched, including whoever is running this reset."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Academic period not found")
+
+            cur.execute("SELECT offering_id FROM unit_offering WHERE semester_id = %s", (semester_id,))
+            offering_ids = [row["offering_id"] for row in cur.fetchall()]
+
+            if offering_ids:
+                # These two don't cascade from unit_offering, so they must be cleared first
+                # or the DELETE below fails with a foreign-key violation.
+                cur.execute("DELETE FROM enrollment WHERE offering_id = ANY(%s)", (offering_ids,))
+                cur.execute(
+                    "UPDATE ulo_plo_mapping_suggestion SET source_offering_id = NULL WHERE source_offering_id = ANY(%s)",
+                    (offering_ids,),
+                )
+
+            cur.execute("DELETE FROM unit_offering WHERE semester_id = %s", (semester_id,))
+            offerings_deleted = cur.rowcount
+
+            cur.execute("DELETE FROM staffing_import_snapshot WHERE semester_id = %s", (semester_id,))
+
+    return {"status": "reset", "offerings_deleted": offerings_deleted}
+
+
 @app.post("/api/admin/offerings", status_code=201)
 def create_admin_offering(
     payload: AdminOfferingCreate,

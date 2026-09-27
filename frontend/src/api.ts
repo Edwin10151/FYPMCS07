@@ -390,6 +390,10 @@ export function deactivateAdminPeriod(token: string, semesterId: number) {
   );
 }
 
+export function resetAdminPeriod(token: string, semesterId: number) {
+  return apiFetch<{ status: string; offerings_deleted: number }>(`/admin/periods/${semesterId}/reset`, token, { method: "POST" });
+}
+
 export type OfferingInput = {
   semester_id: number;
   program_ids: number[];
