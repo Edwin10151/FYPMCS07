@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { deactivateAdminPeriod, errorMessage, getStaffingStatus, type UnmatchedUnit } from "../api";
+import { deactivateAdminPeriod, errorMessage, getStaffingStatus, resetAdminPeriod, type UnmatchedUnit } from "../api";
 import AdminSidebar from "../components/AdminSidebar";
 import "../components/AdminNav.css";
 import { useAdminContext } from "../useAdminContext";
@@ -20,6 +20,8 @@ export default function AdminSetup() {
   const { session, data, error, loading, reload } = useAdminContext();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [working, setWorking] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [flash, setFlash] = useState("");
   const [flashError, setFlashError] = useState("");
   const [staffingSnapshot, setStaffingSnapshot] = useState<{ committed: boolean; unmatched_units: UnmatchedUnit[] } | null>(null);
@@ -27,13 +29,19 @@ export default function AdminSetup() {
 
   const active = data?.periods.find((period) => period.status === "active") ?? null;
 
-  useEffect(() => {
-    if (!session || !active) return;
+  const loadStaffingStatus = (semesterId: number) => {
+    if (!session) return Promise.resolve();
     setStaffingLoaded(false);
-    getStaffingStatus(session.access_token, active.semester_id)
+    return getStaffingStatus(session.access_token, semesterId)
       .then((response) => setStaffingSnapshot(response.snapshot))
       .catch(() => setStaffingSnapshot(null))
       .finally(() => setStaffingLoaded(true));
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    void loadStaffingStatus(active.semester_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, active?.semester_id]);
 
   if (!session) return null;
@@ -75,6 +83,22 @@ export default function AdminSetup() {
     }
   };
 
+  const resetSemesterData = async () => {
+    if (!active) return;
+    setResetting(true);
+    setFlashError("");
+    try {
+      const result = await resetAdminPeriod(session.access_token, active.semester_id);
+      setFlash(`${active.year} ${active.period} was reset — ${result.offerings_deleted} unit offering${result.offerings_deleted === 1 ? "" : "s"} and everything built on them were removed. Ready to start over.`);
+      setResetConfirmOpen(false);
+      await Promise.all([reload(), loadStaffingStatus(active.semester_id)]);
+    } catch (err) {
+      setFlashError(errorMessage(err));
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
     <div className="app">
       <AdminSidebar user={session.user} />
@@ -86,6 +110,7 @@ export default function AdminSetup() {
           <div className="unit-banner">
             <div><h1 style={{ fontSize: 26 }}>Semester Setup</h1><div className="sub">Manage the current teaching semester, then reach the Tutor List and Student List uploads.</div></div>
             <div className="unit-banner-right">
+              <button className="btn danger" disabled={!active} onClick={() => setResetConfirmOpen(true)}>Reset Data</button>
               <button
                 className="btn primary"
                 disabled={!emailReminderReady}
@@ -154,6 +179,23 @@ export default function AdminSetup() {
             <div className="adm-modal-actions">
               <button className="btn" disabled={working} onClick={() => setConfirmOpen(false)}>Cancel</button>
               <button className="btn danger" disabled={working} onClick={() => void deactivate()}>{working ? "Deactivating..." : "Deactivate semester"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetConfirmOpen && active && (
+        <div className="adm-modal-overlay" onClick={() => !resetting && setResetConfirmOpen(false)}>
+          <div className="adm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Reset all data for {active.year} {active.period}?</h3>
+            <div className="adm-modal-sub">
+              This permanently deletes every unit offering for this semester, and everything built on them: Tutor List staffing and dashboard access, Student List enrolments, assessments, ULOs, PLO mappings, grade uploads and AI reports. Use this when there are too many changes to fix by hand and you'd rather redo the semester from scratch.
+              <br /><br />
+              Staff and student accounts are never touched — nobody's login is affected, including your own.
+            </div>
+            <div className="adm-modal-actions">
+              <button className="btn" disabled={resetting} onClick={() => setResetConfirmOpen(false)}>Cancel</button>
+              <button className="btn danger" disabled={resetting} onClick={() => void resetSemesterData()}>{resetting ? "Resetting..." : "Reset all data"}</button>
             </div>
           </div>
         </div>
