@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createAdminUser, createAdminUsers, errorMessage, resetAdminUserPassword, roleLabel, setAdminUserActive, setAdminUserRole } from "../api";
-import Sidebar from "../components/Sidebar";
-import AdminNav from "../components/AdminNav";
+import AdminSidebar from "../components/AdminSidebar";
 import { findColumn, parseCsv } from "../csv";
 import { useAdminContext } from "../useAdminContext";
 
@@ -111,10 +110,9 @@ export default function AdminStaff() {
     } catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
   };
 
-  return <div className="app"><Sidebar user={session.user} /><main className="main">
+  return <div className="app"><AdminSidebar user={session.user} /><main className="main">
     <div className="topbar"><div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester setup</Link><span className="sep">›</span><strong>Staff records</strong></div><div className="top-actions"><button className="btn" onClick={() => { setStaged([]); setUploadOpen(true); }}>Upload staff CSV</button><button className="btn primary" onClick={() => setAddOpen(true)}>+ Add staff</button></div></div>
     <div className="content"><div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Staff records</h1><div className="sub">Management controls dashboard access using staff ID, Monash email, role, and temporary passwords.</div></div></div>
-      <AdminNav counts={{ "/admin/staff": data?.staff.length ?? 0 }} />
       {(flash || error || loading) && <div className="adm-flash"><span>{flash || error || "Loading staff records..."}{temporaryPasswords.length > 0 && <span style={{ display: "block", marginTop: 8 }}>{temporaryPasswords.map((item) => <span key={item.name} style={{ display: "block" }}><strong>{item.name}:</strong> <code>{item.password}</code></span>)}</span>}</span><span className="x" onClick={() => { setFlash(""); setTemporaryPasswords([]); }}>✕</span></div>}
       <div className="adm-stats"><div className="adm-stat navy"><div className="lbl"><span className="b" />Staff on file</div><div className="v">{data?.staff.length ?? 0}</div><div className="sub">Stored staff accounts</div></div><div className="adm-stat ok"><div className="lbl"><span className="b" />Active</div><div className="v">{activeCount}</div><div className="sub">Can sign in</div></div><div className="adm-stat warn"><div className="lbl"><span className="b" />Password change required</div><div className="v">{pendingCount}</div><div className="sub">New temporary accounts</div></div><div className="adm-stat"><div className="lbl"><span className="b" />Unassigned</div><div className="v">{unassigned}</div><div className="sub">Teaching staff without an offering</div></div></div>
       <div className="adm-toolbar"><div className="adm-search">⌕<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by staff ID, name, or email…" /></div><span className="adm-toolbar-lbl">Role</span><select className="adm-select" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as "all" | Role)}><option value="all">All roles</option><option value="management">Management</option><option value="coordinator">Unit coordinator</option><option value="lecturer">Lecturer</option></select><span className="adm-count">{visible.length} staff account{visible.length === 1 ? "" : "s"}</span></div>

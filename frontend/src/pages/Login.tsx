@@ -24,7 +24,7 @@ function mockSession(email: string): Session {
 
 export default function Login() {
   const [step, setStep] = useState<"email" | "password">("email");
-  const [email, setEmail] = useState("elise.chen@monash.edu");
+  const [email, setEmail] = useState(import.meta.env.DEV ? "elise.chen@monash.edu" : "");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -92,6 +92,7 @@ export default function Login() {
                   <input
                     className="input lg"
                     type="email"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoFocus
@@ -138,6 +139,7 @@ export default function Login() {
                   <input
                     className="input lg"
                     type="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoFocus

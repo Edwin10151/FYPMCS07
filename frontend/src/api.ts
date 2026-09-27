@@ -448,7 +448,7 @@ export function inspectStaffingRoster(token: string, semesterId: number, file: F
   }>;
 }
 
-export type NewStaffAccount = { email: string; full_name: string };
+export type NewStaffAccount = { email: string; full_name: string; temporary_password: string };
 
 export type RosterPersonOption = { name: string; email: string | null; role_type: "lecture" | "tutorial" | "laboratory" };
 

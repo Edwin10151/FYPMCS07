@@ -9,6 +9,7 @@ const NAV_ADMIN = [
   { to: "/admin/offerings", label: "Unit Offerings", ic: "i-units" },
   { to: "/admin/tutors", label: "Tutor List", ic: "i-users" },
   { to: "/admin/enrolments", label: "Student List", ic: "i-up" },
+  { to: "/admin/staff", label: "Staff Accounts", ic: "i-users" },
 ];
 
 export default function AdminSidebar({ user }: { user: SessionUser }) {

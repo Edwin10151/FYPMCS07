@@ -2666,20 +2666,28 @@ async def _read_roster_upload(semester_id: int, file: UploadFile) -> list[dict]:
     return units
 
 
-def _ensure_staff_account(cur, full_name: str, email: str) -> int:
-    """Auto-provision a login for a roster-listed staff member who has no account yet.
-    Uses the shared default password until SSO replaces password auth entirely."""
-    cur.execute("SELECT role_id FROM role WHERE role_name = 'lecturer'")
-    lecturer_role_id = cur.fetchone()["role_id"]
+def _ensure_staff_account(cur, full_name: str, email: str, role_name: str = "lecturer") -> dict:
+    """Auto-provision a roster-listed account and return its one-time credentials."""
+    email = email.strip().lower()
+    if not email.endswith("@monash.edu"):
+        raise HTTPException(status_code=422, detail="Roster accounts require a Monash staff email address")
+    cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
+    role_id = cur.fetchone()["role_id"]
+    temporary_password = generate_temporary_password()
     cur.execute(
         """
-        INSERT INTO app_user (full_name, email, password_hash, role_id)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO app_user (full_name, email, password_hash, role_id, must_change_password)
+        VALUES (%s, %s, %s, %s, TRUE)
         RETURNING user_id
         """,
-        (full_name, email, hash_password(settings.demo_password), lecturer_role_id),
+        (full_name, email, hash_password(temporary_password), role_id),
     )
-    return cur.fetchone()["user_id"]
+    return {
+        "user_id": cur.fetchone()["user_id"],
+        "full_name": full_name,
+        "email": email,
+        "temporary_password": temporary_password,
+    }
 
 
 def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[str], unit_code: str | None = None) -> tuple[int, list[dict]]:
@@ -2731,8 +2739,9 @@ def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[s
             if match:
                 staff_user_id = match["user_id"]
             else:
-                staff_user_id = _ensure_staff_account(cur, entry["name"] or entry["email"], entry["email"])
-                new_accounts.append({"email": entry["email"], "full_name": entry["name"]})
+                account = _ensure_staff_account(cur, entry["name"] or entry["email"], entry["email"])
+                staff_user_id = account["user_id"]
+                new_accounts.append({key: value for key, value in account.items() if key != "user_id"})
             if staff_user_id != coordinator_id:
                 cur.execute(
                     "INSERT INTO offering_lecturer (offering_id, lecturer_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
@@ -2771,7 +2780,7 @@ def _sync_staffing_from_latest_snapshot(cur, semester_id: int, unit_code: str, o
     return _apply_staffing_for_unit(cur, offering_id, unit, [], unit_code=unit_code)
 
 
-def _resolve_coordinator_user_id(cur, unit: dict, email: str) -> int:
+def _resolve_coordinator_user_id(cur, unit: dict, email: str) -> tuple[int, dict | None]:
     """Find-or-create the login for a coordinator chosen either from this unit's own roster
     list, or — when the roster lists no staff at all for it (e.g. a placement unit with only
     a coordinator and no lecturers) — from its Handbook-published candidates instead. Promotes
@@ -2791,17 +2800,10 @@ def _resolve_coordinator_user_id(cur, unit: dict, email: str) -> int:
     if match:
         if match["role_name"] == "lecturer":
             cur.execute("UPDATE app_user SET role_id = %s WHERE user_id = %s", (coordinator_role_id, match["user_id"]))
-        return match["user_id"]
+        return match["user_id"], None
 
-    cur.execute(
-        """
-        INSERT INTO app_user (full_name, email, password_hash, role_id)
-        VALUES (%s, %s, %s, %s)
-        RETURNING user_id
-        """,
-        (entry["name"], email, hash_password(settings.demo_password), coordinator_role_id),
-    )
-    return cur.fetchone()["user_id"]
+    account = _ensure_staff_account(cur, entry["name"], email, "coordinator")
+    return account["user_id"], {key: value for key, value in account.items() if key != "user_id"}
 
 
 def _create_offering_for_unit(cur, semester_id: int, unit_code: str, unit: dict, coordinator_user_id: int | None) -> int:
@@ -2964,7 +2966,11 @@ def commit_staffing_roster(
                 # One coordinator choice covers every real code this row represents (a co-taught
                 # unit shares the same teaching arrangement across both codes), so resolve it once.
                 chosen_email = (payload.coordinators.get(unit["unit_code"]) or "").strip().lower() or None
-                coordinator_user_id = _resolve_coordinator_user_id(cur, unit, chosen_email) if chosen_email else None
+                coordinator_user_id = None
+                if chosen_email:
+                    coordinator_user_id, new_coordinator_account = _resolve_coordinator_user_id(cur, unit, chosen_email)
+                    if new_coordinator_account:
+                        accounts_created.append(new_coordinator_account)
 
                 for code in codes:
                     cur.execute(

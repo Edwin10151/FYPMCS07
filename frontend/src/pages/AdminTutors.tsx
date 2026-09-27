@@ -365,8 +365,9 @@ export default function AdminTutors() {
                 <div className="adm-stat ok"><div className="lbl"><span className="b" />Matched offerings</div><div className="v">{commitResult.matched_offerings}</div><div className="sub">Staffing synced</div></div>
                 <div className="adm-stat navy"><div className="lbl"><span className="b" />Offerings created</div><div className="v">{commitResult.offerings_created}</div><div className="sub">New units this semester</div></div>
                 <div className="adm-stat"><div className="lbl"><span className="b" />Staffing rows saved</div><div className="v">{commitResult.staffing_rows_created}</div><div className="sub">Lecture / tutorial / lab rows</div></div>
-                <div className="adm-stat navy"><div className="lbl"><span className="b" />New staff accounts</div><div className="v">{commitResult.accounts_created.length}</div><div className="sub">Created with the default password</div></div>
+                <div className="adm-stat navy"><div className="lbl"><span className="b" />New staff accounts</div><div className="v">{commitResult.accounts_created.length}</div><div className="sub">Temporary passwords generated</div></div>
               </div>
+              {commitResult.accounts_created.length > 0 && <div className="adm-flash"><span><strong>Share these temporary passwords securely. They are shown only in this result.</strong>{commitResult.accounts_created.map((account) => <span key={account.email} style={{ display: "block", marginTop: 8 }}>{account.full_name} ({account.email}): <code>{account.temporary_password}</code></span>)}</span></div>}
               {commitResult.warnings.length > 0 && (
                 <div className="adm-card">
                   <div className="adm-card-head"><div><h4>Warnings</h4></div></div>
