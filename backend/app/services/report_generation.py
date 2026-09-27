@@ -182,6 +182,9 @@ def _ollama_draft(
     base_url: str,
     model: str,
     timeout_seconds: float,
+    num_ctx: int,
+    num_predict: int,
+    keep_alive: str,
 ) -> ReportDraft:
     if not model:
         raise ReportGenerationError("LLM_MODEL must be configured when LLM_PROVIDER=ollama", 500)
@@ -192,8 +195,13 @@ def _ollama_draft(
             json={
                 "model": model,
                 "stream": False,
+                "keep_alive": keep_alive,
                 "format": ReportDraft.model_json_schema(),
-                "options": {"temperature": 0},
+                "options": {
+                    "temperature": 0,
+                    "num_ctx": num_ctx,
+                    "num_predict": num_predict,
+                },
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {
@@ -221,13 +229,24 @@ def generate_report(
     local_llm_url: str,
     model: str,
     timeout_seconds: float,
+    num_ctx: int = 4096,
+    num_predict: int = 1200,
+    keep_alive: str = "10m",
 ) -> GeneratedReport:
     normalized_provider = provider.strip().lower()
     if normalized_provider == "mock":
         draft = _mock_draft(evidence)
         model_name = None
     elif normalized_provider == "ollama":
-        draft = _ollama_draft(evidence, local_llm_url, model, timeout_seconds)
+        draft = _ollama_draft(
+            evidence,
+            local_llm_url,
+            model,
+            timeout_seconds,
+            num_ctx,
+            num_predict,
+            keep_alive,
+        )
         model_name = model
     else:
         raise ReportGenerationError(f"Unsupported LLM provider: {provider}", 500)

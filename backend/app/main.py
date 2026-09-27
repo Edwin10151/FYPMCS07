@@ -748,6 +748,9 @@ def generate_report_draft(
             local_llm_url=settings.local_llm_url,
             model=settings.llm_model,
             timeout_seconds=settings.llm_timeout_seconds,
+            num_ctx=settings.llm_num_ctx,
+            num_predict=settings.llm_num_predict,
+            keep_alive=settings.llm_keep_alive,
         )
     except ReportGenerationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

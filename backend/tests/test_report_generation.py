@@ -113,7 +113,12 @@ def test_ollama_request_enforces_schema_and_validates_response(monkeypatch):
 
     assert generated.draft == expected
     assert captured["json"]["format"] == ReportDraft.model_json_schema()
-    assert captured["json"]["options"] == {"temperature": 0}
+    assert captured["json"]["options"] == {
+        "temperature": 0,
+        "num_ctx": 4096,
+        "num_predict": 1200,
+    }
+    assert captured["json"]["keep_alive"] == "10m"
     prompt = captured["json"]["messages"][1]["content"]
     assert json.loads(prompt)["student_count"] == 100
     assert "student_id" not in prompt
