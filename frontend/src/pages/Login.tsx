@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
 import { errorMessage, login, saveSession, type Session } from "../api";
 import "./Login.css";
@@ -111,7 +111,7 @@ export default function Login() {
               </form>
 
               <div className="form-foot">
-                <a href="#">Can't login</a>
+                Need help? Contact your faculty administrator.
               </div>
             </>
           ) : (
@@ -148,9 +148,7 @@ export default function Login() {
                 {error && <p className="login-error" role="alert">{error}</p>}
 
                 <div className="between">
-                  <a href="#" className="link">
-                    Forgot password?
-                  </a>
+                  <span className="link">Password help is managed by your faculty administrator.</span>
                 </div>
 
                 <button type="submit" className="primary" disabled={busy}>
@@ -165,8 +163,6 @@ export default function Login() {
               )}
 
               <div className="form-foot-links">
-                <a href="#">Can't login</a>
-                <a href="#">Lost or new phone? Reset your MFA</a>
                 <a
                   href="#"
                   onClick={(e) => {
@@ -192,7 +188,7 @@ export default function Login() {
           </div>
 
           <div className="form-foot">
-            Need access? <Link to="/admin">Contact your faculty admin</Link>
+            Need access? Contact your faculty administrator.
           </div>
         </div>
       </main>
