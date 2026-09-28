@@ -12,6 +12,27 @@ def _one(cur, query: str, params: tuple):
     return row[0] if isinstance(row, tuple) else next(iter(row.values()))
 
 
+def ensure_super_admin() -> None:
+    """Idempotent bootstrap for the super_admin tier: runs every startup (unlike
+    seed_demo_data, which only runs once against an empty database), so the
+    account exists whether this is a fresh volume or one that's already seeded."""
+    settings = get_settings()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT role_id FROM role WHERE role_name = 'super_admin'")
+            role = cur.fetchone()
+            if not role:
+                return
+            cur.execute(
+                """
+                INSERT INTO app_user (full_name, email, password_hash, role_id)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (email) DO NOTHING
+                """,
+                ("Super Admin", "super.admin@monash.edu", hash_password(settings.demo_password), role["role_id"]),
+            )
+
+
 def seed_demo_data() -> None:
     settings = get_settings()
     with get_conn() as conn:

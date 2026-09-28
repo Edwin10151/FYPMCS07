@@ -8,7 +8,7 @@ import secrets
 from typing import Annotated, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -64,7 +64,6 @@ def create_access_token(user: dict) -> str:
 
 def get_current_user(
     credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer)],
-    request: Request,
 ) -> dict:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
@@ -90,8 +89,6 @@ def get_current_user(
     )
     if not user or not user["is_active"]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
-    if user["must_change_password"] and request.url.path != "/api/auth/change-password":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Change the temporary password before continuing")
     return user
 
 
@@ -107,7 +104,7 @@ def require_permission(min_permission_level: int):
 def ensure_offering_access(user: dict, offering_id: int, min_permission_level: int = 10) -> dict:
     if user["permission_level"] < min_permission_level:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
-    if user["role_name"] == "management":
+    if user["role_name"] in ("management", "super_admin"):
         return user
 
     if user["role_name"] == "coordinator":

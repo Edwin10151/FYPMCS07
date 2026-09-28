@@ -24,6 +24,7 @@ export default function AdminOfferings() {
   }, [data, semesterId]);
 
   if (!session) return null;
+  const isSuperAdmin = session.user.role_name === "super_admin";
 
   const period = data?.periods.find((item) => item.semester_id === semesterId) ?? null;
   const offerings = data?.offerings.filter((offering) => offering.semester_id === semesterId) ?? [];
@@ -99,7 +100,7 @@ export default function AdminOfferings() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester Setup</Link><span className="sep">›</span><strong>Unit Offerings</strong></div>
-          <div className="top-actions"><button className="btn primary" disabled={!semesterId} onClick={openAdd}>+ Add unit</button></div>
+          <div className="top-actions"><button className="btn primary" disabled={!semesterId || !isSuperAdmin} title={isSuperAdmin ? undefined : "Only a super admin can add unit offerings"} onClick={openAdd}>+ Add unit</button></div>
         </div>
         <div className="content">
           <div className="unit-banner">
@@ -129,7 +130,7 @@ export default function AdminOfferings() {
                   <td>{offering.unit_name}</td>
                   <td className="muted">{offering.program_codes.join(", ") || "—"}</td>
                   <td>{offering.coordinator_name ?? <span className="unassigned">Unassigned</span>}</td>
-                  <td style={{ textAlign: "right" }}><div className="row-tools"><button type="button" className="ic danger" title={`Delete ${offering.unit_code}`} onClick={() => setDeleteTarget(offering)}>×</button></div></td>
+                  <td style={{ textAlign: "right" }}><div className="row-tools"><button type="button" className="ic danger" disabled={!isSuperAdmin} title={isSuperAdmin ? `Delete ${offering.unit_code}` : "Only a super admin can remove unit offerings"} onClick={() => setDeleteTarget(offering)}>×</button></div></td>
                 </tr>)}
               </tbody></table>
             )}
