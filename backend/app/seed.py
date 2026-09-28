@@ -25,8 +25,8 @@ def ensure_super_admin() -> None:
                 return
             cur.execute(
                 """
-                INSERT INTO app_user (full_name, email, password_hash, role_id)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO app_user (full_name, email, password_hash, role_id, must_change_password)
+                VALUES (%s, %s, %s, %s, TRUE)
                 ON CONFLICT (email) DO NOTHING
                 """,
                 ("Super Admin", "super.admin@monash.edu", hash_password(settings.demo_password), role["role_id"]),
