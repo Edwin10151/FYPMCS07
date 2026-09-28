@@ -49,15 +49,15 @@ export default function ChangePassword() {
           <form onSubmit={submit}>
             <label className="field">
               <span className="lbl">Temporary password</span>
-              <input className="input lg" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required autoFocus />
+              <input className="input lg" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required autoFocus />
             </label>
             <label className="field">
               <span className="lbl">New password</span>
-              <input className="input lg" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={12} required />
+              <input className="input lg" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={12} required />
             </label>
             <label className="field">
               <span className="lbl">Confirm new password</span>
-              <input className="input lg" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} minLength={12} required />
+              <input className="input lg" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} minLength={12} required />
             </label>
             {error && <p className="login-error" role="alert">{error}</p>}
             <button type="submit" className="primary" disabled={busy}>{busy ? "Saving..." : "Save password"}</button>

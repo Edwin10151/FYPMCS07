@@ -32,6 +32,7 @@ from app.seed import ensure_super_admin, seed_demo_data
 from app.services.calculation import split_weight
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
+from app.services.email_notification import send_reminders
 from app.services.unit_coordinator import fetch_unit_coordinators_for_units
 from app.services.report_generation import (
     AssessmentEvidence,
@@ -91,6 +92,12 @@ class AdminUserUpdate(BaseModel):
 
 class AdminUserBulkCreate(BaseModel):
     users: list[AdminUserCreate]
+
+
+class EmailReminderSend(BaseModel):
+    semester_id: int
+    subject: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=4000)
 
 
 class MappingUpdate(BaseModel):
@@ -743,6 +750,9 @@ def generate_report_draft(
             local_llm_url=settings.local_llm_url,
             model=settings.llm_model,
             timeout_seconds=settings.llm_timeout_seconds,
+            num_ctx=settings.llm_num_ctx,
+            num_predict=settings.llm_num_predict,
+            keep_alive=settings.llm_keep_alive,
         )
     except ReportGenerationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
@@ -1269,6 +1279,116 @@ def update_admin_user_status(
     return {"status": "updated"}
 
 
+@app.post("/api/admin/users/{user_id}/reset-password")
+def reset_admin_user_password(
+    user_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    if user_id == user["user_id"]:
+        raise HTTPException(status_code=409, detail="You cannot reset your own password here")
+    temporary_password = generate_temporary_password()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE app_user
+                SET password_hash = %s, must_change_password = TRUE
+                WHERE user_id = %s
+                RETURNING full_name
+                """,
+                (hash_password(temporary_password), user_id),
+            )
+            account = cur.fetchone()
+            if not account:
+                raise HTTPException(status_code=404, detail="Staff account not found")
+    return {"full_name": account["full_name"], "temporary_password": temporary_password}
+
+
+def _email_reminder_preview(semester_id: int) -> dict:
+    semester = fetch_one(
+        "SELECT semester_id, year, period, status FROM semester WHERE semester_id = %s",
+        (semester_id,),
+    )
+    if not semester:
+        raise HTTPException(status_code=404, detail="Semester not found")
+    recipients = fetch_all(
+        """
+        SELECT staff.user_id, staff.full_name, staff.email,
+               STRING_AGG(DISTINCT unit.unit_code, ', ' ORDER BY unit.unit_code) AS units
+        FROM unit_offering offering
+        JOIN unit ON unit.unit_id = offering.unit_id
+        JOIN app_user staff ON staff.user_id = offering.coordinator_id
+        WHERE offering.semester_id = %s
+          AND offering.status <> 'discontinued'
+          AND staff.is_active = TRUE
+        GROUP BY staff.user_id, staff.full_name, staff.email
+        ORDER BY staff.full_name
+        """,
+        (semester_id,),
+    )
+    label = f"{semester['year']} {semester['period']}"
+    return {
+        "semester": semester,
+        "configured": settings.email_configured,
+        "sender": settings.email_from or None,
+        "recipients": recipients,
+        "subject": f"Action required: complete OBE setup for {label}",
+        "body": (
+            f"The MCS07 Curriculum Analytics dashboard is ready for {label}. "
+            "Please sign in and complete the OBE setup and reporting workflow for your assigned unit(s)."
+        ),
+    }
+
+
+@app.get("/api/admin/email-reminders/preview")
+def email_reminder_preview(
+    semester_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    return _email_reminder_preview(semester_id)
+
+
+@app.post("/api/admin/email-reminders/send")
+def send_email_reminder(
+    payload: EmailReminderSend,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    preview = _email_reminder_preview(payload.semester_id)
+    if not preview["configured"]:
+        raise HTTPException(status_code=503, detail="Email delivery is not configured")
+    if not preview["recipients"]:
+        raise HTTPException(status_code=422, detail="No active unit coordinators are assigned")
+    try:
+        deliveries = send_reminders(settings, preview["recipients"], payload.subject, payload.body)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for delivery in deliveries:
+                cur.execute(
+                    """
+                    INSERT INTO email_notification_delivery
+                        (semester_id, sent_by, recipient_user_id, recipient_email, subject, status, error_message)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        payload.semester_id,
+                        user["user_id"],
+                        delivery["user_id"],
+                        delivery["email"],
+                        payload.subject,
+                        delivery["status"],
+                        delivery["error"],
+                    ),
+                )
+    return {
+        "sent": sum(item["status"] == "sent" for item in deliveries),
+        "failed": sum(item["status"] == "failed" for item in deliveries),
+        "deliveries": deliveries,
+    }
+
+
 _ADMIN_ROLE_NAMES = {"management", "super_admin"}
 _SEMESTER_STATUSES = {"planning", "active", "archived"}
 _OFFERING_STATUSES = {"draft", "active", "discontinued"}
@@ -1625,6 +1745,42 @@ def deactivate_admin_period(
         "next_year": next_year,
         "next_period": next_period,
     }
+
+
+@app.post("/api/admin/periods/{semester_id}/reset")
+def reset_admin_period(
+    semester_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    """Wipe this semester's unit offerings back to nothing — the Tutor List and Student
+    List commit flows both build on unit_offering, so deleting it here cascades to every
+    offering_staffing/offering_lecturer/offering_program row, every assessment, ULO,
+    PLO mapping, grade upload and AI report tied to those offerings for this semester.
+    Accounts are never touched, including whoever is running this reset."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Academic period not found")
+
+            cur.execute("SELECT offering_id FROM unit_offering WHERE semester_id = %s", (semester_id,))
+            offering_ids = [row["offering_id"] for row in cur.fetchall()]
+
+            if offering_ids:
+                # These two don't cascade from unit_offering, so they must be cleared first
+                # or the DELETE below fails with a foreign-key violation.
+                cur.execute("DELETE FROM enrollment WHERE offering_id = ANY(%s)", (offering_ids,))
+                cur.execute(
+                    "UPDATE ulo_plo_mapping_suggestion SET source_offering_id = NULL WHERE source_offering_id = ANY(%s)",
+                    (offering_ids,),
+                )
+
+            cur.execute("DELETE FROM unit_offering WHERE semester_id = %s", (semester_id,))
+            offerings_deleted = cur.rowcount
+
+            cur.execute("DELETE FROM staffing_import_snapshot WHERE semester_id = %s", (semester_id,))
+
+    return {"status": "reset", "offerings_deleted": offerings_deleted}
 
 
 @app.post("/api/admin/offerings", status_code=201)
@@ -2525,20 +2681,28 @@ async def _read_roster_upload(semester_id: int, file: UploadFile) -> list[dict]:
     return units
 
 
-def _ensure_staff_account(cur, full_name: str, email: str) -> int:
-    """Auto-provision a login for a roster-listed staff member who has no account yet.
-    Uses the shared default password until SSO replaces password auth entirely."""
-    cur.execute("SELECT role_id FROM role WHERE role_name = 'lecturer'")
-    lecturer_role_id = cur.fetchone()["role_id"]
+def _ensure_staff_account(cur, full_name: str, email: str, role_name: str = "lecturer") -> dict:
+    """Auto-provision a roster-listed account and return its one-time credentials."""
+    email = email.strip().lower()
+    if not email.endswith("@monash.edu"):
+        raise HTTPException(status_code=422, detail="Roster accounts require a Monash staff email address")
+    cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
+    role_id = cur.fetchone()["role_id"]
+    temporary_password = generate_temporary_password()
     cur.execute(
         """
-        INSERT INTO app_user (full_name, email, password_hash, role_id)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO app_user (full_name, email, password_hash, role_id, must_change_password)
+        VALUES (%s, %s, %s, %s, TRUE)
         RETURNING user_id
         """,
-        (full_name, email, hash_password(settings.demo_password), lecturer_role_id),
+        (full_name, email, hash_password(temporary_password), role_id),
     )
-    return cur.fetchone()["user_id"]
+    return {
+        "user_id": cur.fetchone()["user_id"],
+        "full_name": full_name,
+        "email": email,
+        "temporary_password": temporary_password,
+    }
 
 
 def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[str], unit_code: str | None = None) -> tuple[int, list[dict]]:
@@ -2590,8 +2754,9 @@ def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[s
             if match:
                 staff_user_id = match["user_id"]
             else:
-                staff_user_id = _ensure_staff_account(cur, entry["name"] or entry["email"], entry["email"])
-                new_accounts.append({"email": entry["email"], "full_name": entry["name"]})
+                account = _ensure_staff_account(cur, entry["name"] or entry["email"], entry["email"])
+                staff_user_id = account["user_id"]
+                new_accounts.append({key: value for key, value in account.items() if key != "user_id"})
             if staff_user_id != coordinator_id:
                 cur.execute(
                     "INSERT INTO offering_lecturer (offering_id, lecturer_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
@@ -2630,7 +2795,7 @@ def _sync_staffing_from_latest_snapshot(cur, semester_id: int, unit_code: str, o
     return _apply_staffing_for_unit(cur, offering_id, unit, [], unit_code=unit_code)
 
 
-def _resolve_coordinator_user_id(cur, unit: dict, email: str) -> int:
+def _resolve_coordinator_user_id(cur, unit: dict, email: str) -> tuple[int, dict | None]:
     """Find-or-create the login for a coordinator chosen either from this unit's own roster
     list, or — when the roster lists no staff at all for it (e.g. a placement unit with only
     a coordinator and no lecturers) — from its Handbook-published candidates instead. Promotes
@@ -2650,17 +2815,10 @@ def _resolve_coordinator_user_id(cur, unit: dict, email: str) -> int:
     if match:
         if match["role_name"] == "lecturer":
             cur.execute("UPDATE app_user SET role_id = %s WHERE user_id = %s", (coordinator_role_id, match["user_id"]))
-        return match["user_id"]
+        return match["user_id"], None
 
-    cur.execute(
-        """
-        INSERT INTO app_user (full_name, email, password_hash, role_id)
-        VALUES (%s, %s, %s, %s)
-        RETURNING user_id
-        """,
-        (entry["name"], email, hash_password(settings.demo_password), coordinator_role_id),
-    )
-    return cur.fetchone()["user_id"]
+    account = _ensure_staff_account(cur, entry["name"], email, "coordinator")
+    return account["user_id"], {key: value for key, value in account.items() if key != "user_id"}
 
 
 def _create_offering_for_unit(cur, semester_id: int, unit_code: str, unit: dict, coordinator_user_id: int | None) -> int:
@@ -2823,7 +2981,11 @@ def commit_staffing_roster(
                 # One coordinator choice covers every real code this row represents (a co-taught
                 # unit shares the same teaching arrangement across both codes), so resolve it once.
                 chosen_email = (payload.coordinators.get(unit["unit_code"]) or "").strip().lower() or None
-                coordinator_user_id = _resolve_coordinator_user_id(cur, unit, chosen_email) if chosen_email else None
+                coordinator_user_id = None
+                if chosen_email:
+                    coordinator_user_id, new_coordinator_account = _resolve_coordinator_user_id(cur, unit, chosen_email)
+                    if new_coordinator_account:
+                        accounts_created.append(new_coordinator_account)
 
                 for code in codes:
                     cur.execute(

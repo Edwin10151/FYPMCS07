@@ -42,8 +42,8 @@ docker compose run --rm -T -e PYTHONPATH=/app -v "$PWD/backend/tests:/app/tests:
 
 ## Deployment
 
-Push to `main` triggers GitHub Actions. The Droplet deploy script pulls `main`
-and runs the Docker Compose stack.
+Push to `main` triggers GitHub Actions. The workflow connects to the GMKtec
+through Tailscale, pulls `main`, and runs the Docker Compose stack.
 
 ## Report Generation
 
@@ -54,10 +54,20 @@ LLM_PROVIDER=mock
 ```
 
 To use a local Ollama server, set `LLM_PROVIDER=ollama`, `LLM_MODEL` to an
-installed model name, and `LOCAL_LLM_URL` to its internal URL. The backend
-validates a fixed three-section CQI response and does not send student-level
-data to the model. The Report page supports draft saving, QAG submission,
-change requests, approval, and browser-based PDF export.
+installed model name, `LOCAL_LLM_URL=http://ollama:11434`, and
+`COMPOSE_PROFILES=llm`. Start the stack, then install the model once with:
+
+```bash
+docker compose exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M
+```
+
+The Ollama service is private to the Compose network, runs one request at a
+time, and is limited to 6 GB RAM and six CPU cores so the dashboard and
+database remain responsive. The backend calculates the factual attainment and
+historical sections deterministically; Ollama proposes only the next-cohort
+action. Student-level data is never sent to the model. The Report page supports
+draft saving, QAG submission, change requests, approval, and browser-based PDF
+export.
 
 ## Deferred Scope
 

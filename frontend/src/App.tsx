@@ -45,9 +45,8 @@ export default function App() {
       <Route path="/report" element={<RequireAuth><Report /></RequireAuth>} />
       {/* Admin Portal lives at /admin/portal (UnitSelect's "Admin Portal" card
           links here) and fans out to Semester Setup, Unit Offerings, Tutor
-          List and Student List, each using AdminSidebar. /admin and
-          /admin/staff are kept reachable but are no longer linked from
-          navigation — see Sidebar's emptied Administration section. The old
+          List, Student List, and Staff Accounts using AdminSidebar. /admin is
+          retained for the older People & Roles view. The old
           Units & Offerings (/admin/units) and Academic Periods
           (/admin/periods) pages were removed outright. */}
       <Route path="/admin/portal" element={<RequireManagement><AdminMain /></RequireManagement>} />

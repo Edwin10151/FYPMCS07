@@ -390,6 +390,10 @@ export function deactivateAdminPeriod(token: string, semesterId: number) {
   );
 }
 
+export function resetAdminPeriod(token: string, semesterId: number) {
+  return apiFetch<{ status: string; offerings_deleted: number }>(`/admin/periods/${semesterId}/reset`, token, { method: "POST" });
+}
+
 export type OfferingInput = {
   semester_id: number;
   program_ids: number[];
@@ -444,7 +448,7 @@ export function inspectStaffingRoster(token: string, semesterId: number, file: F
   }>;
 }
 
-export type NewStaffAccount = { email: string; full_name: string };
+export type NewStaffAccount = { email: string; full_name: string; temporary_password: string };
 
 export type RosterPersonOption = { name: string; email: string | null; role_type: "lecture" | "tutorial" | "laboratory" };
 
@@ -524,6 +528,31 @@ export function setAdminUserRole(token: string, userId: number, roleName: "super
   return apiFetch<{ status: string }>(`/admin/users/${userId}`, token, {
     method: "PATCH",
     body: JSON.stringify({ role_name: roleName }),
+  });
+}
+
+export function resetAdminUserPassword(token: string, userId: number) {
+  return apiFetch<{ full_name: string; temporary_password: string }>(`/admin/users/${userId}/reset-password`, token, {
+    method: "POST",
+  });
+}
+
+export type EmailReminderPreview = {
+  configured: boolean;
+  sender: string | null;
+  recipients: Array<{ user_id: number; full_name: string; email: string; units: string }>;
+  subject: string;
+  body: string;
+};
+
+export function getEmailReminderPreview(token: string, semesterId: number) {
+  return apiFetch<EmailReminderPreview>(`/admin/email-reminders/preview?semester_id=${semesterId}`, token);
+}
+
+export function sendEmailReminder(token: string, semesterId: number, subject: string, body: string) {
+  return apiFetch<{ sent: number; failed: number }>("/admin/email-reminders/send", token, {
+    method: "POST",
+    body: JSON.stringify({ semester_id: semesterId, subject, body }),
   });
 }
 

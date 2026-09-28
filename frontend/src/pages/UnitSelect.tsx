@@ -59,6 +59,7 @@ export default function UnitSelect() {
               <div className="us-user-email">{session.user.email}</div>
             </div>
           </div>
+          <button className="us-signout" onClick={() => navigate("/settings")}>Account settings</button>
           <button className="us-signout" onClick={() => setShowSignOut(true)}>Sign out</button>
         </div>
       </header>
@@ -78,7 +79,7 @@ export default function UnitSelect() {
               <div className="admin-portal-banner-badge">ADMIN</div>
               <div>
                 <h3>Admin Portal</h3>
-                <div className="admin-portal-banner-sub">Semester Setup · Tutor List · Student List</div>
+                <div className="admin-portal-banner-sub">Semester Setup · Tutor List · Student List · Staff Accounts</div>
               </div>
             </div>
             <div className="admin-portal-banner-cta">Open Admin Portal <span className="unit-arrow">→</span></div>
