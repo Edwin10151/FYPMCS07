@@ -1180,8 +1180,8 @@ def _insert_admin_user(cur, values: tuple[str, str, str, str], creator_role_name
     temporary_password = generate_temporary_password()
     cur.execute(
         """
-        INSERT INTO app_user (staff_id, full_name, email, password_hash, role_id)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO app_user (staff_id, full_name, email, password_hash, role_id, must_change_password)
+        VALUES (%s, %s, %s, %s, %s, TRUE)
         RETURNING user_id
         """,
         (staff_id, full_name, email, hash_password(temporary_password), role["role_id"]),

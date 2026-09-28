@@ -8,7 +8,7 @@ import secrets
 from typing import Annotated, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -17,7 +17,7 @@ from app.db import fetch_one
 bearer = HTTPBearer(auto_error=False)
 PBKDF2_ITERATIONS = 390_000
 MIN_PASSWORD_LENGTH = 12
-TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*"
+TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
 
 def hash_password(password: str) -> str:
@@ -44,7 +44,10 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def generate_temporary_password() -> str:
-    return "".join(secrets.choice(TEMPORARY_PASSWORD_ALPHABET) for _ in range(18))
+    return "-".join(
+        "".join(secrets.choice(TEMPORARY_PASSWORD_ALPHABET) for _ in range(4))
+        for _ in range(3)
+    )
 
 
 def is_valid_password(password: str) -> bool:
@@ -64,6 +67,7 @@ def create_access_token(user: dict) -> str:
 
 def get_current_user(
     credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer)],
+    request: Request,
 ) -> dict:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
@@ -89,6 +93,8 @@ def get_current_user(
     )
     if not user or not user["is_active"]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+    if user["must_change_password"] and request.url.path != "/api/auth/change-password":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Change the temporary password before continuing")
     return user
 
 

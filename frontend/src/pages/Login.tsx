@@ -52,7 +52,7 @@ export default function Login() {
       // Prefer the real API when the backend is up…
       const session = await login(email.trim(), password);
       saveSession(session, remember);
-      navigate("/units");
+      navigate(session.user.must_change_password ? "/change-password" : "/units");
     } catch (err) {
       // A network failure is allowed to use the restricted browser-only demo in
       // Vite development. Invalid API credentials stay invalid everywhere.
