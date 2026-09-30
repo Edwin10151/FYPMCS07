@@ -48,7 +48,7 @@
 .us-modal-icon svg { width: 20px; height: 20px; }
 
 .us-modal h3 {
-  font-family: 'Newsreader', serif;
+  font-family: 'DM Serif Text', serif;
   font-weight: 500;
   font-size: 19px;
   color: var(--monash-dark);
@@ -179,8 +179,8 @@
 }
 
 .us-intro h1 {
-  font-family: 'Newsreader', serif;
-  font-weight: 500;
+  font-family: 'DM Serif Text', serif;
+  font-weight: 700;
   font-size: 34px;
   color: var(--monash-dark);
   margin: 0 0 12px;
@@ -302,7 +302,7 @@
 
 .unit-stat { display: flex; flex-direction: column; gap: 3px; }
 .unit-stat-val {
-  font-family: 'Newsreader', serif;
+  font-family: 'DM Serif Text', serif;
   font-size: 22px;
   font-weight: 500;
   color: var(--ink, #232017);
