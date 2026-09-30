@@ -8,6 +8,9 @@
 .step.done { color: var(--ink-2); }
 .stepper .ln { flex: 1; height: 1px; background: var(--line); }
 .stepper .ln.done { background: var(--ok); }
+.step.clickable { cursor: pointer; background: none; border: none; padding: 0; font: inherit; }
+.step.clickable:hover { color: var(--navy); }
+.step.clickable:hover .n { border-color: var(--navy); }
 
 /* File card */
 .file-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; display: grid; grid-template-columns: 44px 1fr auto; gap: 16px; align-items: center; margin-bottom: 16px; }

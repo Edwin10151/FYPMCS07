@@ -77,6 +77,9 @@ def seed_demo_data() -> None:
                 ("PLO 6", "Decompose ill-defined problems into tractable sub-problems and devise principled solutions."),
                 ("PLO 7", "Investigate current research literature to inform engineering decisions and identify open questions."),
                 ("PLO 8", "Demonstrate professional and ethical practice in the development and deployment of IT artefacts."),
+                ("PLO 9", "Work effectively both independently and as part of a team on IT projects."),
+                ("PLO 10", "Apply project management principles to plan and deliver IT solutions."),
+                ("PLO 11", "Engage in continuous learning to keep pace with emerging technologies and practices."),
             ]
             plo_ids = []
             for code, description in plos:

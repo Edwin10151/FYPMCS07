@@ -948,7 +948,7 @@ def mappings(user: Annotated[dict, Depends(require_offering_access())], offering
         FROM plo p
         JOIN offering_program op ON op.program_id = p.program_id
         WHERE op.offering_id = %s
-        ORDER BY p.plo_code
+        ORDER BY p.plo_id
         """,
         (offering_id,),
     )
