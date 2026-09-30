@@ -84,7 +84,7 @@ export default function Setting() {
           <div className="crumbs">
             <Link to="/units">Home</Link>
             <span className="sep">›</span>
-            <Link to="/settings">Settings</Link>
+            <strong>Settings</strong>
           </div>
           <div className="top-actions">
             <div className="settings-top-note">Profile &amp; security</div>
