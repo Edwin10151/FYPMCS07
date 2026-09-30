@@ -137,7 +137,7 @@ export default function Mapping() {
       <Sidebar user={session.user} />
       <main className="main">
         <div className="topbar">
-          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{offering?.unit_code ?? "Unit"}</Link><span className="sep">›</span><Link to="/mapping">Mapping</Link></div>
+          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{offering?.unit_code ?? "Unit"}</Link><span className="sep">›</span><strong>Mapping</strong></div>
           <div className="top-actions">
             <button className="btn ghost" onClick={() => navigate("/assessments")}>View assessments</button>
             {canEdit && <button className="btn primary" disabled={!hasSetupData || uncoveredUlos.length > 0 || saving} onClick={() => void save()}>{saving ? "Saving..." : "Save mapping"}</button>}

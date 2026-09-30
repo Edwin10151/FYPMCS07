@@ -46,7 +46,7 @@ export default function Dashboard() {
       <Sidebar user={session.user} />
       <main className="main">
         <div className="topbar">
-          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{data?.offering.unit_code ?? "Unit"}</Link><span className="sep">›</span><Link to="/dashboard">Dashboard</Link></div>
+          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{data?.offering.unit_code ?? "Unit"}</Link><span className="sep">›</span><strong>Dashboard</strong></div>
           <div className="top-actions"><button className="btn ghost" onClick={() => window.print()}>Print report</button></div>
         </div>
         <div className="content">
