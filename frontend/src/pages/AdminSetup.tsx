@@ -134,7 +134,8 @@ export default function AdminSetup() {
     setFlashError("");
     try {
       const result = await resetAdminPeriod(session.access_token, active.semester_id);
-      setFlash(`${active.year} ${active.period} was reset — ${result.offerings_deleted} unit offering${result.offerings_deleted === 1 ? "" : "s"} and everything built on them were removed. Ready to start over.`);
+      const accountsNote = result.accounts_deleted > 0 ? ` ${result.accounts_deleted} staff account${result.accounts_deleted === 1 ? "" : "s"} with no other ties were removed too.` : "";
+      setFlash(`${active.year} ${active.period} was reset — ${result.offerings_deleted} unit offering${result.offerings_deleted === 1 ? "" : "s"} and everything built on them were removed.${accountsNote} Ready to start over.`);
       setResetConfirmOpen(false);
       await Promise.all([reload(), loadStaffingStatus(active.semester_id)]);
     } catch (err) {
@@ -295,7 +296,7 @@ export default function AdminSetup() {
             <div className="adm-modal-sub">
               This permanently deletes every unit offering for this semester, and everything built on them: Tutor List staffing and dashboard access, Student List enrolments, assessments, ULOs, PLO mappings, grade uploads and AI reports. Use this when there are too many changes to fix by hand and you'd rather redo the semester from scratch.
               <br /><br />
-              Staff and student accounts are never touched — nobody's login is affected, including your own.
+              A coordinator or lecturer account is also removed, but only if it has no other tie anywhere in the system once this semester is cleared — so an account still linked to another semester, past or present, keeps working. Management and super admin accounts are never touched, including your own, and no other semester's data is ever modified.
             </div>
             <div className="adm-modal-actions">
               <button className="btn" disabled={resetting} onClick={() => setResetConfirmOpen(false)}>Cancel</button>

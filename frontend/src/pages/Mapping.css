@@ -273,7 +273,7 @@
   from { opacity: 0; transform: translateY(8px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-.hb-modal-head h3 { font-family: 'Newsreader', serif; font-weight: 500; font-size: 19px; margin: 0 0 6px; color: var(--ink); }
+.hb-modal-head h3 { font-family: 'Nunito', sans-serif; font-weight: 550; font-size: 19px; margin: 0 0 6px; color: var(--ink); }
 .hb-modal-head p { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; margin: 0 0 20px; }
 .hb-modal-head p em { color: var(--monash-navy); font-style: normal; font-weight: 600; }
 

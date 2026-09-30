@@ -43,10 +43,15 @@ export default function AdminEnrolments() {
   const [latestBatch, setLatestBatch] = useState<EnrollmentBatch | null>(null);
   const [rosterLoading, setRosterLoading] = useState(false);
 
+  const active = data?.periods.find((period) => period.status === "active") ?? null;
+  const offeringsThisSemester = data?.offerings.filter((offering) => offering.semester_id === active?.semester_id && offering.status !== "discontinued") ?? [];
+
   useEffect(() => {
-    if (!data || offeringId) return;
-    setOfferingId(data.offerings.find((offering) => offering.status !== "discontinued")?.offering_id ?? null);
-  }, [data, offeringId]);
+    if (offeringId || !offeringsThisSemester.length) return;
+    setOfferingId(offeringsThisSemester[0].offering_id);
+    // Only auto-select once, the first time offerings become available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offeringsThisSemester.length]);
 
   const loadRoster = async (id: number) => {
     if (!session) return;
@@ -114,8 +119,10 @@ export default function AdminEnrolments() {
     <div className="topbar"><div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester Setup</Link><span className="sep">›</span><strong>Student List</strong></div></div>
     <div className="content"><div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Student List</h1><div className="sub">Upload student ID and name for one unit offering. This list is the School of IT student reference — grade imports and cohort analysis only match against the enrolments stored here, so a grade file can never pull in students from another school.</div></div></div>
       {(flash || error || loading) && <div className="adm-flash">{flash || error || "Loading enrolment records..."}<span className="x" onClick={() => setFlash("")}>✕</span></div>}
+      {!active && !loading && <div className="banner"><div className="ico">!</div><div className="body">No active semester was found, so a student list can't be attached to a unit yet.</div></div>}
+      {active && !offeringsThisSemester.length && !loading && <div className="banner"><div className="ico">!</div><div className="body">{active.year} {active.period} has no unit offerings yet — add one via Unit Offerings or Tutor List before uploading a student list.</div></div>}
       <div className="adm-card">
-        <div className="adm-card-head"><div><h4>Upload Student List</h4><div className="h-sub">Use a UTF-8 CSV. First inspect the headers, map the student ID and name columns, then validate before committing.</div></div><select className="adm-select" value={offeringId ?? ""} onChange={(event) => { setOfferingId(Number(event.target.value)); resetUploadState(); setReplacing(false); }}>{data?.offerings.filter((offering) => offering.status !== "discontinued").map((offering) => <option key={offering.offering_id} value={offering.offering_id}>{offering.year} {offering.period} · {offering.unit_code}</option>)}</select></div>
+        <div className="adm-card-head"><div><h4>Upload Student List</h4><div className="h-sub">Use a UTF-8 CSV. First inspect the headers, map the student ID and name columns, then validate before committing.</div></div><select className="adm-select" disabled={!offeringsThisSemester.length} value={offeringId ?? ""} onChange={(event) => { setOfferingId(Number(event.target.value)); resetUploadState(); setReplacing(false); }}>{offeringsThisSemester.map((offering) => <option key={offering.offering_id} value={offering.offering_id}>{offering.year} {offering.period} · {offering.unit_code}</option>)}</select></div>
         {file ? (
           <div className="adm-file-card">
             <div className="icn">CSV</div>
@@ -134,7 +141,7 @@ export default function AdminEnrolments() {
               <div className="icn">CSV</div>
               <div className="t">Upload Student List</div>
               <div className="s">The file is checked by the server. Required data: one student ID column and a name (either one full-name column, or separate surname / given-names columns).</div>
-              <input type="file" accept=".csv,text/csv" onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} />
+              <input type="file" accept=".csv,text/csv" disabled={!offeringId} onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} />
             </label>
           </div>
         )}
