@@ -1,7 +1,7 @@
 .kpi-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
 .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
 .kpi .lbl { font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.01em; font-weight: 500; }
-.kpi .val { font-family: 'DM Serif Text', serif; font-weight: 500; font-size: 32px; line-height: 1.05; margin-top: 8px; color: var(--ink); letter-spacing: -0.02em; }
+.kpi .val { font-family: 'Nunito', sans-serif; font-weight: 550; font-size: 32px; line-height: 1.05; margin-top: 8px; color: var(--ink); letter-spacing: -0.02em; }
 .kpi .val .u { font-size: 18px; color: var(--ink-3); }
 .kpi .val.warn { color: var(--warn); }
 .kpi .delta { font-size: 11px; color: var(--ink-3); margin-top: 8px; display: flex; align-items: center; gap: 6px; }
@@ -14,7 +14,7 @@
 .lo-card .lo-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .lo-card .lo-code { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-3); letter-spacing: 0.06em; }
 .lo-card .lo-text { font-size: 11.5px; line-height: 1.4; color: var(--ink-2); height: 64px; overflow: hidden; margin-bottom: 14px; }
-.lo-card .lo-pct { font-family: 'DM Serif Text', serif; font-weight: 500; font-size: 30px; color: var(--ink); letter-spacing: -0.02em; line-height: 1; }
+.lo-card .lo-pct { font-family: 'Nunito', sans-serif; font-weight: 550; font-size: 30px; color: var(--ink); letter-spacing: -0.02em; line-height: 1; }
 .lo-card .lo-pct .u { font-size: 14px; color: var(--ink-3); }
 .lo-card.risk .lo-pct { color: var(--risk); }
 .lo-card .lo-bar { margin-top: 12px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; position: relative; }
@@ -77,6 +77,6 @@
 .trend { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 12px; }
 .trend-cell { padding: 10px 12px; background: var(--paper-2); border-radius: 6px; border: 1px solid var(--line); font-size: 11px; }
 .trend-cell .sem { font-family: 'JetBrains Mono', monospace; color: var(--ink-3); margin-bottom: 4px; }
-.trend-cell .v { font-family: 'DM Serif Text', serif; font-size: 18px; font-weight: 500; color: var(--ink); }
+.trend-cell .v { font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 550; color: var(--ink); }
 .trend-cell.now { background: var(--navy-tint); border-color: #DBE3F0; }
 .trend-cell.now .v { color: var(--navy); }

@@ -76,8 +76,8 @@
 }
 
 .signin h2 {
-  font-family: 'DM Serif Text', serif;
-  font-weight: 700;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 550;
   font-size: 28px;
   color: var(--monash-dark);
   margin: 0 0 8px;

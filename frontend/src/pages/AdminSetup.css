@@ -6,10 +6,10 @@
 .current-sem-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px 26px; margin-bottom: 8px; }
 .current-sem-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .current-sem-eye { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
-.current-sem-title { font-family: 'DM Serif Text', serif; font-size: 30px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; margin-bottom: 10px; }
+.current-sem-title { font-family: 'Nunito', sans-serif; font-size: 30px; font-weight: 550; color: var(--ink); letter-spacing: -0.01em; margin-bottom: 10px; }
 .current-sem-stats { display: flex; gap: 32px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line-2); }
 .current-sem-stat { display: flex; flex-direction: column; gap: 3px; }
-.current-sem-stat .v { font-family: 'DM Serif Text', serif; font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; }
+.current-sem-stat .v { font-family: 'Nunito', sans-serif; font-size: 22px; font-weight: 550; color: var(--ink); letter-spacing: -0.01em; }
 .current-sem-stat .l { font-size: 11.5px; color: var(--ink-3); }
 
 /* Tutor List / Student List entry tiles */

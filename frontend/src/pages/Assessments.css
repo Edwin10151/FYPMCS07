@@ -21,7 +21,7 @@
 .weight-bar-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; margin-bottom: 16px; }
 .wbar-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
 .wbar-lbl { font-size: 12px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; text-transform: uppercase; }
-.wbar-total { font-family: 'DM Serif Text', serif; font-size: 24px; color: var(--ok); font-weight: 500; letter-spacing: -0.01em; }
+.wbar-total { font-family: 'Nunito', sans-serif; font-size: 24px; color: var(--ok); font-weight: 550; letter-spacing: -0.01em; }
 .wbar { height: 28px; background: var(--paper); border-radius: 6px; border: 1px solid var(--line); overflow: hidden; display: flex; }
 .wbar .seg { height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: 600; font-family: 'JetBrains Mono', monospace; border-right: 1px solid rgba(255,255,255,0.2); white-space: nowrap; overflow: hidden; transition: width .3s ease, opacity .22s ease, background .2s ease; }
 .wbar .seg:last-child { border-right: none; }
@@ -126,7 +126,7 @@
   color: var(--navy); background: var(--navy-tint); padding: 3px 9px; border-radius: 5px;
   margin-bottom: 8px; text-transform: uppercase;
 }
-.confirm-modal h3 { font-family: 'DM Serif Text', serif; font-weight: 500; font-size: 19px; margin: 0 0 10px; color: var(--ink); }
+.confirm-modal h3 { font-family: 'Nunito', sans-serif; font-weight: 550; font-size: 19px; margin: 0 0 10px; color: var(--ink); }
 .confirm-modal p { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0; }
 .confirm-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 
@@ -138,7 +138,7 @@
   box-shadow: 0 20px 60px rgba(0,27,43,0.25);
   animation: hurdle-modal-in 0.18s ease-out;
 }
-.lo-map-modal h3 { font-family: 'DM Serif Text', serif; font-weight: 500; font-size: 19px; margin: 0 0 10px; color: var(--ink); }
+.lo-map-modal h3 { font-family: 'Nunito', sans-serif; font-weight: 550; font-size: 19px; margin: 0 0 10px; color: var(--ink); }
 .lo-map-intro { font-size: 12.5px; line-height: 1.6; color: var(--ink-2); margin: 0 0 6px; }
 .lo-map-canvas { display: flex; align-items: stretch; gap: 0; margin: 20px 0 14px; }
 .lo-map-sources { display: flex; flex-direction: column; gap: 14px; flex: 1; min-width: 0; position: relative; padding-right: 26px; }
@@ -207,7 +207,7 @@
   color: var(--warn); background: var(--warn-bg); padding: 3px 9px; border-radius: 5px;
   margin-bottom: 8px; text-transform: uppercase;
 }
-.hurdle-modal-head h3 { font-family: 'DM Serif Text', serif; font-weight: 500; font-size: 19px; margin: 0; color: var(--ink); }
+.hurdle-modal-head h3 { font-family: 'Nunito', sans-serif; font-weight: 550; font-size: 19px; margin: 0; color: var(--ink); }
 .hurdle-modal-label { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
 .hurdle-modal-desc { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0; }
 .hurdle-modal-actions { display: flex; justify-content: flex-end; margin-top: 22px; }
