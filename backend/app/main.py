@@ -28,7 +28,7 @@ from app.auth import (
 from app.config import get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
-from app.seed import seed_demo_data
+from app.seed import ensure_super_admin, seed_demo_data
 from app.services.calculation import split_weight
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
@@ -52,6 +52,7 @@ from app.services.report_generation import (
 async def lifespan(app: FastAPI):
     run_migrations()
     seed_demo_data()
+    ensure_super_admin()
     yield
 
 
@@ -288,7 +289,7 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
     elif user["role_name"] == "lecturer":
         query += " WHERE EXISTS (SELECT 1 FROM offering_lecturer ol WHERE ol.offering_id = o.offering_id AND ol.lecturer_id = %s)"
         params = (user["user_id"],)
-    elif user["role_name"] == "management":
+    elif user["role_name"] in ("management", "super_admin"):
         params = None
     else:
         raise HTTPException(status_code=403, detail="Unknown role")
@@ -301,8 +302,9 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
     for row in rows:
         # Management has view-only access to every unit unless it is literally
         # the assigned coordinator for that offering (admin workflows live in
-        # the Admin Portal, not the per-unit workspace).
-        row["can_edit"] = row["coordinator_id"] == user["user_id"]
+        # the Admin Portal, not the per-unit workspace). super_admin is the
+        # exception: it can edit every unit's workspace too.
+        row["can_edit"] = row["coordinator_id"] == user["user_id"] or user["role_name"] == "super_admin"
         del row["coordinator_id"]
     return {"offerings": rows}
 
@@ -1163,12 +1165,14 @@ def _admin_user_values(payload: AdminUserCreate) -> tuple[str, str, str, str]:
     return staff_id, full_name, email, role_name
 
 
-def _insert_admin_user(cur, values: tuple[str, str, str, str]) -> dict:
+def _insert_admin_user(cur, values: tuple[str, str, str, str], creator_role_name: str) -> dict:
     staff_id, full_name, email, role_name = values
     cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
     role = cur.fetchone()
     if not role:
-        raise HTTPException(status_code=422, detail="Role must be management, coordinator, or lecturer")
+        raise HTTPException(status_code=422, detail="Role must be super_admin, management, coordinator, or lecturer")
+    if role_name in _ADMIN_ROLE_NAMES and creator_role_name != "super_admin":
+        raise HTTPException(status_code=403, detail="Only a super admin can grant management or super admin access")
     cur.execute("SELECT 1 FROM app_user WHERE staff_id = %s OR email = %s", (staff_id, email))
     if cur.fetchone():
         raise HTTPException(status_code=409, detail="A staff account already uses that ID or email")
@@ -1203,7 +1207,7 @@ def create_admin_user(
 ):
     with get_conn() as conn:
         with conn.cursor() as cur:
-            return _insert_admin_user(cur, _admin_user_values(payload))
+            return _insert_admin_user(cur, _admin_user_values(payload), user["role_name"])
 
 
 @app.post("/api/admin/users/bulk", status_code=201)
@@ -1218,7 +1222,7 @@ def create_admin_users(
         raise HTTPException(status_code=422, detail="The upload has duplicate staff IDs or emails")
     with get_conn() as conn:
         with conn.cursor() as cur:
-            accounts = [_insert_admin_user(cur, item) for item in values]
+            accounts = [_insert_admin_user(cur, item, user["role_name"]) for item in values]
     return {"accounts": accounts}
 
 
@@ -1234,8 +1238,16 @@ def update_admin_user_status(
         raise HTTPException(status_code=409, detail="You cannot deactivate your own account")
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT role_id FROM app_user WHERE user_id = %s FOR UPDATE", (user_id,))
-            if not cur.fetchone():
+            cur.execute(
+                """
+                SELECT au.role_id, r.role_name AS current_role_name
+                FROM app_user au JOIN role r ON r.role_id = au.role_id
+                WHERE au.user_id = %s FOR UPDATE
+                """,
+                (user_id,),
+            )
+            existing = cur.fetchone()
+            if not existing:
                 raise HTTPException(status_code=404, detail="Staff account not found")
             updates: list[str] = []
             values: list = []
@@ -1247,9 +1259,11 @@ def update_admin_user_status(
                 cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
                 role = cur.fetchone()
                 if not role:
-                    raise HTTPException(status_code=422, detail="Role must be management, coordinator, or lecturer")
-                if user_id == user["user_id"] and role_name != "management":
-                    raise HTTPException(status_code=409, detail="You cannot remove your own Management role")
+                    raise HTTPException(status_code=422, detail="Role must be super_admin, management, coordinator, or lecturer")
+                if (role_name in _ADMIN_ROLE_NAMES or existing["current_role_name"] in _ADMIN_ROLE_NAMES) and user["role_name"] != "super_admin":
+                    raise HTTPException(status_code=403, detail="Only a super admin can change management or super admin access")
+                if user_id == user["user_id"] and role_name not in _ADMIN_ROLE_NAMES:
+                    raise HTTPException(status_code=409, detail="You cannot remove your own admin role")
                 if role_name != "coordinator":
                     cur.execute("SELECT 1 FROM unit_offering WHERE coordinator_id = %s LIMIT 1", (user_id,))
                     if cur.fetchone():
@@ -1375,6 +1389,7 @@ def send_email_reminder(
     }
 
 
+_ADMIN_ROLE_NAMES = {"management", "super_admin"}
 _SEMESTER_STATUSES = {"planning", "active", "archived"}
 _OFFERING_STATUSES = {"draft", "active", "discontinued"}
 _STUDENT_CODE_PATTERN = re.compile(r"^\d{8,9}$")
@@ -1771,7 +1786,7 @@ def reset_admin_period(
 @app.post("/api/admin/offerings", status_code=201)
 def create_admin_offering(
     payload: AdminOfferingCreate,
-    user: Annotated[dict, Depends(require_permission(30))],
+    user: Annotated[dict, Depends(require_permission(40))],
 ):
     _validate_offering_status(payload.status)
     unit_code = payload.unit_code.strip().upper()
@@ -1823,7 +1838,7 @@ def create_admin_offering(
 def update_admin_offering(
     offering_id: int,
     payload: AdminOfferingUpdate,
-    user: Annotated[dict, Depends(require_permission(30))],
+    user: Annotated[dict, Depends(require_permission(40))],
 ):
     _validate_offering_status(payload.status)
     unit_code = payload.unit_code.strip().upper()
@@ -1875,7 +1890,7 @@ def update_admin_offering(
 @app.delete("/api/admin/offerings/{offering_id}")
 def delete_admin_offering(
     offering_id: int,
-    user: Annotated[dict, Depends(require_permission(30))],
+    user: Annotated[dict, Depends(require_permission(40))],
 ):
     try:
         with get_conn() as conn:
@@ -1892,7 +1907,7 @@ def delete_admin_offering(
 @app.post("/api/admin/offerings/bulk-from-roster", status_code=201)
 def create_offerings_from_roster(
     payload: RosterOfferingsBulkCreate,
-    user: Annotated[dict, Depends(require_permission(30))],
+    user: Annotated[dict, Depends(require_permission(40))],
 ):
     if not payload.offerings:
         raise HTTPException(status_code=422, detail="Select at least one unit to add")

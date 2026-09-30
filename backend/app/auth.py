@@ -17,7 +17,7 @@ from app.db import fetch_one
 bearer = HTTPBearer(auto_error=False)
 PBKDF2_ITERATIONS = 390_000
 MIN_PASSWORD_LENGTH = 12
-TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*"
+TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
 
 def hash_password(password: str) -> str:
@@ -44,7 +44,10 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def generate_temporary_password() -> str:
-    return "".join(secrets.choice(TEMPORARY_PASSWORD_ALPHABET) for _ in range(18))
+    return "-".join(
+        "".join(secrets.choice(TEMPORARY_PASSWORD_ALPHABET) for _ in range(4))
+        for _ in range(3)
+    )
 
 
 def is_valid_password(password: str) -> bool:
@@ -107,7 +110,7 @@ def require_permission(min_permission_level: int):
 def ensure_offering_access(user: dict, offering_id: int, min_permission_level: int = 10) -> dict:
     if user["permission_level"] < min_permission_level:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
-    if user["role_name"] == "management":
+    if user["role_name"] in ("management", "super_admin"):
         return user
 
     if user["role_name"] == "coordinator":

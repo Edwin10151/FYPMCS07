@@ -111,7 +111,8 @@ export default function Report() {
   const complete = Object.values(sections).every((value) => value.trim());
   const teachingUser = session?.user.role_name === "lecturer" || session?.user.role_name === "coordinator";
   const canEdit = !!teachingUser && (!report || report.status === "draft" || report.status === "changes_requested");
-  const canReview = session?.user.role_name === "management" && report?.status === "submitted";
+  const isAdminTier = session?.user.role_name === "management" || session?.user.role_name === "super_admin";
+  const canReview = isAdminTier && report?.status === "submitted";
 
   useEffect(() => {
     if (!dirty) return;
