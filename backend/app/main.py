@@ -1756,7 +1756,13 @@ def reset_admin_period(
     List commit flows both build on unit_offering, so deleting it here cascades to every
     offering_staffing/offering_lecturer/offering_program row, every assessment, ULO,
     PLO mapping, grade upload and AI report tied to those offerings for this semester.
-    Accounts are never touched, including whoever is running this reset."""
+
+    A lecturer/coordinator-tier account is removed too, but only if it now has zero
+    remaining ties anywhere in the system (no other semester's offering, staffing row,
+    or audit trail) — i.e. it existed only for the semester just cleared. Management and
+    super_admin accounts are never touched, and neither is any account still tied to a
+    different semester, past or present, so nothing about an already-finalized semester
+    is ever modified by resetting a later one."""
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,))
@@ -1779,8 +1785,39 @@ def reset_admin_period(
             offerings_deleted = cur.rowcount
 
             cur.execute("DELETE FROM staffing_import_snapshot WHERE semester_id = %s", (semester_id,))
+            cur.execute("DELETE FROM email_notification_delivery WHERE semester_id = %s", (semester_id,))
 
-    return {"status": "reset", "offerings_deleted": offerings_deleted}
+            cur.execute(
+                """
+                DELETE FROM app_user u
+                WHERE u.role_id IN (SELECT role_id FROM role WHERE role_name IN ('lecturer', 'coordinator'))
+                AND NOT EXISTS (SELECT 1 FROM unit_offering o WHERE o.coordinator_id = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM offering_lecturer ol WHERE ol.lecturer_id = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM offering_staffing os WHERE os.staff_user_id = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM enrollment_upload_batch b WHERE b.uploaded_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM grade_upload_batch b WHERE b.uploaded_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM grade_upload_issue i WHERE i.resolved_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM assessment a WHERE a.confirmed_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM assessment_ulo au WHERE au.confirmed_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM offering_ulo ou WHERE ou.confirmed_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM ulo_plo_mapping m WHERE m.confirmed_by = u.user_id OR m.removed_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM ulo_plo_mapping_suggestion s WHERE s.reviewed_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM handbook_import_snapshot h WHERE h.confirmed_by = u.user_id)
+                AND NOT EXISTS (SELECT 1 FROM staffing_import_snapshot sn WHERE sn.imported_by = u.user_id)
+                AND NOT EXISTS (
+                    SELECT 1 FROM ai_report r
+                    WHERE r.generated_by = u.user_id OR r.finalized_by = u.user_id
+                       OR r.submitted_by = u.user_id OR r.reviewed_by = u.user_id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM email_notification_delivery e
+                    WHERE e.sent_by = u.user_id OR e.recipient_user_id = u.user_id
+                )
+                """
+            )
+            accounts_deleted = cur.rowcount
+
+    return {"status": "reset", "offerings_deleted": offerings_deleted, "accounts_deleted": accounts_deleted}
 
 
 @app.post("/api/admin/offerings", status_code=201)
