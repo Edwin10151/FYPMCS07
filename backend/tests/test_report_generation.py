@@ -5,10 +5,10 @@ import httpx
 import pytest
 
 from app.services.report_generation import (
+    ActionPlanSuggestion,
     AssessmentEvidence,
     LearningOutcomeEvidence,
     PreviousOfferingEvidence,
-    ReportDraft,
     ReportEvidence,
     ReportGenerationError,
     attainment_grade,
@@ -83,6 +83,8 @@ def test_mock_report_uses_current_and_previous_aggregate_evidence():
     assert generated.provider == "mock"
     assert "LO1" in generated.draft.attainment_analysis
     assert "S2 2025" in generated.draft.previous_cohort_outcomes
+    assert "4.0 percentage points" in generated.draft.previous_cohort_outcomes
+    assert "% percentage points" not in generated.draft.previous_cohort_outcomes
     assert "Complexity proofs" in generated.draft.next_cohort_action_plan
     assert "student_id" not in generated.model_dump_json()
     assert "email" not in generated.model_dump_json()
@@ -93,9 +95,7 @@ def test_attainment_grade_boundaries():
 
 
 def test_ollama_request_enforces_schema_and_validates_response(monkeypatch):
-    expected = ReportDraft(
-        attainment_analysis="LO1 is the lowest relative result.",
-        previous_cohort_outcomes="LO1 improved from the previous offering.",
+    expected = ActionPlanSuggestion(
         next_cohort_action_plan="Add a formative proof exercise for LO1.",
     )
     captured = {}
@@ -111,13 +111,37 @@ def test_ollama_request_enforces_schema_and_validates_response(monkeypatch):
     monkeypatch.setattr(httpx, "post", fake_post)
     generated = generate_report(evidence(False), "ollama", "http://ollama:11434", "test-model", 30)
 
-    assert generated.draft == expected
-    assert captured["json"]["format"] == ReportDraft.model_json_schema()
-    assert captured["json"]["options"] == {"temperature": 0}
+    assert "LO2" in generated.draft.attainment_analysis
+    assert "No verified previous-offering" in generated.draft.previous_cohort_outcomes
+    assert generated.draft.next_cohort_action_plan == expected.next_cohort_action_plan
+    assert captured["json"]["format"] == ActionPlanSuggestion.model_json_schema()
+    assert captured["json"]["options"] == {
+        "temperature": 0,
+        "num_ctx": 4096,
+        "num_predict": 1200,
+    }
+    assert captured["json"]["keep_alive"] == "10m"
     prompt = captured["json"]["messages"][1]["content"]
-    assert json.loads(prompt)["student_count"] == 100
+    prompt_data = json.loads(prompt)
+    assert prompt_data["weakest_outcome"]["code"] == "LO1"
+    assert "student_count" not in prompt_data
     assert "student_id" not in prompt
     assert "email" not in prompt
+
+
+def test_ollama_falls_back_when_action_invents_a_percentage(monkeypatch):
+    def fake_post(url, **kwargs):
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            json={"message": {"content": '{"next_cohort_action_plan":"Raise LO1 to 99%."}'}},
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    generated = generate_report(evidence(False), "ollama", "http://ollama:11434", "test-model", 30)
+
+    assert "99%" not in generated.draft.next_cohort_action_plan
+    assert "LO1" in generated.draft.next_cohort_action_plan
 
 
 def test_ollama_rejects_an_invalid_structured_response(monkeypatch):

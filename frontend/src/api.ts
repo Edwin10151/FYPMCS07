@@ -390,6 +390,10 @@ export function deactivateAdminPeriod(token: string, semesterId: number) {
   );
 }
 
+export function resetAdminPeriod(token: string, semesterId: number) {
+  return apiFetch<{ status: string; offerings_deleted: number; accounts_deleted: number }>(`/admin/periods/${semesterId}/reset`, token, { method: "POST" });
+}
+
 export type OfferingInput = {
   semester_id: number;
   program_ids: number[];
@@ -444,7 +448,7 @@ export function inspectStaffingRoster(token: string, semesterId: number, file: F
   }>;
 }
 
-export type NewStaffAccount = { email: string; full_name: string };
+export type NewStaffAccount = { email: string; full_name: string; temporary_password: string };
 
 export type RosterPersonOption = { name: string; email: string | null; role_type: "lecture" | "tutorial" | "laboratory" };
 
@@ -495,7 +499,7 @@ export function getStaffingStatus(token: string, semesterId: number) {
 
 export function createAdminUser(
   token: string,
-  payload: { staff_id: string; full_name: string; email: string; role_name: "management" | "coordinator" | "lecturer" },
+  payload: { staff_id: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" },
 ) {
   return apiFetch<{ user: AdminUser; temporary_password: string }>("/admin/users", token, {
     method: "POST",
@@ -505,7 +509,7 @@ export function createAdminUser(
 
 export function createAdminUsers(
   token: string,
-  users: Array<{ staff_id: string; full_name: string; email: string; role_name: "management" | "coordinator" | "lecturer" }>,
+  users: Array<{ staff_id: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" }>,
 ) {
   return apiFetch<{ accounts: Array<{ user: AdminUser; temporary_password: string }> }>("/admin/users/bulk", token, {
     method: "POST",
@@ -520,10 +524,35 @@ export function setAdminUserActive(token: string, userId: number, isActive: bool
   });
 }
 
-export function setAdminUserRole(token: string, userId: number, roleName: "management" | "coordinator" | "lecturer") {
+export function setAdminUserRole(token: string, userId: number, roleName: "super_admin" | "management" | "coordinator" | "lecturer") {
   return apiFetch<{ status: string }>(`/admin/users/${userId}`, token, {
     method: "PATCH",
     body: JSON.stringify({ role_name: roleName }),
+  });
+}
+
+export function resetAdminUserPassword(token: string, userId: number) {
+  return apiFetch<{ full_name: string; temporary_password: string }>(`/admin/users/${userId}/reset-password`, token, {
+    method: "POST",
+  });
+}
+
+export type EmailReminderPreview = {
+  configured: boolean;
+  sender: string | null;
+  recipients: Array<{ user_id: number; full_name: string; email: string; units: string }>;
+  subject: string;
+  body: string;
+};
+
+export function getEmailReminderPreview(token: string, semesterId: number) {
+  return apiFetch<EmailReminderPreview>(`/admin/email-reminders/preview?semester_id=${semesterId}`, token);
+}
+
+export function sendEmailReminder(token: string, semesterId: number, subject: string, body: string) {
+  return apiFetch<{ sent: number; failed: number }>("/admin/email-reminders/send", token, {
+    method: "POST",
+    body: JSON.stringify({ semester_id: semesterId, subject, body }),
   });
 }
 
@@ -639,5 +668,6 @@ export function roleLabel(roleName: string) {
   if (roleName === "coordinator") return "Unit Coordinator";
   if (roleName === "lecturer") return "Lecturer";
   if (roleName === "management") return "Management";
+  if (roleName === "super_admin") return "Super Admin";
   return roleName;
 }

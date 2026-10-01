@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-import { clearSession, initials } from "../api";
+import { changePassword, clearSession, errorMessage, initials } from "../api";
 import { useSession } from "../useSession";
 import "./Settings.css";
 
@@ -9,31 +9,22 @@ export default function Setting() {
   const session = useSession();
   const navigate = useNavigate();
 
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [savedPasswordLength, setSavedPasswordLength] = useState(8);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
   if (!session) return null;
 
   const displayInitials = initials(session.user.full_name);
-  const maskedPassword = "*".repeat(savedPasswordLength);
-
-  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const objectUrl = URL.createObjectURL(file);
-    setAvatarPreview(objectUrl);
-  };
-
   const startPasswordChange = () => {
     setIsChangingPassword(true);
     setPasswordError("");
     setPasswordSuccess("");
+    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
   };
@@ -42,16 +33,17 @@ export default function Setting() {
     setIsChangingPassword(false);
     setPasswordError("");
     setPasswordSuccess("");
+    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
   };
 
-  const savePasswordChange = () => {
+  const savePasswordChange = async () => {
     setPasswordError("");
     setPasswordSuccess("");
 
-    if (!newPassword.trim() || !confirmPassword.trim()) {
-      setPasswordError("Enter and confirm the new password.");
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError("Enter your current password and confirm the new password.");
       return;
     }
 
@@ -60,11 +52,23 @@ export default function Setting() {
       return;
     }
 
-    setSavedPasswordLength(newPassword.length);
-    setPasswordSuccess("Password updated.");
-    setIsChangingPassword(false);
-    setNewPassword("");
-    setConfirmPassword("");
+    if (newPassword.length < 12) {
+      setPasswordError("New password must be at least 12 characters.");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      await changePassword(session.access_token, currentPassword, newPassword);
+      setPasswordSuccess("Password updated.");
+      setIsChangingPassword(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setPasswordError(errorMessage(err));
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   const handleLogout = () => {
@@ -80,7 +84,7 @@ export default function Setting() {
           <div className="crumbs">
             <Link to="/units">Home</Link>
             <span className="sep">›</span>
-            <Link to="/settings">Settings</Link>
+            <strong>Settings</strong>
           </div>
           <div className="top-actions">
             <div className="settings-top-note">Profile &amp; security</div>
@@ -92,7 +96,7 @@ export default function Setting() {
             <div>
               <h1 style={{ fontSize: 26 }}>Settings</h1>
               <div className="sub">
-                Manage your personal details, profile picture, password, and account session.
+                Review your account details, change your password, and manage your session.
               </div>
             </div>
             <div className="settings-chip">Account</div>
@@ -103,18 +107,8 @@ export default function Setting() {
               <div className="settings-hero">
                 <div className="settings-avatar-wrap">
                   <div className="settings-avatar">
-                    {avatarPreview ? <img src={avatarPreview} alt="Profile preview" /> : <span>{displayInitials}</span>}
+                    <span>{displayInitials}</span>
                   </div>
-
-                  <label className="btn ghost" style={{ cursor: "pointer" }}>
-                    Upload photo
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      style={{ display: "none" }}
-                    />
-                  </label>
                 </div>
 
                 <div className="settings-hero-copy">
@@ -145,7 +139,7 @@ export default function Setting() {
                 <div className="settings-row">
                   <div className="settings-field">
                     <label>Password</label>
-                    <div className="settings-static mono">{maskedPassword}</div>
+                    <div className="settings-static mono">************</div>
                   </div>
 
                   <button className="btn" onClick={startPasswordChange}>
@@ -155,9 +149,21 @@ export default function Setting() {
               ) : (
                 <div className="settings-password-block">
                   <div className="settings-field">
+                    <label>Current password</label>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      className="settings-input"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter current password"
+                    />
+                  </div>
+                  <div className="settings-field">
                     <label>New password</label>
                     <input
                       type="password"
+                      autoComplete="new-password"
                       className="settings-input"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
@@ -169,6 +175,7 @@ export default function Setting() {
                     <label>Confirm password</label>
                     <input
                       type="password"
+                      autoComplete="new-password"
                       className="settings-input"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
@@ -179,11 +186,11 @@ export default function Setting() {
                   {passwordError && <div className="settings-error">{passwordError}</div>}
 
                   <div className="settings-password-actions">
-                    <button className="btn ghost" onClick={cancelPasswordChange}>
+                    <button className="btn ghost" disabled={savingPassword} onClick={cancelPasswordChange}>
                       Cancel
                     </button>
-                    <button className="btn primary" onClick={savePasswordChange}>
-                      Save password
+                    <button className="btn primary" disabled={savingPassword} onClick={() => void savePasswordChange()}>
+                      {savingPassword ? "Saving..." : "Save password"}
                     </button>
                   </div>
                 </div>

@@ -342,7 +342,7 @@ export default function Assessments() {
       <Sidebar user={session.user} />
       <main className="main">
         <div className="topbar">
-          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{offering?.unit_code ?? "Unit"}</Link><span className="sep">›</span><Link to="/assessments">Assessments</Link></div>
+          <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{offering?.unit_code ?? "Unit"}</Link><span className="sep">›</span><strong>Assessments</strong></div>
           <div className="top-actions" />
         </div>
         <div className="content">

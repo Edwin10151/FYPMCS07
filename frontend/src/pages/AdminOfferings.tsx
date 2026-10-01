@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { createOfferingsFromRoster, deleteAdminOffering, errorMessage, type AdminOffering } from "../api";
+import { createOfferingsFromRoster, deleteAdminOffering, errorMessage, type AdminOffering, type NewStaffAccount } from "../api";
 import AdminSidebar from "../components/AdminSidebar";
 import "../components/AdminNav.css";
 import { useAdminContext } from "../useAdminContext";
@@ -13,6 +13,7 @@ export default function AdminOfferings() {
   const [form, setForm] = useState<{ unit_code: string; unit_name: string; program_ids: number[]; coordinator_id: string }>({ unit_code: "", unit_name: "", program_ids: [], coordinator_id: "" });
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState("");
+  const [newAccounts, setNewAccounts] = useState<NewStaffAccount[]>([]);
   const [flashError, setFlashError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<AdminOffering | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -23,6 +24,7 @@ export default function AdminOfferings() {
   }, [data, semesterId]);
 
   if (!session) return null;
+  const isSuperAdmin = session.user.role_name === "super_admin";
 
   const period = data?.periods.find((item) => item.semester_id === semesterId) ?? null;
   const offerings = data?.offerings.filter((offering) => offering.semester_id === semesterId) ?? [];
@@ -32,6 +34,7 @@ export default function AdminOfferings() {
   const openAdd = () => {
     setForm({ unit_code: "", unit_name: "", program_ids: [], coordinator_id: "" });
     setFlashError("");
+    setNewAccounts([]);
     setAddOpen(true);
   };
 
@@ -61,9 +64,10 @@ export default function AdminOfferings() {
         return;
       }
       const synced = result.created[0]?.staffing_rows_synced ?? 0;
-      const newAccounts = result.created[0]?.accounts_created ?? [];
+      const createdAccounts = result.created[0]?.accounts_created ?? [];
       const syncNote = synced > 0 ? ` ${synced} tutor roster row${synced === 1 ? "" : "s"} matched automatically.` : "";
-      const accountsNote = newAccounts.length > 0 ? ` ${newAccounts.length} new staff account${newAccounts.length === 1 ? "" : "s"} created (default password).` : "";
+      const accountsNote = createdAccounts.length > 0 ? ` ${createdAccounts.length} new staff account${createdAccounts.length === 1 ? "" : "s"} created.` : "";
+      setNewAccounts(createdAccounts);
       setFlash(`${form.unit_code.trim().toUpperCase()} added${result.warnings.length ? ` — ${result.warnings.join(" ")}` : "."}${syncNote}${accountsNote}`);
       setAddOpen(false);
       await reload();
@@ -96,7 +100,7 @@ export default function AdminOfferings() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester Setup</Link><span className="sep">›</span><strong>Unit Offerings</strong></div>
-          <div className="top-actions"><button className="btn primary" disabled={!semesterId} onClick={openAdd}>+ Add unit</button></div>
+          <div className="top-actions"><button className="btn primary" disabled={!semesterId || !isSuperAdmin} title={isSuperAdmin ? undefined : "Only a super admin can add unit offerings"} onClick={openAdd}>+ Add unit</button></div>
         </div>
         <div className="content">
           <div className="unit-banner">
@@ -110,7 +114,7 @@ export default function AdminOfferings() {
           </div>
 
           {(error || flashError) && <div className="banner"><div className="ico">!</div><div className="body">{error || flashError}</div></div>}
-          {flash && <div className="adm-flash">{flash}<span className="x" onClick={() => setFlash("")}>✕</span></div>}
+          {flash && <div className="adm-flash"><span>{flash}{newAccounts.length > 0 && <span style={{ display: "block", marginTop: 8 }}><strong>Share these temporary passwords securely.</strong>{newAccounts.map((account) => <span key={account.email} style={{ display: "block", marginTop: 8 }}>{account.full_name} ({account.email}): <code>{account.temporary_password}</code></span>)}</span>}</span><span className="x" onClick={() => { setFlash(""); setNewAccounts([]); }}>✕</span></div>}
           {unassignedCount > 0 && (
             <div className="banner warn"><div className="ico">!</div><div className="body">{unassignedCount} unit{unassignedCount === 1 ? "" : "s"} in {period ? `${period.year} ${period.period}` : "this semester"} {unassignedCount === 1 ? "has" : "have"} no coordinator assigned yet.</div></div>
           )}
@@ -126,7 +130,7 @@ export default function AdminOfferings() {
                   <td>{offering.unit_name}</td>
                   <td className="muted">{offering.program_codes.join(", ") || "—"}</td>
                   <td>{offering.coordinator_name ?? <span className="unassigned">Unassigned</span>}</td>
-                  <td style={{ textAlign: "right" }}><div className="row-tools"><button type="button" className="ic danger" title={`Delete ${offering.unit_code}`} onClick={() => setDeleteTarget(offering)}>×</button></div></td>
+                  <td style={{ textAlign: "right" }}><div className="row-tools"><button type="button" className="ic danger" disabled={!isSuperAdmin} title={isSuperAdmin ? `Delete ${offering.unit_code}` : "Only a super admin can remove unit offerings"} onClick={() => setDeleteTarget(offering)}>×</button></div></td>
                 </tr>)}
               </tbody></table>
             )}
