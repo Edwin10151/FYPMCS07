@@ -28,7 +28,7 @@ from app.auth import (
 from app.config import get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
-from app.seed import seed_demo_data
+from app.seed import ensure_super_admin, seed_demo_data
 from app.services.calculation import even_ulo_contributions
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
