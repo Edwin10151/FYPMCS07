@@ -3,7 +3,7 @@ from decimal import Decimal
 from app.auth import hash_password
 from app.config import get_settings
 from app.db import get_conn
-from app.services.calculation import attainment_percentage, split_weight
+from app.services.calculation import attainment_percentage, even_ulo_contributions
 
 
 def _one(cur, query: str, params: tuple):
@@ -159,6 +159,7 @@ def seed_demo_data() -> None:
                 ("Final examination", Decimal("40.00"), Decimal("100.00"), 4, [0, 1, 2, 3]),
             ]
             assessment_ids = []
+            seeded_links: list[tuple[int, int]] = []
             for name, weight, max_mark, order, covered_indexes in assessments:
                 cur.execute(
                     """
@@ -172,17 +173,20 @@ def seed_demo_data() -> None:
                 )
                 assessment_id = cur.fetchone()["assessment_id"]
                 assessment_ids.append(assessment_id)
-                shares = split_weight(weight, [ulo_ids[item] for item in covered_indexes])
-                for offering_ulo_id, allocated_weight in shares.items():
-                    cur.execute(
-                        """
-                        INSERT INTO assessment_ulo (
-                            offering_id, assessment_id, offering_ulo_id, source, is_confirmed, allocated_weight, confirmed_by, confirmed_at
-                        )
-                        VALUES (%s, %s, %s, 'handbook', TRUE, %s, %s, CURRENT_TIMESTAMP)
-                        """,
-                        (offering_id, assessment_id, offering_ulo_id, allocated_weight, user_ids["elise.chen@monash.edu"]),
+                seeded_links.extend((assessment_id, ulo_ids[item]) for item in covered_indexes)
+
+            # A ULO's share depends on how many assessments cover it, so this is
+            # settled only once every assessment exists.
+            for (assessment_id, offering_ulo_id), contribution in even_ulo_contributions(seeded_links).items():
+                cur.execute(
+                    """
+                    INSERT INTO assessment_ulo (
+                        offering_id, assessment_id, offering_ulo_id, source, is_confirmed, allocated_weight, confirmed_by, confirmed_at
                     )
+                    VALUES (%s, %s, %s, 'handbook', TRUE, %s, %s, CURRENT_TIMESTAMP)
+                    """,
+                    (offering_id, assessment_id, offering_ulo_id, contribution, user_ids["elise.chen@monash.edu"]),
+                )
 
             mapping_pairs = [
                 (0, [0, 1]),

@@ -66,6 +66,20 @@ function blurOnWheel(event: React.WheelEvent<HTMLInputElement>) {
   event.currentTarget.blur();
 }
 
+/**
+ * A ULO's default contribution is an even split of 100% across the assessments
+ * that cover it: four assessments covering ULO1 each contribute 25% of their
+ * marks toward it, so the coverage editor opens at 100% in total.
+ *
+ * Note the direction -- per ULO across its assessments, not per assessment
+ * across the ULOs it spans. Covering more outcomes never dilutes what an
+ * assessment contributes to any one of them.
+ */
+function defaultContribution(savedRows: EditableRow[], uloCode: string): number {
+  const covering = savedRows.filter((row) => row.assessment_id !== null && row.covers.includes(uloCode));
+  return covering.length === 0 ? 0 : Math.round((100 / covering.length) * 100) / 100;
+}
+
 function buildWeightsPayload(savedRows: EditableRow[], allUlos: OfferingUlo[], contributions: Record<string, number>): AssessmentUloWeightInput[] {
   const weights: AssessmentUloWeightInput[] = [];
   savedRows.forEach((row) => {
@@ -74,7 +88,7 @@ function buildWeightsPayload(savedRows: EditableRow[], allUlos: OfferingUlo[], c
       const uloMeta = allUlos.find((item) => item.ulo_code === code);
       if (!uloMeta) return;
       const key = `${row.assessment_id}::${code}`;
-      const fallback = row.allocated_weights[index] ?? Math.round((100 / row.covers.length) * 100) / 100;
+      const fallback = row.allocated_weights[index] ?? defaultContribution(savedRows, code);
       weights.push({ assessment_id: row.assessment_id as number, offering_ulo_id: uloMeta.offering_ulo_id, allocated_weight: contributions[key] ?? fallback });
     });
   });
@@ -294,7 +308,7 @@ export default function Assessments() {
     savedRows.forEach((row) => {
       if (row.assessment_id === null || !row.covers.includes(uloCode)) return;
       const index = row.covers.indexOf(uloCode);
-      const fallback = row.allocated_weights[index] ?? Math.round((100 / row.covers.length) * 100) / 100;
+      const fallback = row.allocated_weights[index] ?? defaultContribution(savedRows, uloCode);
       draft[row.assessment_id] = contributions[`${row.assessment_id}::${uloCode}`] ?? fallback;
     });
     setModalDraft(draft);
@@ -387,7 +401,14 @@ export default function Assessments() {
               </div>
               {allUlos.map((ulo) => {
                 const coveredBy = savedRows.filter((row) => row.assessment_id !== null && row.covers.includes(ulo.ulo_code));
-                const total = coveredBy.reduce((sum, row) => sum + (contributions[`${row.assessment_id}::${ulo.ulo_code}`] ?? (100 / row.covers.length)), 0);
+                // One source for a row's contribution: an unsaved edit wins, then the
+                // stored value, then the even-split default. The bar and the total both
+                // read it, so they cannot disagree.
+                const contributionFor = (row: EditableRow) =>
+                  contributions[`${row.assessment_id}::${ulo.ulo_code}`]
+                    ?? row.allocated_weights[row.covers.indexOf(ulo.ulo_code)]
+                    ?? defaultContribution(savedRows, ulo.ulo_code);
+                const total = coveredBy.reduce((sum, row) => sum + contributionFor(row), 0);
                 const ok = coveredBy.length > 0 && Math.abs(total - 100) < 0.01;
                 return <div key={ulo.ulo_code} className="per-lo-row">
                   <div className="lo-l">
@@ -396,7 +417,13 @@ export default function Assessments() {
                   </div>
                   <div className="alloc-bar">{coveredBy.length === 0
                     ? <div className="alloc-empty">No assessment currently links this ULO</div>
-                    : coveredBy.map((row) => <div key={row.key} className="seg-a" style={{ width: `${100 / coveredBy.length}%`, background: colorForKey(row.key) }}>{row.assessment_name}</div>)}</div>
+                    : coveredBy.map((row) => <div key={row.key} className="seg-a" title={`${row.assessment_name}: ${contributionFor(row)}% of its marks count toward ${ulo.ulo_code}`} style={{
+                        // Segments are sized by share of the ULO's total, so they keep
+                        // filling the bar even when the contributions do not add to 100
+                        // -- the status icon to the left is what flags that.
+                        width: `${total > 0 ? (contributionFor(row) / total) * 100 : 100 / coveredBy.length}%`,
+                        background: colorForKey(row.key),
+                      }}>{row.assessment_name}</div>)}</div>
                   <div className="per-lo-actions">{canEdit && <button type="button" className="btn ghost" disabled={coveredBy.length === 0} onClick={() => openUloEditor(ulo.ulo_code)}>Edit</button>}</div>
                 </div>;
               })}
