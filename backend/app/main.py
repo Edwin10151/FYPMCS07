@@ -2235,7 +2235,7 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
                 -- attainment rather than quietly shrinking what was expected.
                 -- (Percent signs are avoided in this comment: psycopg scans the
                 -- whole statement for placeholders, comments included.)
-                SUM(a.max_mark * au.allocated_weight / 100) AS total_available_weight,
+                SUM(COALESCE(sg.max_mark, a.max_mark) * au.allocated_weight / 100) AS total_available_weight,
                 SUM(COALESCE(sg.raw_mark, 0) * au.allocated_weight / 100) AS achieved_weight
             FROM enrollment e
             JOIN assessment_ulo au ON au.offering_id = e.offering_id
@@ -2322,6 +2322,26 @@ def commit_grade_upload(
             )
             if cur.fetchone()["count"]:
                 raise HTTPException(status_code=409, detail="Resolve upload errors before committing")
+
+            # The gradebook is the only place that knows an assessment's real total:
+            # a Handbook import cannot publish one, so it defaults to 100 and no screen
+            # can change it. Record what this upload was marked out of, otherwise the
+            # attainment denominator stays 100 and a mark out of 25 reads a quarter of
+            # its true value.
+            cur.execute(
+                """
+                UPDATE assessment a
+                SET max_mark = m.max_mark
+                FROM grade_upload_column_mapping m
+                WHERE m.upload_batch_id = %s
+                  AND m.assessment_id = a.assessment_id
+                  AND a.offering_id = %s
+                  AND m.max_mark IS NOT NULL
+                  AND a.max_mark IS DISTINCT FROM m.max_mark
+                """,
+                (upload_batch_id, batch["offering_id"]),
+            )
+
             cur.execute(
                 """
                 SELECT e.enrollment_id, c.assessment_id, c.raw_mark, c.max_mark, a.weight, r.upload_row_id
