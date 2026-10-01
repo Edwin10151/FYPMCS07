@@ -29,7 +29,7 @@ from app.config import get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
 from app.seed import seed_demo_data
-from app.services.calculation import split_weight
+from app.services.calculation import even_ulo_contributions
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
 from app.services.unit_coordinator import fetch_unit_coordinators_for_units
@@ -455,6 +455,9 @@ def confirm_handbook_import(
                     )
 
             cur.execute("DELETE FROM assessment WHERE offering_id = %s AND source = 'handbook'", (offering_id,))
+            # A contribution is a share of one ULO across the assessments covering
+            # it, so every link has to be known before any share can be worked out.
+            handbook_links: list[tuple[int, int]] = []
             for order, assessment in enumerate(payload["assessments"], start=1):
                 cur.execute(
                     """
@@ -475,18 +478,23 @@ def confirm_handbook_import(
                     ),
                 )
                 assessment_id = cur.fetchone()["assessment_id"]
-                linked_ulo_ids = [ulo_ids[code] for code in assessment["ulo_codes"] if code in ulo_ids]
-                for offering_ulo_id, allocated_weight in split_weight(Decimal(assessment["weight"]), linked_ulo_ids).items():
-                    cur.execute(
-                        """
-                        INSERT INTO assessment_ulo (
-                            offering_id, assessment_id, offering_ulo_id, source, is_confirmed,
-                            allocated_weight, confirmed_by, confirmed_at
-                        )
-                        VALUES (%s, %s, %s, 'handbook', TRUE, %s, %s, CURRENT_TIMESTAMP)
-                        """,
-                        (offering_id, assessment_id, offering_ulo_id, allocated_weight, user["user_id"]),
+                for code in assessment["ulo_codes"]:
+                    if code in ulo_ids:
+                        handbook_links.append((assessment_id, ulo_ids[code]))
+
+
+            contributions = even_ulo_contributions(handbook_links)
+            for (assessment_id, offering_ulo_id), contribution in contributions.items():
+                cur.execute(
+                    """
+                    INSERT INTO assessment_ulo (
+                        offering_id, assessment_id, offering_ulo_id, source, is_confirmed,
+                        allocated_weight, confirmed_by, confirmed_at
                     )
+                    VALUES (%s, %s, %s, 'handbook', TRUE, %s, %s, CURRENT_TIMESTAMP)
+                    """,
+                    (offering_id, assessment_id, offering_ulo_id, contribution, user["user_id"]),
+                )
 
             cur.execute(
                 """
@@ -1038,6 +1046,10 @@ def save_assessments(
                     (payload.offering_id, list(remove_ids)),
                 )
 
+            # Collected across every assessment, then resolved once at the end.
+            saved_links: list[tuple[int, int]] = []
+            kept_contributions: dict[tuple[int, int], Decimal] = {}
+
             for order, item in enumerate(payload.assessments, start=1):
                 name = item.assessment_name.strip()
                 if item.assessment_id is not None and item.assessment_id in existing_ids:
@@ -1073,24 +1085,37 @@ def save_assessments(
                 existing_links = {row["offering_ulo_id"]: row["allocated_weight"] for row in cur.fetchall()}
                 cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
 
-                linked_ulo_ids = [ulo_ids[code] for code in item.ulo_codes if code in ulo_ids]
-                # New LO links default to an even split of 100% (the LO-contribution
-                # convention, independent of the assessment's own weight). A link that
-                # already existed keeps whatever contribution percentage a coordinator
-                # set for it in the Assessment coverage editor.
-                default_shares = split_weight(Decimal(100), linked_ulo_ids)
-                for offering_ulo_id, default_share in default_shares.items():
-                    allocated_weight = existing_links.get(offering_ulo_id, default_share)
-                    cur.execute(
-                        """
-                        INSERT INTO assessment_ulo (
-                            offering_id, assessment_id, offering_ulo_id, source, is_confirmed,
-                            allocated_weight, confirmed_by, confirmed_at
-                        )
-                        VALUES (%s, %s, %s, 'manual', TRUE, %s, %s, CURRENT_TIMESTAMP)
-                        """,
-                        (payload.offering_id, assessment_id, offering_ulo_id, allocated_weight, user["user_id"]),
+                for code in item.ulo_codes:
+                    offering_ulo_id = ulo_ids.get(code)
+                    if offering_ulo_id is None:
+                        continue
+                    saved_links.append((assessment_id, offering_ulo_id))
+                    if offering_ulo_id in existing_links:
+                        kept_contributions[(assessment_id, offering_ulo_id)] = existing_links[offering_ulo_id]
+
+            # A ULO's default share depends on how many assessments end up covering
+            # it, so this can only be settled once every assessment has been saved.
+            # A contribution the coordinator tuned in the coverage editor wins over
+            # the default.
+            defaults = even_ulo_contributions(saved_links)
+            for link in saved_links:
+                assessment_id, offering_ulo_id = link
+                cur.execute(
+                    """
+                    INSERT INTO assessment_ulo (
+                        offering_id, assessment_id, offering_ulo_id, source, is_confirmed,
+                        allocated_weight, confirmed_by, confirmed_at
                     )
+                    VALUES (%s, %s, %s, 'manual', TRUE, %s, %s, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        payload.offering_id,
+                        assessment_id,
+                        offering_ulo_id,
+                        kept_contributions.get(link, defaults.get(link, Decimal("0.00"))),
+                        user["user_id"],
+                    ),
+                )
     return {"status": "saved"}
 
 
@@ -2201,10 +2226,20 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
             SELECT
                 e.enrollment_id,
                 au.offering_ulo_id,
-                SUM(au.allocated_weight) AS total_available_weight,
-                SUM(COALESCE((sg.raw_mark / NULLIF(sg.max_mark, 0)) * au.allocated_weight, 0)) AS achieved_weight
+                -- A contribution is the share of an assessment's marks that counts
+                -- toward this ULO, so both sides are marks, not unit weightings:
+                --   available = sum of (max_mark x contribution)
+                --   achieved  = sum of (raw_mark x contribution)
+                -- An assessment the student has no grade for stays in the
+                -- denominator and scores zero, so a missing mark counts against
+                -- attainment rather than quietly shrinking what was expected.
+                -- (Percent signs are avoided in this comment: psycopg scans the
+                -- whole statement for placeholders, comments included.)
+                SUM(a.max_mark * au.allocated_weight / 100) AS total_available_weight,
+                SUM(COALESCE(sg.raw_mark, 0) * au.allocated_weight / 100) AS achieved_weight
             FROM enrollment e
             JOIN assessment_ulo au ON au.offering_id = e.offering_id
+            JOIN assessment a ON a.assessment_id = au.assessment_id
             LEFT JOIN student_grade sg ON sg.enrollment_id = e.enrollment_id
                 AND sg.assessment_id = au.assessment_id
             WHERE e.offering_id = %s AND au.allocated_weight > 0

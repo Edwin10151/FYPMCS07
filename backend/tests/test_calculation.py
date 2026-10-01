@@ -1,20 +1,89 @@
 from decimal import Decimal
 
-from app.services.calculation import attainment_percentage, split_weight
+import pytest
+
+from app.services.calculation import attainment_percentage, even_ulo_contributions
 
 
-def test_split_weight_evenly_across_linked_ulos():
-    assert split_weight(Decimal("25.00"), [1, 2, 3]) == {
-        1: Decimal("8.33"),
-        2: Decimal("8.33"),
-        3: Decimal("8.34"),
+def test_a_ulo_covered_by_four_assessments_gives_each_a_quarter():
+    # The split is per ULO across its assessments, which is what makes the
+    # coverage editor open at 100%.
+    links = [(10, 1), (11, 1), (12, 1), (13, 1)]
+    assert even_ulo_contributions(links) == {
+        (10, 1): Decimal("25.00"),
+        (11, 1): Decimal("25.00"),
+        (12, 1): Decimal("25.00"),
+        (13, 1): Decimal("25.00"),
     }
 
 
-def test_split_weight_always_preserves_the_assessment_weight():
-    allocations = split_weight(Decimal("100.00"), [1, 2, 3, 4, 5, 6])
-    assert sum(allocations.values()) == Decimal("100.00")
+def test_each_ulo_totals_exactly_one_hundred():
+    links = [(10, 1), (11, 1), (12, 1)]  # 33.33 x 3 = 99.99 without correction
+    assert sum(even_ulo_contributions(links).values()) == Decimal("100.00")
 
 
-def test_attainment_percentage():
-    assert attainment_percentage(Decimal("32.50"), Decimal("50.00")) == Decimal("65.00")
+def test_every_ulo_is_split_independently():
+    # ULO1 is covered by two assessments, ULO2 by one. ULO2's single assessment
+    # carries all of it, regardless of how many ULOs that assessment spans.
+    links = [(10, 1), (11, 1), (10, 2)]
+    contributions = even_ulo_contributions(links)
+    assert contributions[(10, 1)] == Decimal("50.00")
+    assert contributions[(11, 1)] == Decimal("50.00")
+    assert contributions[(10, 2)] == Decimal("100.00")
+
+
+def test_covering_more_outcomes_does_not_dilute_an_assessment():
+    # One assessment covering six ULOs contributes fully to each of them.
+    links = [(10, ulo) for ulo in range(1, 7)]
+    assert set(even_ulo_contributions(links).values()) == {Decimal("100.00")}
+
+
+def test_no_links_produces_no_contributions():
+    assert even_ulo_contributions([]) == {}
+
+
+def test_a_repeated_link_is_counted_once():
+    assert even_ulo_contributions([(10, 1), (10, 1)]) == {(10, 1): Decimal("100.00")}
+
+
+def test_the_worked_example_from_the_coordinator():
+    """Student A's ULO attainment, using the coordinator's own figures.
+
+        marks        A1 8/10   A2 30/40   A3 15/20   A4 10/15   A5 10/15
+        contribution    20%       30%        20%        15%        15%
+
+        achieved = 8x.2 + 30x.3 + 15x.2 + 10x.15 + 10x.15 = 16.6
+        available = 10x.2 + 40x.3 + 20x.2 + 15x.15 + 15x.15 = 22.5
+    """
+    marks = [
+        (Decimal("8"), Decimal("10"), Decimal("20")),
+        (Decimal("30"), Decimal("40"), Decimal("30")),
+        (Decimal("15"), Decimal("20"), Decimal("20")),
+        (Decimal("10"), Decimal("15"), Decimal("15")),
+        (Decimal("10"), Decimal("15"), Decimal("15")),
+    ]
+    achieved = sum(raw * pct / 100 for raw, _, pct in marks)
+    available = sum(mx * pct / 100 for _, mx, pct in marks)
+
+    assert achieved == Decimal("16.60")
+    assert available == Decimal("22.50")
+    assert attainment_percentage(achieved, available) == Decimal("73.78")
+
+
+def test_a_perfect_student_reaches_one_hundred():
+    assert attainment_percentage(Decimal("22.5"), Decimal("22.5")) == Decimal("100.00")
+
+
+def test_nothing_available_is_not_a_division_error():
+    assert attainment_percentage(Decimal("0"), Decimal("0")) == Decimal("0.00")
+
+
+@pytest.mark.parametrize(
+    "achieved,available,expected",
+    [
+        (Decimal("11.25"), Decimal("22.5"), Decimal("50.00")),  # exactly the pass line
+        (Decimal("11.24"), Decimal("22.5"), Decimal("49.96")),
+    ],
+)
+def test_the_pass_boundary(achieved, available, expected):
+    assert attainment_percentage(achieved, available) == expected
