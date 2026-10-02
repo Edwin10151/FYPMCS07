@@ -56,12 +56,12 @@ def test_normalise_handbook_content_keeps_only_selected_semester_and_location():
                 },
             ],
         },
-        period="S1",
+        period="FEB",
         location="Malaysia",
     )
 
     assert [assessment["name"] for assessment in payload["assessments"]] == ["S1 proposal"]
-    assert payload["offering_scope"] == {"period": "S1", "location": "Malaysia"}
+    assert payload["offering_scope"] == {"period": "FEB", "location": "Malaysia"}
 
 
 def test_normalise_handbook_content_excludes_unscoped_assessments_when_scope_is_selected():
@@ -72,7 +72,7 @@ def test_normalise_handbook_content_excludes_unscoped_assessments_when_scope_is_
             "unit_learning_outcomes": [{"number": "1", "description": "Plan a project."}],
             "assessments": [{"name": "Unscoped task", "weight": "20", "learning_outcomes": "1"}],
         },
-        period="S1",
+        period="FEB",
         location="Malaysia",
     )
 
@@ -91,7 +91,7 @@ def test_normalise_handbook_content_keeps_assessments_when_scope_labels_are_all_
                 {"name": "Reflection", "weight": "10", "learning_outcomes": "1", "offerings_formatted": ""},
             ],
         },
-        period="S1",
+        period="FEB",
         location="Malaysia",
     )
 

@@ -31,8 +31,9 @@ UNIT_CODE_PATTERN = re.compile(r"^[A-Z]{3}\d{4}$")
 # Handbook phrasing for a teaching period, used to tell one campus offering from
 # another. Matches the labels published on the unit page.
 PERIOD_LABELS = {
-    "S1": "First semester",
-    "S2": "Second semester",
+    "FEB": "First semester",
+    "JUL": "Second semester",
+    # OCT intentionally omitted — see handbook.py's PERIOD_LABELS comment.
 }
 
 # Contact roles worth recording, mapped to a human label. A unit routinely lists
