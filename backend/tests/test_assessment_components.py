@@ -117,6 +117,34 @@ def test_component_total_must_match_parent(db, fixture):
     assert raised.value.status_code == 422
 
 
+def test_upload_split_retains_existing_grade_and_rejects_old_parent_preview(db, fixture):
+    offering, enrollment, _, assessment = setup_components(db, fixture)
+    aid = assessment["assessment_id"]
+    db.execute("DELETE FROM assessment_component WHERE assessment_id=%s", (aid,))
+    db.execute("INSERT INTO student_grade (enrollment_id, offering_id, assessment_id, raw_mark, max_mark, weighted_score) VALUES (%s,%s,%s,90,100,9)", (enrollment, offering, aid))
+    old = asyncio.run(main.preview_grade_upload(user=fixture["user"], offering_id=offering,
+        student_code_column="ID number", assessment_columns=json.dumps([{"assessment_id":aid,"csv_column":"Score","max_mark":100}]), sheet_name=None,
+        file=UploadFile(filename="old.csv", file=io.BytesIO(b"ID number,Score\ncomponent-student,50\n"))))
+    saved = main.save_upload_components(offering, aid, main.UploadComponentsInput(components=[
+        main.AssessmentComponentInput(component_name="First",weight=5),
+        main.AssessmentComponentInput(component_name="Second",weight=5)]), fixture["user"])
+    assert len(saved["components"]) == 2
+    assert db.execute("SELECT weighted_score FROM student_grade WHERE enrollment_id=%s", (enrollment,)).fetchone()["weighted_score"] == Decimal(9)
+    with pytest.raises(HTTPException) as raised:
+        main.commit_grade_upload(old["upload_batch_id"], fixture["user"])
+    assert raised.value.status_code == 409
+    assessment["components"] = saved["components"]
+    first = upload(fixture, offering, assessment, [(saved["components"][0],75,100)])
+    main.commit_grade_upload(first["upload_batch_id"], fixture["user"])
+    assert db.execute("SELECT weighted_score FROM student_grade WHERE enrollment_id=%s", (enrollment,)).fetchone()["weighted_score"] == Decimal(9)
+    second = upload(fixture, offering, assessment, [(saved["components"][1],85,100)])
+    main.commit_grade_upload(second["upload_batch_id"], fixture["user"])
+    assert db.execute("SELECT weighted_score FROM student_grade WHERE enrollment_id=%s", (enrollment,)).fetchone()["weighted_score"] == Decimal(8)
+    with pytest.raises(HTTPException) as raised:
+        main.save_upload_components(offering, aid, main.UploadComponentsInput(components=[]), fixture["user"])
+    assert raised.value.status_code == 409
+
+
 def test_handbook_replacement_cannot_delete_configured_components(db, fixture):
     offering, _, _, assessment = setup_components(db, fixture)
     snapshot = insert(db, "INSERT INTO handbook_import_snapshot (offering_id, source_url, payload) VALUES (%s, 'https://example.test', '{}'::jsonb)", (offering,))

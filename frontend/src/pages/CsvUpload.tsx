@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { commitGradeUpload, errorMessage, getAssessments, getDashboard, inspectGradeUpload, previewGradeUpload, type Assessment, type CsvInspection, type DashboardPayload, type GradePreview } from "../api";
+import { commitGradeUpload, saveUploadComponents, errorMessage, getAssessments, getDashboard, inspectGradeUpload, previewGradeUpload, type Assessment, type CsvInspection, type DashboardPayload, type GradePreview } from "../api";
 import Sidebar from "../components/Sidebar";
 import GradeColumnMapping, { MappingSummary, ScorePreview } from "../components/GradeColumnMapping";
 import { emptyMapping, gradeTargets, scoreColumns, suggestMappings, taskKey, type GradeMapping } from "../gradebook";
@@ -24,6 +24,7 @@ export default function CsvUpload() {
   const [sheetName, setSheetName] = useState("");
   const [studentColumn, setStudentColumn] = useState("");
   const [mappings, setMappings] = useState<Record<string, GradeMapping>>({});
+  const [pendingComponents, setPendingComponents] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<GradePreview | null>(null);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
@@ -32,7 +33,7 @@ export default function CsvUpload() {
 
   useEffect(() => {
     if (!session || !offeringId) return;
-    setFile(null); setInspection(null); setPreview(null); setCommitted(null); setDashboard(null);
+    setFile(null); setInspection(null); setPreview(null); setCommitted(null); setDashboard(null); setPendingComponents(new Set());
     Promise.all([getDashboard(session.access_token, offeringId), getAssessments(session.access_token, offeringId)])
       .then(([dashboardData, assessmentData]) => {
         setDashboard(dashboardData); setAssessments(assessmentData.assessments);
@@ -58,6 +59,29 @@ export default function CsvUpload() {
   const weightMismatch = targets.some((target) => { const column = columns.find((c) => c.header === mappings[target.mappingKey]?.csvColumn); return column?.weight != null && column.weight !== Number(target.weight); });
   const invalidComponentTotal = assessments.some((a) => a.components.length > 0 && Math.round(a.components.reduce((sum, c) => sum + Number(c.weight), 0) * 100) !== Math.round(Number(a.weight) * 100));
   const setMapping = (key: string, mapping: GradeMapping) => setMappings((current) => ({ ...current, [key]: mapping }));
+  const changeComponents = (id: number, components: Assessment["components"]) => {
+    setAssessments(current => current.map(a => a.assessment_id === id ? {...a, components} : a));
+    setPendingComponents(current => new Set(current).add(id));
+    const keys = new Set(components.map(c => `component-${c.component_id}`));
+    setMappings(current => Object.fromEntries(Object.entries(current).filter(([key]) => key !== `assessment-${id}` && (!key.startsWith("component-") || !assessments.find(a=>a.assessment_id===id)?.components.some(c=>`component-${c.component_id}`===key) || keys.has(key)))));
+  };
+  const persistComponents = async (id: number) => {
+    if (!offeringId) return;
+    const assessment = assessments.find(a => a.assessment_id===id);
+    if (!assessment) return;
+    setWorking(true); setError("");
+    try {
+      const result = await saveUploadComponents(session.access_token, offeringId, id, assessment.components.map(c=>({component_id:c.component_id>0?c.component_id:null, component_name:c.component_name, weight:Number(c.weight)})));
+      setAssessments(current=>current.map(a=>a.assessment_id===id?{...a,components:result.components}:a));
+      setMappings(current=>{
+        const next={...current};
+        assessment.components.forEach(c=>delete next[`component-${c.component_id}`]);
+        result.components.forEach((c,i)=>{next[`component-${c.component_id}`]=current[`component-${assessment.components[i].component_id}`] ?? emptyMapping();});
+        return next;
+      });
+      setPendingComponents(current=>{const next=new Set(current);next.delete(id);return next;});
+    } catch(err) {setError(errorMessage(err));} finally {setWorking(false);}
+  };
   const chooseFile = async (selected: File) => {
     if (!offeringId || archived || !dashboard) return;
     setWorking(true); setError(""); setPreview(null); setCommitted(null);
@@ -77,7 +101,7 @@ export default function CsvUpload() {
     } catch (err) { setError(errorMessage(err)); } finally { setWorking(false); }
   };
   const previewUpload = async () => {
-    if (!file || !offeringId || archived || !studentColumn || !mappedColumns.length || invalidMaximum || weightMismatch || invalidComponentTotal || duplicateColumns.length) return;
+    if (!file || !offeringId || archived || !studentColumn || !mappedColumns.length || invalidMaximum || weightMismatch || invalidComponentTotal || pendingComponents.size > 0 || duplicateColumns.length) return;
     setWorking(true); setError("");
     try { setPreview(await previewGradeUpload(session.access_token, offeringId, studentColumn, mappedColumns, file, sheetName)); }
     catch (err) { setError(errorMessage(err)); } finally { setWorking(false); }
@@ -103,7 +127,7 @@ export default function CsvUpload() {
       <fieldset disabled={archived || !dashboard || working} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} aria-label="Grade upload controls">
       <div className="stepper">{["Upload file", "Map columns", "Review results", "Commit grades"].map((label, index) => { const clickable = index < step && index < 2 && !committed; return <Fragment key={label}><div className={`step ${index < step ? "done" : index === step ? "now" : ""}${clickable ? " clickable" : ""}`} role={clickable ? "button" : undefined} tabIndex={clickable ? 0 : undefined} title={clickable ? `Back to ${label}` : undefined} onClick={clickable ? () => goToStep(index) : undefined} onKeyDown={clickable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); goToStep(index); } } : undefined}><span className="n">{index < step ? "✓" : index + 1}</span>{label}</div>{index < 3 && <span className={`ln ${index < step ? "done" : ""}`} />}</Fragment>; })}</div>
       {!file ? <div className="upload-step-card"><label className="grade-drop"><div className="icn">XLS</div><div className="t">Choose a Moodle gradebook</div><div className="s">Upload a CSV export or an Excel workbook. For workbooks, choose the correct semester worksheet before mapping columns.</div><input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} /></label></div> : <><div className="file-card"><div className="icn">{file.name.toLowerCase().endsWith(".xlsx") ? "XLS" : "CSV"}</div><div><div className="nm">{file.name}<span className="sub">{inspection?.row_count ?? 0} rows · {inspection?.headers.length ?? 0} columns · {formatFileSize(file.size)}</span></div></div><button className="btn" onClick={replaceFile}>Replace file</button></div>
-        {!preview && <div className="mapping-card"><div className="hd"><div><h4>Map gradebook columns</h4><div className="h-sub">Percentage columns are preferred and use a maximum of 100 automatically. Review suggested matches. Totals, letters, groups and team-contribution fields are excluded.</div></div></div>{inspection?.sheet_names?.length ? <div className="identity-map-row"><label className="identity-map-cell"><div className="src-lbl">Workbook worksheet</div><div className="src">Semester data</div><select className="map-select" value={sheetName} disabled={working} onChange={(event) => void chooseSheet(event.target.value)}>{inspection.sheet_names.map((name) => <option key={name} value={name}>{name}</option>)}</select></label></div> : null}<div className="identity-map-row" style={{ marginTop: 14 }}><label className="identity-map-cell"><div className="src-lbl">Required identity</div><div className="src">Student ID</div><select className="map-select" value={studentColumn} onChange={(event) => setStudentColumn(event.target.value)}><option value="">Choose a gradebook column</option>{inspection?.headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label></div><GradeColumnMapping assessments={assessments} headers={inspection?.headers ?? []} mappings={mappings} onChange={setMapping} /><div className="adm-modal-actions">{invalidMaximum && <span className="field-hint">Enter a valid maximum for every selected score column.</span>}{weightMismatch && <span className="grade-mapping-error">Resolve column weight mismatches before validating.</span>}{invalidComponentTotal && <span className="grade-mapping-error">Component weights must match their parent assessment.</span>}{duplicateColumns.length ? <span className="field-hint">Each task can only be mapped once, using either Percentage or Raw marks.</span> : null}<button className="btn primary" disabled={working || !studentColumn || !mappedColumns.length || duplicateColumns.length > 0 || invalidMaximum || weightMismatch || invalidComponentTotal} onClick={() => void previewUpload()}>{working ? "Checking..." : "Validate mapped grades"}</button></div></div>}
+        {!preview && <div className="mapping-card"><div className="hd"><div><h4>Map gradebook columns</h4><div className="h-sub">Percentage columns are preferred and use a maximum of 100 automatically. Review suggested matches. Totals, letters, groups and team-contribution fields are excluded.</div></div></div>{inspection?.sheet_names?.length ? <div className="identity-map-row"><label className="identity-map-cell"><div className="src-lbl">Workbook worksheet</div><div className="src">Semester data</div><select className="map-select" value={sheetName} disabled={working} onChange={(event) => void chooseSheet(event.target.value)}>{inspection.sheet_names.map((name) => <option key={name} value={name}>{name}</option>)}</select></label></div> : null}<div className="identity-map-row" style={{ marginTop: 14 }}><label className="identity-map-cell"><div className="src-lbl">Required identity</div><div className="src">Student ID</div><select className="map-select" value={studentColumn} onChange={(event) => setStudentColumn(event.target.value)}><option value="">Choose a gradebook column</option>{inspection?.headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label></div><GradeColumnMapping assessments={assessments} headers={inspection?.headers ?? []} mappings={mappings} onChange={setMapping} onComponentsChange={changeComponents} onSaveComponents={(id)=>void persistComponents(id)} pendingComponents={pendingComponents} /><div className="adm-modal-actions">{pendingComponents.size > 0 && <span className="field-hint">Save component setup before validating grades.</span>}{invalidMaximum && <span className="field-hint">Enter a valid maximum for every selected score column.</span>}{weightMismatch && <span className="grade-mapping-error">Resolve column weight mismatches before validating.</span>}{invalidComponentTotal && <span className="grade-mapping-error">Component weights must match their parent assessment.</span>}{duplicateColumns.length ? <span className="field-hint">Each task can only be mapped once, using either Percentage or Raw marks.</span> : null}<button className="btn primary" disabled={working || !studentColumn || !mappedColumns.length || duplicateColumns.length > 0 || invalidMaximum || weightMismatch || invalidComponentTotal || pendingComponents.size > 0} onClick={() => void previewUpload()}>{working ? "Checking..." : "Validate mapped grades"}</button></div></div>}
         {preview && <><MappingSummary assessments={assessments} mappings={mappings} /><ScorePreview preview={preview} /><div className="result-row"><div className="stat-card ok"><div className="lbl"><span className="b" />Matched students</div><div className="v">{preview.matched_count}</div><div className="sub">Found in stored enrolments</div></div><div className="stat-card risk"><div className="lbl"><span className="b" />Errors</div><div className="v">{errorCount}</div><div className="sub">Must be fixed before commit</div></div><div className="stat-card warn"><div className="lbl"><span className="b" />Warnings</div><div className="v">{warningCount}</div><div className="sub">Missing rows or marks to review</div></div><div className="stat-card"><div className="lbl"><span className="b" />Rows inspected</div><div className="v">{preview.row_count}</div><div className="sub">Original gradebook rows</div></div></div><div className="recon-detail-card"><div className="recon-detail-hd"><h4>Server validation</h4><span className="recon-detail-count">{preview.issues.length} issue{preview.issues.length === 1 ? "" : "s"}</span></div>{preview.issues.length ? <table className="recon-tbl"><thead><tr><th>Row</th><th>Severity</th><th>Details</th></tr></thead><tbody>{preview.issues.slice(0, 30).map((issue, index) => <tr key={`${issue.row}-${index}`} className={issue.severity === "error" ? "err" : "warn"}><td className="id">{issue.row ?? "—"}</td><td><span className={`reason ${issue.severity === "error" ? "" : "w"}`}>{issue.severity}</span></td><td>{issue.message}</td></tr>)}</tbody></table> : <div className="recon-detail-empty">All mapped grade rows are valid.</div>}</div><div className="confirm-bar"><div><div className="hd">Commit grades and calculate ULO attainment</div><div className="sb">The server saves raw marks, normalized weighted scores, per-student ULO attainment, and cohort results. It will validate again before saving.</div></div><div className="actions"><button className="btn" onClick={() => setPreview(null)}>Adjust mapping</button><button className="btn primary" disabled={working || errorCount > 0} onClick={() => void commit()}>{working ? "Committing..." : "Commit grades"}</button></div></div></>}
       </>}
       </fieldset>

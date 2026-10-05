@@ -48,12 +48,13 @@ reports retain their original saved evidence.
 
 ## Split assessments
 
-In Assessment setup, use **Add component** at the bottom right of an assessment
-to expand its component editor. Add any number of named components with positive
-unit-grade weights. Their total must equal the parent assessment's weight; only
-the parent counts toward the unit's overall assessment total. Save the setup
-before uploading marks. Components inherit the parent's LO coverage; tasks with
-different LO coverage need separate assessments rather than this component editor.
+After choosing a gradebook in **Grade upload**, use **Add component** at the
+bottom right of the parent assessment's mapping group. Select a CSV score column
+for each component; its task name becomes the component name and a stated weight
+is suggested. Add as many components as needed, adjust their positive unit-grade
+weights to total the parent weight, and **Save components** before validating.
+Assessment setup manages parent weights and LO coverage and links to this upload
+step. Components inherit parent LO coverage.
 
 Grade upload groups each saved component under its parent and shows a dropdown
 of gradebook score columns. Component names identify the tasks; the dropdown
@@ -79,16 +80,18 @@ Selecting their Percentage columns with values `75%` and `85%` produces the
 same `8/10` result using `(75 / 100 * 5) + (85 / 100 * 5)`. No additional
 multiplication by the parent 10% is applied.
 
-Partial uploads store component scores but do not create a parent total until
-all components have scores. The preview flags incomplete assessments and their
+Partial uploads store component scores but do not create a new parent total until
+all components have scores. When splitting an already graded parent in Grade
+upload, its existing result remains until that student has all component scores. The preview flags incomplete assessments and their
 LO results as provisional. An unmapped column or blank score retains any saved
 component score; numeric zero is an explicit score. Later component uploads
 replace only that component and recalculate the parent from all saved scores.
 Use a fresh preview to review the current saved scores before committing.
 
-Component structure is locked once an upload preview references the assessment
-or grades exist, preventing changes to the meaning of saved evidence. Existing
-assessments with grade evidence cannot be retroactively split by this editor.
+Component structure is locked once a preview or saved score references a
+component. Parent-only grades do not prevent initial component setup in Grade
+upload. An older parent-only preview cannot be committed after a split; it must
+be validated again against component columns.
 
 ## Semester Safety
 

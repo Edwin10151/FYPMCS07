@@ -717,3 +717,7 @@ export function roleLabel(roleName: string) {
   if (roleName === "super_admin") return "Super Admin";
   return roleName;
 }
+
+export function saveUploadComponents(token: string, offeringId: number, assessmentId: number, components: Array<{component_id: number | null; component_name: string; weight: number}>) {
+  return apiFetch<{components: AssessmentComponent[]}>(`/offerings/${offeringId}/assessments/${assessmentId}/upload-components`, token, {method: "PUT", body: JSON.stringify({components})});
+}

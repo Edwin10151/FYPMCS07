@@ -1,27 +1,37 @@
-import { Link } from "react-router-dom";
 import type { Assessment, GradePreview } from "../api";
-import { emptyMapping, gradeTargets, mappingForColumn, scoreColumns, taskKey, type GradeMapping } from "../gradebook";
+import { emptyMapping, gradeTargets, mappingForColumn, scoreColumns, taskKey, taskName, type GradeMapping } from "../gradebook";
 
 type Props = {
   assessments: Assessment[];
   headers: string[];
   mappings: Record<string, GradeMapping>;
   onChange: (key: string, mapping: GradeMapping) => void;
+  onComponentsChange: (assessmentId: number, components: Assessment["components"]) => void;
+  onSaveComponents: (assessmentId: number) => void;
+  pendingComponents: Set<number>;
 };
 
-export default function GradeColumnMapping({ assessments, headers, mappings, onChange }: Props) {
+export default function GradeColumnMapping({ assessments, headers, mappings, onChange, onComponentsChange, onSaveComponents, pendingComponents }: Props) {
   const columns = scoreColumns(headers);
   const tasks = [...new Set(columns.map((c) => c.task))];
   return <div className="grade-assessment-groups">{assessments.map((assessment) => <section className="grade-assessment-group" key={assessment.assessment_id}>
-    <div className="grade-assessment-heading"><div><h4>{assessment.assessment_name}</h4><span>{assessment.weight}% of the unit grade{assessment.components.length ? ` · ${assessment.components.length} components` : ""}</span></div><Link className="btn ghost" to="/assessments">{assessment.components.length ? "Manage components" : "Set up components"}</Link></div>
+    <div className="grade-assessment-heading"><div><h4>{assessment.assessment_name}</h4><span>{assessment.weight}% of the unit grade{assessment.components.length ? ` · ${assessment.components.length} components` : ""}</span></div></div>
     {gradeTargets([assessment]).map((target) => {
       const mapping = mappings[target.mappingKey] ?? emptyMapping();
       const selected = columns.find((c) => c.header === mapping.csvColumn);
       const usedTasks = Object.entries(mappings).filter(([key, m]) => key !== target.mappingKey && m.csvColumn).map(([, m]) => taskKey(m.csvColumn));
       const weightMismatch = selected?.weight !== null && selected?.weight !== undefined && selected.weight !== Number(target.weight);
       return <div className="col-edit" key={target.mappingKey}>
-        <div><div className="src-lbl">{target.component_id ? "Component" : "Assessment"} · {target.weight}% of unit grade</div><div className="src">{target.assessment_name}</div><div className="field-hint">{mapping.suggested ? "Suggested match — review the selected task before validating." : "Choose one score representation for this task."}</div></div>
-        <div><label className="field-hint" htmlFor={`column-${target.mappingKey}`}>Gradebook score column</label><select id={`column-${target.mappingKey}`} className="map-select" value={mapping.csvColumn} onChange={(event) => onChange(target.mappingKey, mappingForColumn(event.target.value))}>
+        <div><div className="src-lbl">{target.component_id ? "Component" : "Assessment"} · {target.weight}% of unit grade</div><div className="src">{target.assessment_name}</div>{target.component_id && !assessment.components_locked && <div><label className="field-hint">Component unit weight (%)<input className="max-marks-input" aria-label={`Component weight for ${target.assessment_name}`} type="number" min="0.01" max={assessment.weight} step="0.01" value={target.weight} onChange={event => onComponentsChange(assessment.assessment_id, assessment.components.map(c => c.component_id === target.component_id ? {...c, weight:event.target.value} : c))} /></label><button type="button" className="btn ghost" onClick={() => onComponentsChange(assessment.assessment_id, assessment.components.filter(c => c.component_id !== target.component_id))}>Remove component</button></div>}
+        <div className="field-hint">{mapping.suggested ? "Suggested match — review the selected task before validating." : "Choose one score representation for this task."}</div></div>
+        <div><label className="field-hint" htmlFor={`column-${target.mappingKey}`}>Gradebook score column</label><select id={`column-${target.mappingKey}`} className="map-select" value={mapping.csvColumn} onChange={(event) => {
+          const header = event.target.value;
+          onChange(target.mappingKey, mappingForColumn(header));
+          if (target.component_id && !assessment.components_locked && header) {
+            const column = columns.find(c => c.header === header);
+            onComponentsChange(assessment.assessment_id, assessment.components.map(c => c.component_id === target.component_id ? {...c, component_name: taskName(header), weight: String(column?.weight ?? c.weight)} : c));
+          }
+        }}>
           <option value="">Do not import this {target.component_id ? "component" : "assessment"}</option>
           {tasks.map((task) => <optgroup label={task} key={task}>{columns.filter((c) => c.task === task).map((column) => <option key={column.header} value={column.header} disabled={usedTasks.includes(taskKey(column.header))}>{column.header}</option>)}</optgroup>)}
         </select>
@@ -34,6 +44,16 @@ export default function GradeColumnMapping({ assessments, headers, mappings, onC
       </div>;
     })}
     {assessment.components.length > 0 && <div className="grade-component-total">Component weights: <strong>{assessment.components.reduce((sum, c) => sum + Number(c.weight), 0).toFixed(2)}% / {assessment.weight}%</strong></div>}
+    <div className="component-actions">
+      {!assessment.components_locked && Number(assessment.weight) > 0 && <button className="btn ghost" type="button" onClick={() => {
+        const remaining = Math.max(0, Number(assessment.weight) - assessment.components.reduce((sum,c) => sum + Number(c.weight),0));
+        onComponentsChange(assessment.assessment_id, [...assessment.components, {component_id:-Date.now(), component_name:`Component ${assessment.components.length+1}`, weight:String(remaining)}]);
+      }}>+ Add component</button>}
+      {pendingComponents.has(assessment.assessment_id) && <button className="btn primary" type="button" disabled={assessment.components.some(c=>!c.component_name.trim() || Number(c.weight)<=0 || !Number.isFinite(Number(c.weight))) || (assessment.components.length>0 && Math.round(assessment.components.reduce((sum,c)=>sum+Number(c.weight),0)*100)!==Math.round(Number(assessment.weight)*100))} onClick={() => onSaveComponents(assessment.assessment_id)}>Save components</button>}
+    </div>
+    {assessment.components_locked && <p className="field-hint">Component scores or previews already exist. Choose columns for the saved components; their names and weights are locked.</p>}
+    {Number(assessment.weight)===0 && <p className="field-hint">This assessment has no unit-grade weight. Weighted components cannot be added.</p>}
+    <p className="field-hint">Existing assessment results are retained until a student's complete set of component scores is imported.</p>
     <p className="field-hint">Unmapped or blank scores retain saved results. Missing components keep the combined assessment incomplete.</p>
   </section>)}</div>;
 }

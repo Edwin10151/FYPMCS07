@@ -1082,14 +1082,16 @@ def assessments(user: Annotated[dict, Depends(require_offering_access())], offer
     )
     locked = fetch_all(
         """SELECT DISTINCT assessment_id FROM (
-           SELECT assessment_id FROM student_grade WHERE offering_id = %s
+           SELECT c.assessment_id FROM student_component_grade g
+           JOIN assessment_component c USING (component_id)
+           JOIN enrollment e USING (enrollment_id) WHERE e.offering_id = %s
            UNION ALL
            SELECT c.assessment_id FROM grade_upload_cell c
            JOIN grade_upload_row r USING (upload_row_id)
-           JOIN grade_upload_batch b USING (upload_batch_id) WHERE b.offering_id = %s
+           JOIN grade_upload_batch b USING (upload_batch_id) WHERE b.offering_id = %s AND c.component_id IS NOT NULL
            UNION ALL
            SELECT m.assessment_id FROM grade_upload_column_mapping m
-           JOIN grade_upload_batch b USING (upload_batch_id) WHERE b.offering_id = %s
+           JOIN grade_upload_batch b USING (upload_batch_id) WHERE b.offering_id = %s AND m.component_id IS NOT NULL
            ) evidence""", (offering_id, offering_id, offering_id),
     )
     locked_ids = {item["assessment_id"] for item in locked}
@@ -1099,7 +1101,7 @@ def assessments(user: Annotated[dict, Depends(require_offering_access())], offer
     return {"assessments": rows, "all_ulos": all_ulos}
 
 
-def _save_assessment_components(cur, assessment_id: int, components: list[AssessmentComponentInput]) -> None:
+def _save_assessment_components(cur, assessment_id: int, components: list[AssessmentComponentInput], *, upload_setup: bool = False) -> None:
     cur.execute("SELECT component_id, component_name, weight FROM assessment_component WHERE assessment_id = %s ORDER BY component_order, component_id", (assessment_id,))
     existing = cur.fetchall()
     ids = {c["component_id"] for c in existing}
@@ -1110,10 +1112,10 @@ def _save_assessment_components(cur, assessment_id: int, components: list[Assess
     after = [(c.component_id, c.component_name.strip(), c.weight) for c in components]
     if before == after:
         return
-    cur.execute("""SELECT 1 FROM student_grade WHERE assessment_id = %s
-                   UNION ALL SELECT 1 FROM grade_upload_cell WHERE assessment_id = %s
-                   UNION ALL SELECT 1 FROM grade_upload_column_mapping WHERE assessment_id = %s LIMIT 1""",
-                (assessment_id, assessment_id, assessment_id))
+    cur.execute("""SELECT 1 FROM student_grade WHERE assessment_id = %s AND NOT %s
+                   UNION ALL SELECT 1 FROM grade_upload_cell WHERE assessment_id = %s AND (NOT %s OR component_id IS NOT NULL)
+                   UNION ALL SELECT 1 FROM grade_upload_column_mapping WHERE assessment_id = %s AND (NOT %s OR component_id IS NOT NULL) LIMIT 1""",
+                (assessment_id, upload_setup, assessment_id, upload_setup, assessment_id, upload_setup))
     if cur.fetchone():
         raise HTTPException(status_code=409, detail="Components cannot change after grade uploads or previews. Keep the existing assessment structure.")
     remove = ids - set(incoming_ids)
@@ -1129,6 +1131,33 @@ def _save_assessment_components(cur, assessment_id: int, components: list[Assess
         else:
             cur.execute("UPDATE assessment_component SET component_name = %s, weight = %s, component_order = %s WHERE component_id = %s",
                         (component.component_name.strip(), component.weight, order, component.component_id))
+
+
+class UploadComponentsInput(BaseModel):
+    components: list[AssessmentComponentInput]
+
+
+@app.put("/api/offerings/{offering_id}/assessments/{assessment_id}/upload-components")
+def save_upload_components(offering_id: int, assessment_id: int, payload: UploadComponentsInput,
+                           user: Annotated[dict, Depends(require_permission(10))]):
+    ensure_offering_access(user, offering_id, min_permission_level=10)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
+            cur.execute("SELECT weight FROM assessment WHERE assessment_id = %s AND offering_id = %s FOR UPDATE", (assessment_id, offering_id))
+            parent = cur.fetchone()
+            if not parent:
+                raise HTTPException(status_code=404, detail="Assessment not found in this offering")
+            names = [c.component_name.strip().casefold() for c in payload.components]
+            if any(not n for n in names) or len(names) != len(set(names)):
+                raise HTTPException(status_code=422, detail="Components need unique, non-empty names")
+            if payload.components and sum(c.weight for c in payload.components) != parent["weight"]:
+                raise HTTPException(status_code=422, detail="Component weights must total the parent assessment weight")
+            _save_assessment_components(cur, assessment_id, payload.components, upload_setup=True)
+            _mark_report_evidence_stale(cur, offering_id)
+            cur.execute("SELECT component_id, component_name, weight FROM assessment_component WHERE assessment_id = %s ORDER BY component_order, component_id", (assessment_id,))
+            components = cur.fetchall()
+    return {"components": components}
 
 
 
@@ -2619,17 +2648,6 @@ def _load_offering_assessments(cur, offering_id: int) -> dict[int, dict]:
         """,
         (offering_id,),
     )
-    return {row["assessment_id"]: row for row in cur.fetchall()}
-
-
-def _load_offering_assessments(cur, offering_id: int) -> dict[int, dict]:
-    cur.execute(
-        """
-        SELECT assessment_id, assessment_name, weight
-        FROM assessment WHERE offering_id = %s ORDER BY assessment_order
-        """,
-        (offering_id,),
-    )
     assessments = {row["assessment_id"]: row for row in cur.fetchall()}
     cur.execute("""SELECT c.component_id, c.assessment_id, c.component_name, c.weight
                    FROM assessment_component c JOIN assessment a USING (assessment_id)
@@ -2985,6 +3003,12 @@ def commit_grade_upload(
             )
             if cur.fetchone()["count"]:
                 raise HTTPException(status_code=409, detail="Resolve upload errors before committing")
+
+            cur.execute("""SELECT 1 FROM grade_upload_column_mapping m
+                           WHERE m.upload_batch_id = %s AND m.assessment_id IS NOT NULL AND m.component_id IS NULL
+                           AND EXISTS (SELECT 1 FROM assessment_component c WHERE c.assessment_id = m.assessment_id) LIMIT 1""", (upload_batch_id,))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Components were configured after this preview. Validate the gradebook again using its component columns.")
 
             # The gradebook is the only place that knows an assessment's real total:
             # a Handbook import cannot publish one, so it defaults to 100 and no screen
