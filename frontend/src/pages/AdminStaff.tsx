@@ -58,9 +58,7 @@ export default function AdminStaff() {
   const activeCount = data?.staff.filter((staff) => staff.is_active).length ?? 0;
   const pendingCount = data?.staff.filter((staff) => staff.is_active && staff.must_change_password).length ?? 0;
   const unassigned = data?.staff.filter((staff) => staff.is_active && ["coordinator", "lecturer"].includes(staff.role_name) && !assignments.get(staff.user_id)?.length).length ?? 0;
-  const formIssue = !form.staff_id.trim() ? "Enter a staff ID."
-    : form.staff_id.trim().length > 50 ? "Staff ID must be at most 50 characters."
-    : form.full_name.trim().length < 3 ? "Enter a full name with at least 3 characters."
+  const formIssue = form.full_name.trim().length < 3 ? "Enter a full name with at least 3 characters."
     : !emailPattern.test(form.email.trim()) ? "Enter a valid email address." : "";
   const canAdd = !formIssue;
   const addStaff = async () => {
@@ -151,7 +149,7 @@ export default function AdminStaff() {
         const protectedAccount = staff.user_id === session.user.user_id || (rowIsAdminTier && !isSuperAdmin);
         const rowOptions = Array.from(new Set<Role>([staff.role_name as Role, ...assignableRoles]));
         return <tr key={staff.user_id}>
-          <td><span className="nm">{staff.full_name}</span><span className="em">{staff.staff_id} · {staff.email}</span></td>
+          <td><span className="nm">{staff.full_name}</span><span className="em">{staff.staff_id ? `${staff.staff_id} · ` : ""}{staff.email}</span></td>
           <td><select className="adm-select" value={staff.role_name} disabled={working || protectedAccount} title={rowIsAdminTier && !isSuperAdmin ? "Only a super admin can change this account's role" : undefined} onChange={(event) => void changeRole(staff.user_id, event.target.value as Role)}>{rowOptions.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></td>
           <td className="muted">{assignments.get(staff.user_id)?.join(", ") || "No unit offering assigned"}</td>
           <td><span className={`adm-status ${!staff.is_active ? "inactive" : staff.must_change_password ? "planning" : "active"}`}><span className="d" />{!staff.is_active ? "Inactive" : staff.must_change_password ? "Password change required" : "Active"}</span></td>
