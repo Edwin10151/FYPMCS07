@@ -1301,7 +1301,9 @@ def create_admin_user(
 ):
     with get_conn() as conn:
         with conn.cursor() as cur:
-            return _insert_admin_user(cur, _admin_user_values(payload), user["role_name"])
+            account = _insert_admin_user(cur, _admin_user_values(payload), user["role_name"])
+    account["notification_status"] = _send_staff_welcome(account)
+    return account
 
 
 @app.post("/api/admin/users/bulk", status_code=201)
@@ -1317,7 +1319,33 @@ def create_admin_users(
     with get_conn() as conn:
         with conn.cursor() as cur:
             accounts = [_insert_admin_user(cur, item, user["role_name"]) for item in values]
+    for account in accounts:
+        account["notification_status"] = _send_staff_welcome(account)
     return {"accounts": accounts}
+
+
+def _send_staff_welcome(account: dict) -> str:
+    if not settings.email_configured:
+        return "not_configured"
+    try:
+        login_url = urlsplit(_password_reset_url("welcome"))._replace(path="/login", fragment="").geturl()
+    except HTTPException:
+        return "not_configured"
+    recipient = {key: account["user"][key] for key in ("user_id", "full_name", "email")}
+    body = (
+        f"An administrator created your Curriculum Analytics account.\n\n"
+        f"Sign in: {login_url}\n"
+        f"Email: {recipient['email']}\n"
+        f"Temporary password: {account['temporary_password']}\n\n"
+        "You must choose a new password on your first sign-in. "
+        "Do not share or forward these credentials. "
+        "If you did not expect this account, contact your administrator."
+    )
+    try:
+        deliveries = send_reminders(settings, [recipient], "Your Curriculum Analytics account", body)
+        return "sent" if deliveries and deliveries[0]["status"] == "sent" else "failed"
+    except RuntimeError:
+        return "failed"
 
 
 @app.patch("/api/admin/users/{user_id}")

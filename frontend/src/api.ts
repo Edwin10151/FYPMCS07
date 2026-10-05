@@ -519,7 +519,7 @@ export function createAdminUser(
   token: string,
   payload: { staff_id: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" },
 ) {
-  return apiFetch<{ user: AdminUser; temporary_password: string }>("/admin/users", token, {
+  return apiFetch<{ user: AdminUser; temporary_password: string; notification_status: "sent" | "failed" | "not_configured" }>("/admin/users", token, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -529,7 +529,7 @@ export function createAdminUsers(
   token: string,
   users: Array<{ staff_id: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" }>,
 ) {
-  return apiFetch<{ accounts: Array<{ user: AdminUser; temporary_password: string }> }>("/admin/users/bulk", token, {
+  return apiFetch<{ accounts: Array<{ user: AdminUser; temporary_password: string; notification_status: "sent" | "failed" | "not_configured" }> }>("/admin/users/bulk", token, {
     method: "POST",
     body: JSON.stringify({ users }),
   });

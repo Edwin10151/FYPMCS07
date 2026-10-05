@@ -68,7 +68,7 @@ export default function AdminStaff() {
     try {
       const result = await createAdminUser(session.access_token, { ...form, staff_id: form.staff_id.trim(), full_name: form.full_name.trim(), email: form.email.trim() });
       setTemporaryPasswords([{ name: result.user.full_name, email: result.user.email, password: result.temporary_password }]);
-      setFlash(`${result.user.full_name} was added. Share the temporary password securely.`);
+      setFlash(`${result.user.full_name} was added. ${result.notification_status === "sent" ? "Welcome email with the temporary password sent." : result.notification_status === "failed" ? "Welcome email failed; share the temporary password securely or send a reset link." : "Welcome email is not configured; share the temporary password securely."}`);
       setAddOpen(false); setForm({ staff_id: "", full_name: "", email: "", role_name: "lecturer" }); await reload();
     } catch (err) { setAddError(errorMessage(err)); } finally { setWorking(false); }
   };
@@ -103,7 +103,9 @@ export default function AdminStaff() {
     try {
       const result = await createAdminUsers(session.access_token, valid.map(({ staff_id, full_name, email, role_name }) => ({ staff_id, full_name, email, role_name })));
       setTemporaryPasswords(result.accounts.map((account) => ({ name: account.user.full_name, email: account.user.email, password: account.temporary_password })));
-      setFlash(`${result.accounts.length} staff account${result.accounts.length === 1 ? "" : "s"} created. Share each temporary password securely.`);
+      const sent = result.accounts.filter((account) => account.notification_status === "sent").length;
+      const unsent = result.accounts.filter((account) => account.notification_status !== "sent");
+      setFlash(`${result.accounts.length} staff account${result.accounts.length === 1 ? "" : "s"} created. ${sent} welcome email(s) sent.${unsent.length ? ` Email not sent to ${unsent.map((account) => account.user.email).join(", ")}; share their temporary passwords securely or send reset links.` : ""}`);
       setStaged([]); setUploadOpen(false); await reload();
     } catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
   };
