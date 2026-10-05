@@ -100,7 +100,7 @@ export default function AdminOfferings() {
       <main className="main">
         <div className="topbar">
           <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester Setup</Link><span className="sep">›</span><strong>Unit Offerings</strong></div>
-          <div className="top-actions"><button className="btn primary" disabled={!semesterId || !isSuperAdmin} title={isSuperAdmin ? undefined : "Only a super admin can add unit offerings"} onClick={openAdd}>+ Add unit</button></div>
+          <div className="top-actions"><button className="btn primary" disabled={!semesterId} onClick={openAdd}>+ Add unit</button></div>
         </div>
         <div className="content">
           <div className="unit-banner">

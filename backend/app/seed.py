@@ -109,7 +109,7 @@ def seed_demo_data() -> None:
                 VALUES (%s, %s, %s, %s)
                 RETURNING semester_id
                 """,
-                (2026, "S1", "2026-02-23", "2026-06-19"),
+                (2026, "FEB", "2026-02-23", "2026-06-19"),
             )
             offering_id = _one(
                 cur,

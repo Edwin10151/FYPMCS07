@@ -41,7 +41,7 @@ def evidence(previous: bool = True) -> ReportEvidence:
     if previous:
         previous_offering = PreviousOfferingEvidence(
             year=2025,
-            period="S2",
+            period="JUL",
             student_count=90,
             learning_outcomes=[
                 LearningOutcomeEvidence(
@@ -69,7 +69,7 @@ def evidence(previous: bool = True) -> ReportEvidence:
         unit_code="FIT2004",
         unit_name="Algorithms and Data Structures",
         year=2026,
-        period="S1",
+        period="FEB",
         student_count=100,
         learning_outcomes=current_outcomes,
         assessments=[AssessmentEvidence(name="Complexity proofs", weight=20, ulo_codes=["LO1"])],
@@ -82,7 +82,7 @@ def test_mock_report_uses_current_and_previous_aggregate_evidence():
 
     assert generated.provider == "mock"
     assert "LO1" in generated.draft.attainment_analysis
-    assert "S2 2025" in generated.draft.previous_cohort_outcomes
+    assert "JUL 2025" in generated.draft.previous_cohort_outcomes
     assert "4.0 percentage points" in generated.draft.previous_cohort_outcomes
     assert "% percentage points" not in generated.draft.previous_cohort_outcomes
     assert "Complexity proofs" in generated.draft.next_cohort_action_plan

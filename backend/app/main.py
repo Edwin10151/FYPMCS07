@@ -1415,6 +1415,7 @@ def send_email_reminder(
 
 
 _ADMIN_ROLE_NAMES = {"management", "super_admin"}
+_INTAKE_PERIODS = {"FEB", "JUL", "OCT"}
 _SEMESTER_STATUSES = {"planning", "active", "archived"}
 _OFFERING_STATUSES = {"draft", "active", "discontinued"}
 _STUDENT_CODE_PATTERN = re.compile(r"^\d{8,9}$")
@@ -1678,8 +1679,8 @@ def create_admin_period(
 ):
     _validate_period(payload)
     period = payload.period.strip().upper()
-    if period not in {"S1", "S2"}:
-        raise HTTPException(status_code=422, detail="Period must be S1 or S2")
+    if period not in _INTAKE_PERIODS:
+        raise HTTPException(status_code=422, detail="Period must be FEB, JUL, or OCT")
     if not 2020 <= payload.year <= 2100:
         raise HTTPException(status_code=422, detail="Year must be between 2020 and 2100")
     with get_conn() as conn:
@@ -1727,10 +1728,12 @@ def update_admin_period(
 
 
 def _next_period(year: int, period: str) -> tuple[int, str]:
-    """Each year has two semesters: S1 rolls to S2 the same year, S2 rolls to S1 the next year."""
-    if period == "S1":
-        return year, "S2"
-    return year + 1, "S1"
+    """Each year has three intakes: FEB rolls to JUL, JUL rolls to OCT, OCT rolls to FEB the next year."""
+    if period == "FEB":
+        return year, "JUL"
+    if period == "JUL":
+        return year, "OCT"
+    return year + 1, "FEB"
 
 
 @app.post("/api/admin/periods/{semester_id}/deactivate")
@@ -1848,7 +1851,7 @@ def reset_admin_period(
 @app.post("/api/admin/offerings", status_code=201)
 def create_admin_offering(
     payload: AdminOfferingCreate,
-    user: Annotated[dict, Depends(require_permission(40))],
+    user: Annotated[dict, Depends(require_permission(30))],
 ):
     _validate_offering_status(payload.status)
     unit_code = payload.unit_code.strip().upper()
@@ -1969,7 +1972,7 @@ def delete_admin_offering(
 @app.post("/api/admin/offerings/bulk-from-roster", status_code=201)
 def create_offerings_from_roster(
     payload: RosterOfferingsBulkCreate,
-    user: Annotated[dict, Depends(require_permission(40))],
+    user: Annotated[dict, Depends(require_permission(30))],
 ):
     if not payload.offerings:
         raise HTTPException(status_code=422, detail="Select at least one unit to add")
