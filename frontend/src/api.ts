@@ -553,7 +553,7 @@ export function getStaffingStatus(token: string, semesterId: number) {
 
 export function createAdminUser(
   token: string,
-  payload: { staff_id: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" },
+  payload: { staff_id?: string; full_name: string; email: string; role_name: "super_admin" | "management" | "coordinator" | "lecturer" },
 ) {
   return apiFetch<{ user: AdminUser; temporary_password: string; notification_status: "sent" | "failed" | "not_configured" }>("/admin/users", token, {
     method: "POST",

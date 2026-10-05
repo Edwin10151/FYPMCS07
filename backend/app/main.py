@@ -99,7 +99,7 @@ class PasswordResetRequest(BaseModel):
 
 
 class AdminUserCreate(BaseModel):
-    staff_id: str = Field(min_length=1, max_length=50)
+    staff_id: str | None = Field(default=None, max_length=50)
     full_name: str
     email: EmailStr
     role_name: str
@@ -1353,19 +1353,19 @@ def admin_users(user: Annotated[dict, Depends(require_permission(30))]):
     return {"users": rows}
 
 
-def _admin_user_values(payload: AdminUserCreate) -> tuple[str, str, str, str]:
-    staff_id = payload.staff_id.strip()
+def _admin_user_values(payload: AdminUserCreate) -> tuple[str | None, str, str, str]:
+    staff_id = (payload.staff_id or "").strip() or None
     full_name = payload.full_name.strip()
     email = str(payload.email).lower()
     role_name = payload.role_name.strip().lower()
-    if not staff_id or len(staff_id) > 50:
+    if staff_id and len(staff_id) > 50:
         raise HTTPException(status_code=422, detail="Staff ID must contain 1 to 50 characters")
     if len(full_name) < 3:
         raise HTTPException(status_code=422, detail="Full name is required")
     return staff_id, full_name, email, role_name
 
 
-def _insert_admin_user(cur, values: tuple[str, str, str, str], creator_role_name: str) -> dict:
+def _insert_admin_user(cur, values: tuple[str | None, str, str, str], creator_role_name: str) -> dict:
     staff_id, full_name, email, role_name = values
     cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
     role = cur.fetchone()
@@ -1373,7 +1373,7 @@ def _insert_admin_user(cur, values: tuple[str, str, str, str], creator_role_name
         raise HTTPException(status_code=422, detail="Role must be super_admin, management, coordinator, or lecturer")
     if role_name in _ADMIN_ROLE_NAMES and creator_role_name != "super_admin":
         raise HTTPException(status_code=403, detail="Only a super admin can grant management or super admin access")
-    cur.execute("SELECT 1 FROM app_user WHERE staff_id = %s OR email = %s", (staff_id, email))
+    cur.execute("SELECT 1 FROM app_user WHERE (staff_id IS NOT NULL AND staff_id = %s) OR email = %s", (staff_id, email))
     if cur.fetchone():
         raise HTTPException(status_code=409, detail="A staff account already uses that ID or email")
 
