@@ -119,10 +119,15 @@ def test_component_total_must_match_parent(db, fixture):
 
 def test_handbook_replacement_cannot_delete_configured_components(db, fixture):
     offering, _, _, assessment = setup_components(db, fixture)
-    snapshot = insert(db, "INSERT INTO handbook_import_snapshot (offering_id, source_url, payload) VALUES (%s, 'https://example.test', '{}'::jsonb)", (offering,))
+    db.execute("UPDATE assessment SET source = 'handbook' WHERE assessment_id = %s", (assessment["assessment_id"],))
+    payload = {"unit_code": "FIT9991", "learning_outcomes": [{"code": "LO1", "description": "Vlog"}],
+               "assessments": [{"name": "Portfolio", "weight": "100", "is_hurdle": False, "ulo_codes": ["LO1"]}]}
+    snapshot = insert(db, "INSERT INTO handbook_import_snapshot (offering_id, source_url, payload) VALUES (%s, 'https://example.test', %s::jsonb)", (offering, json.dumps(payload)))
+    review = main.review_handbook(payload, main._handbook_state(db.cursor(), offering))
     with pytest.raises(HTTPException) as raised:
-        main.confirm_handbook_import(offering, main.HandbookImportConfirmation(handbook_import_id=snapshot), fixture["user"])
+        main.confirm_handbook_import(offering, main.HandbookImportConfirmation(handbook_import_id=snapshot, review_revision=review["revision"]), fixture["user"])
     assert raised.value.status_code == 409
+    assert "components cannot" in raised.value.detail
     assert len(main.assessments(fixture["user"], offering)["assessments"][0]["components"]) == 2
 
 

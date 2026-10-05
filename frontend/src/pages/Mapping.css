@@ -134,7 +134,7 @@
 
 /* Fixed layout + explicit column widths keep header and body cells pixel-aligned */
 .mx-table { width: 100%; font-size: 12px; table-layout: fixed; border-collapse: collapse; }
-.mx-table .col-plo { width: 120px; }
+.mx-table .col-plo { width: 150px; }
 .mx-table .col-lo  { width: auto; }
 .mx-table th, .mx-table td { border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
 .mx-table th:last-child, .mx-table td:last-child { border-right: none; }
@@ -282,3 +282,14 @@
 .hb-diff-new .hb-diff-tag { background: var(--ok-bg); color: var(--ok); }
 
 .hb-modal-actions { display: flex; justify-content: flex-end; margin-top: 22px; }
+.programme-context { margin-bottom: 16px; }
+.programme-context p { font-size: 13px; line-height: 1.5; }
+.plo-description { font-size: 12px; line-height: 1.5; margin-top: 6px; }
+.hb-options { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.hb-options label { display: flex; align-items: start; gap: 8px; margin: 10px 0; font-size: 13px; }
+.hb-previous { display: block; margin-top: 5px; color: var(--ink-2); font-size: 12px; }
+
+.plo-cell-head { flex-wrap: wrap; }
+.plo-cell-head .h-sub { white-space: nowrap; font-size: 10px; }
+.plo-description summary { cursor: pointer; color: var(--ink-2); font-size: 11px; }
+.plo-description p { margin: 8px 0 0; }

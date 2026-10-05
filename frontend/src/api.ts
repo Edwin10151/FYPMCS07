@@ -29,6 +29,7 @@ export type Offering = {
   can_edit: boolean;
   handbook_url: string | null;
   last_scraped_at: string | null;
+  handbook_application_mode: "full" | "ulos_only" | null;
 };
 
 export type LearningOutcome = {
@@ -112,7 +113,9 @@ export type ReportSections = {
 
 export type MappingPayload = {
   ulos: Array<{ offering_ulo_id: number; ulo_code: string; description: string }>;
-  plos: Array<{ plo_id: number; plo_code: string; description: string }>;
+  plos: Array<{ plo_id: number; plo_code: string; description: string; program_code: string; program_name: string }>;
+  programs: Array<{ program_id: number; program_code: string; program_name: string; plo_count: number }>;
+  handbook_confirmed: boolean;
   mappings: Array<{ mapping_id: number; offering_ulo_id: number; plo_id: number }>;
 };
 
@@ -159,7 +162,21 @@ export type AssessmentUloWeightInput = {
   allocated_weight: number;
 };
 
+export type HandbookReview = {
+  revision: string;
+  ulos: Array<{ code: string; description: string; previous_code: string | null; previous_description?: string; status: string }>;
+  assessments: Array<{ name: string; weight: string; previous_weight?: string; status: string }>;
+  retained_ulos: string[];
+  removed_assessments: string[];
+  retained_assessments: string[];
+  ulo_blockers: string[];
+  assessment_blockers: string[];
+  has_grades: boolean;
+  has_previews: boolean;
+};
+
 export type HandbookDraft = {
+  review: HandbookReview;
   handbook_import_id: number;
   source_url: string;
   handbook_version: string | null;
@@ -376,10 +393,10 @@ export function getLatestHandbookImport(token: string, offeringId: number) {
   return apiFetch<{ import: HandbookDraft | null }>(`/offerings/${offeringId}/handbook-import`, token);
 }
 
-export function confirmHandbookImport(token: string, offeringId: number, handbookImportId: number) {
+export function confirmHandbookImport(token: string, offeringId: number, handbookImportId: number, reviewRevision: string, applicationMode: "full" | "ulos_only") {
   return apiFetch<{ status: string }>(`/offerings/${offeringId}/handbook-import/confirm`, token, {
     method: "POST",
-    body: JSON.stringify({ handbook_import_id: handbookImportId }),
+    body: JSON.stringify({ handbook_import_id: handbookImportId, review_revision: reviewRevision, application_mode: applicationMode }),
   });
 }
 

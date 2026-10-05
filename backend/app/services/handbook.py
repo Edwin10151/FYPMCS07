@@ -93,6 +93,8 @@ def normalise_page_content(
             )
     if not learning_outcomes:
         raise HandbookImportError("Handbook unit has no learning outcomes")
+    if len({u["code"] for u in learning_outcomes}) != len(learning_outcomes):
+        raise HandbookImportError("Handbook unit has duplicate learning outcome codes")
 
     raw_assessments = [
         item for item in page_content.get("assessments") or [] if isinstance(item, dict)
@@ -134,6 +136,8 @@ def normalise_page_content(
             }
         )
 
+    if len({a["name"].casefold() for a in assessments}) != len(assessments):
+        raise HandbookImportError("Handbook unit has duplicate assessment names")
     payload = {
         "unit_code": unit_code,
         "title": title,
