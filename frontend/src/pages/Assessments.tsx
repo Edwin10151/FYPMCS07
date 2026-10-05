@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   errorMessage,
@@ -149,6 +149,34 @@ export default function Assessments() {
   const contributionsDirty = useMemo(() => stableStringify(contributions) !== stableStringify(savedContributions), [contributions, savedContributions]);
   const anyDirty = rowsDirty || contributionsDirty;
   const totalWeight = useMemo(() => rows.reduce((sum, row) => sum + (Number.isFinite(row.weight) ? row.weight : 0), 0), [rows]);
+
+  /**
+   * ULOs whose contributions do not add up to 100%.
+   *
+   * A ULO with no assessments at all is left out: it cannot reach 100 by any
+   * edit here, so blocking the save on it would make coverage unsaveable until
+   * every outcome is linked to something.
+   */
+  const contributionOf = useCallback((row: EditableRow, uloCode: string) =>
+    contributions[`${row.assessment_id}::${uloCode}`]
+      ?? row.allocated_weights[row.covers.indexOf(uloCode)]
+      ?? defaultContribution(savedRows, uloCode),
+    [contributions, savedRows]);
+
+  const coveringRows = useCallback((uloCode: string) =>
+    savedRows.filter((row) => row.assessment_id !== null && row.covers.includes(uloCode)),
+    [savedRows]);
+
+  const unbalancedUlos = useMemo(() =>
+    allUlos
+      .map((ulo) => {
+        const covering = coveringRows(ulo.ulo_code);
+        if (covering.length === 0) return null;
+        const total = covering.reduce((sum, row) => sum + contributionOf(row, ulo.ulo_code), 0);
+        return Math.abs(total - 100) < 0.01 ? null : { code: ulo.ulo_code, total };
+      })
+      .filter((item): item is { code: string; total: number } => item !== null),
+    [allUlos, coveringRows, contributionOf]);
   const invalidReason = useMemo(() => {
     if (rows.some((row) => !row.assessment_name.trim())) return "Every assessment needs a name.";
     const names = rows.map((row) => row.assessment_name.trim().toLowerCase());
@@ -393,21 +421,22 @@ export default function Assessments() {
             {canEdit && <div className="add-row" role="button" tabIndex={0} onClick={addRow} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") addRow(); }}>+ Add assessment row</div>}
             <div className="per-lo-breakdown">
               <div className="per-lo-head">
-                <div><h4>Assessment coverage</h4><div className="h-sub">Each assessment's contribution to a ULO is independent. A ULO is fully covered once its assessments' contributions add up to 100%.</div></div>
+                <div><h4>Assessment coverage</h4><div className="h-sub">Each assessment's contribution to a ULO is independent. A ULO is fully covered once its assessments' contributions add up to 100%.{unbalancedUlos.length > 0 && <span className="coverage-blocked"> Fix {unbalancedUlos.map((u) => `${u.code} (${u.total.toFixed(1)}%)`).join(", ")} before saving.</span>}</div></div>
                 <div className="per-lo-head-actions">
-                  <div className={`pill ${allUlos.length > 0 ? "ok" : "warn"}`}><span className="dot" />{allUlos.length} ULOs covered</div>
-                  {canEdit && <button className="btn primary" disabled={!contributionsDirty || savingCoverage} onClick={() => void saveCoverage()}>{savingCoverage ? "Saving..." : "Save changes"}</button>}
+                  <div className={`pill ${unbalancedUlos.length === 0 && allUlos.length > 0 ? "ok" : "warn"}`}><span className="dot" />{unbalancedUlos.length === 0 ? `${allUlos.length} ULOs covered` : `${unbalancedUlos.length} ULO${unbalancedUlos.length === 1 ? "" : "s"} not at 100%`}</div>
+                  {canEdit && <button
+                    className="btn primary"
+                    disabled={!contributionsDirty || savingCoverage || unbalancedUlos.length > 0}
+                    title={unbalancedUlos.length > 0
+                      ? `These outcomes must total 100% before saving: ${unbalancedUlos.map((u) => `${u.code} (${u.total.toFixed(1)}%)`).join(", ")}`
+                      : undefined}
+                    onClick={() => void saveCoverage()}
+                  >{savingCoverage ? "Saving..." : "Save changes"}</button>}
                 </div>
               </div>
               {allUlos.map((ulo) => {
-                const coveredBy = savedRows.filter((row) => row.assessment_id !== null && row.covers.includes(ulo.ulo_code));
-                // One source for a row's contribution: an unsaved edit wins, then the
-                // stored value, then the even-split default. The bar and the total both
-                // read it, so they cannot disagree.
-                const contributionFor = (row: EditableRow) =>
-                  contributions[`${row.assessment_id}::${ulo.ulo_code}`]
-                    ?? row.allocated_weights[row.covers.indexOf(ulo.ulo_code)]
-                    ?? defaultContribution(savedRows, ulo.ulo_code);
+                const coveredBy = coveringRows(ulo.ulo_code);
+                const contributionFor = (row: EditableRow) => contributionOf(row, ulo.ulo_code);
                 const total = coveredBy.reduce((sum, row) => sum + contributionFor(row), 0);
                 const ok = coveredBy.length > 0 && Math.abs(total - 100) < 0.01;
                 return <div key={ulo.ulo_code} className="per-lo-row">
