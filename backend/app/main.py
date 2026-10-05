@@ -29,7 +29,7 @@ from app.config import get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
 from app.seed import ensure_super_admin, seed_demo_data
-from app.services.calculation import even_ulo_contributions
+from app.services.calculation import even_ulo_contributions, rebalance_contributions
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
 from app.services.email_notification import send_reminders
@@ -1048,6 +1048,22 @@ def save_assessments(
             )
             ulo_ids = {row["ulo_code"]: row["offering_ulo_id"] for row in cur.fetchall()}
 
+            # Snapshot the contributions before anything is deleted. Removing an
+            # assessment cascades its assessment_ulo rows away, so reading this
+            # afterwards would show the post-removal state and the rebalance could
+            # not tell that the outcome had lost an assessment.
+            cur.execute(
+                """
+                SELECT assessment_id, offering_ulo_id, allocated_weight
+                FROM assessment_ulo WHERE offering_id = %s
+                """,
+                (payload.offering_id,),
+            )
+            previous_contributions = {
+                (row["assessment_id"], row["offering_ulo_id"]): row["allocated_weight"]
+                for row in cur.fetchall()
+            }
+
             cur.execute("SELECT assessment_id FROM assessment WHERE offering_id = %s", (payload.offering_id,))
             existing_ids = {row["assessment_id"] for row in cur.fetchall()}
             keep_ids = {item.assessment_id for item in payload.assessments if item.assessment_id is not None}
@@ -1058,9 +1074,7 @@ def save_assessments(
                     (payload.offering_id, list(remove_ids)),
                 )
 
-            # Collected across every assessment, then resolved once at the end.
             saved_links: list[tuple[int, int]] = []
-            kept_contributions: dict[tuple[int, int], Decimal] = {}
 
             for order, item in enumerate(payload.assessments, start=1):
                 name = item.assessment_name.strip()
@@ -1090,26 +1104,19 @@ def save_assessments(
                     )
                     assessment_id = cur.fetchone()["assessment_id"]
 
-                cur.execute(
-                    "SELECT offering_ulo_id, allocated_weight FROM assessment_ulo WHERE assessment_id = %s",
-                    (assessment_id,),
-                )
-                existing_links = {row["offering_ulo_id"]: row["allocated_weight"] for row in cur.fetchall()}
                 cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
 
                 for code in item.ulo_codes:
                     offering_ulo_id = ulo_ids.get(code)
-                    if offering_ulo_id is None:
-                        continue
-                    saved_links.append((assessment_id, offering_ulo_id))
-                    if offering_ulo_id in existing_links:
-                        kept_contributions[(assessment_id, offering_ulo_id)] = existing_links[offering_ulo_id]
+                    if offering_ulo_id is not None:
+                        saved_links.append((assessment_id, offering_ulo_id))
 
-            # A ULO's default share depends on how many assessments end up covering
-            # it, so this can only be settled once every assessment has been saved.
-            # A contribution the coordinator tuned in the coverage editor wins over
-            # the default.
-            defaults = even_ulo_contributions(saved_links)
+            # Settled only once every assessment is saved, because a ULO's share
+            # depends on how many assessments end up covering it. An outcome whose
+            # assessments are unchanged keeps its tuned percentages; one that gained
+            # or lost an assessment is reset to an even split, so it cannot end up
+            # over 100%.
+            settled = rebalance_contributions(previous_contributions, saved_links)
             for link in saved_links:
                 assessment_id, offering_ulo_id = link
                 cur.execute(
@@ -1124,7 +1131,7 @@ def save_assessments(
                         payload.offering_id,
                         assessment_id,
                         offering_ulo_id,
-                        kept_contributions.get(link, defaults.get(link, Decimal("0.00"))),
+                        settled[link],
                         user["user_id"],
                     ),
                 )

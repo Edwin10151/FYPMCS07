@@ -52,3 +52,42 @@ def attainment_percentage(achieved_marks: Decimal, total_available_marks: Decima
         Decimal("0.01"),
         rounding=ROUND_HALF_UP,
     )
+
+
+def rebalance_contributions(
+    previous: dict[tuple[int, int], Decimal],
+    links: Iterable[tuple[int, int]],
+) -> dict[tuple[int, int], Decimal]:
+    """Settle every (assessment, ULO) contribution after an assessments save.
+
+    A ULO whose set of covering assessments is unchanged keeps whatever the
+    coordinator tuned. A ULO that gained or lost an assessment is reset to an
+    even split, because its old percentages were shares of a different set and
+    leaving them would push the outcome past 100%: three assessments at 33.33
+    plus a fourth at the new 25.00 default totals 116.67.
+
+    Resetting does discard tuning for that one outcome. That is the deliberate
+    trade: an outcome that always totals 100 is worth more than tuning silently
+    surviving into a split it no longer describes.
+    """
+    links = list(links)
+
+    before: dict[int, set[int]] = {}
+    for assessment_id, offering_ulo_id in previous:
+        before.setdefault(offering_ulo_id, set()).add(assessment_id)
+
+    after: dict[int, set[int]] = {}
+    for assessment_id, offering_ulo_id in links:
+        after.setdefault(offering_ulo_id, set()).add(assessment_id)
+
+    changed = {ulo for ulo, members in after.items() if before.get(ulo, set()) != members}
+
+    evened = even_ulo_contributions([l for l in links if l[1] in changed])
+
+    settled: dict[tuple[int, int], Decimal] = {}
+    for link in links:
+        if link[1] in changed:
+            settled[link] = evened[link]
+        else:
+            settled[link] = previous.get(link, Decimal("0.00"))
+    return settled
