@@ -19,6 +19,7 @@ export default function CsvUpload() {
   const { offeringId, error: offeringError } = useOfferingId();
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [savedAssessments, setSavedAssessments] = useState<Assessment[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [inspection, setInspection] = useState<CsvInspection | null>(null);
   const [sheetName, setSheetName] = useState("");
@@ -36,7 +37,7 @@ export default function CsvUpload() {
     setFile(null); setInspection(null); setPreview(null); setCommitted(null); setDashboard(null); setPendingComponents(new Set());
     Promise.all([getDashboard(session.access_token, offeringId), getAssessments(session.access_token, offeringId)])
       .then(([dashboardData, assessmentData]) => {
-        setDashboard(dashboardData); setAssessments(assessmentData.assessments);
+        setDashboard(dashboardData); setAssessments(assessmentData.assessments); setSavedAssessments(assessmentData.assessments);
         setMappings(Object.fromEntries(gradeTargets(assessmentData.assessments).map((assessment) => [assessment.mappingKey, emptyMapping()])));
       })
       .catch((err) => setError(errorMessage(err)));
@@ -73,6 +74,7 @@ export default function CsvUpload() {
     try {
       const result = await saveUploadComponents(session.access_token, offeringId, id, assessment.components.map(c=>({component_id:c.component_id>0?c.component_id:null, component_name:c.component_name, weight:Number(c.weight)})));
       setAssessments(current=>current.map(a=>a.assessment_id===id?{...a,components:result.components}:a));
+      setSavedAssessments(current=>current.map(a=>a.assessment_id===id?{...a,components:result.components}:a));
       setMappings(current=>{
         const next={...current};
         assessment.components.forEach(c=>delete next[`component-${c.component_id}`]);
@@ -97,13 +99,19 @@ export default function CsvUpload() {
     try {
       const result = await inspectGradeUpload(session.access_token, offeringId, file, selectedSheet);
       setInspection(result); setSheetName(selectedSheet); setStudentColumn(guessStudentColumn(result.headers));
-      setMappings(suggestMappings(assessments, result.headers));
+      setAssessments(savedAssessments); setPendingComponents(new Set());
+      setMappings(suggestMappings(savedAssessments, result.headers));
     } catch (err) { setError(errorMessage(err)); } finally { setWorking(false); }
   };
   const previewUpload = async () => {
     if (!file || !offeringId || archived || !studentColumn || !mappedColumns.length || invalidMaximum || weightMismatch || invalidComponentTotal || pendingComponents.size > 0 || duplicateColumns.length) return;
     setWorking(true); setError("");
-    try { setPreview(await previewGradeUpload(session.access_token, offeringId, studentColumn, mappedColumns, file, sheetName)); }
+    try {
+      setPreview(await previewGradeUpload(session.access_token, offeringId, studentColumn, mappedColumns, file, sheetName));
+      const lockedIds = new Set(mappedColumns.filter(m=>m.component_id).map(m=>m.assessment_id));
+      const lock = (current: Assessment[])=>current.map(a=>lockedIds.has(a.assessment_id)?{...a,components_locked:true}:a);
+      setAssessments(lock); setSavedAssessments(lock);
+    }
     catch (err) { setError(errorMessage(err)); } finally { setWorking(false); }
   };
   const commit = async () => {
@@ -114,7 +122,7 @@ export default function CsvUpload() {
       setCommitted({ grades: result.grades_saved, components: result.component_grades_saved ?? 0, outcomes: result.attainment_records });
     } catch (err) { setError(errorMessage(err)); } finally { setWorking(false); }
   };
-  const replaceFile = () => { setFile(null); setInspection(null); setPreview(null); setCommitted(null); setStudentColumn(""); setSheetName(""); };
+  const replaceFile = () => { setAssessments(savedAssessments); setPendingComponents(new Set()); setMappings({}); setFile(null); setInspection(null); setPreview(null); setCommitted(null); setStudentColumn(""); setSheetName(""); };
   const goToStep = (index: number) => { if (index === 0) replaceFile(); else if (index === 1) setPreview(null); };
   const unitLabel = dashboard ? `${dashboard.offering.unit_code} ${dashboard.offering.unit_name}` : "Grade upload";
 
