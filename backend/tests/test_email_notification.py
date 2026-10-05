@@ -1,4 +1,5 @@
 from app.config import Settings
+import ssl
 from app.services import email_notification
 
 
@@ -14,7 +15,9 @@ class FakeSmtp:
     def __exit__(self, *_):
         return None
 
-    def starttls(self):
+    def starttls(self, *, context):
+        assert context.check_hostname
+        assert context.verify_mode == ssl.CERT_REQUIRED
         return None
 
     def login(self, username, password):

@@ -114,7 +114,7 @@ export default function Assessments() {
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [editingUlo, setEditingUlo] = useState<string | null>(null);
   const [modalDraft, setModalDraft] = useState<Record<number, number>>({});
-  const canEdit = offering?.can_edit ?? false;
+  const canEdit = (offering?.can_edit ?? false) && offering?.semester_status !== "archived";
 
   const load = async () => {
     if (!session || !offeringId) return;
@@ -383,7 +383,7 @@ export default function Assessments() {
               </div>
               <div className="weight-cell">
                 {canEdit
-                  ? <input type="number" min={0} max={100} step={0.5} value={row.weight} onWheel={blurOnWheel} onChange={(event) => updateRow(row.key, { weight: Math.min(100, Math.max(0, Number(event.target.value) || 0)) })} />
+                  ? <input aria-label={`${row.assessment_name} unit grade weight (%)`} title="Weight in the overall unit grade" type="number" min={0} max={100} step={0.5} value={row.weight} onWheel={blurOnWheel} onChange={(event) => updateRow(row.key, { weight: Math.min(100, Math.max(0, Number(event.target.value) || 0)) })} />
                   : <strong>{row.weight}</strong>}
                 <span className="pct">%</span>
               </div>
@@ -433,9 +433,9 @@ export default function Assessments() {
       </main>
 
       {editingUlo && <div className="confirm-modal-overlay" onClick={() => setEditingUlo(null)}>
-        <div className="lo-map-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="lo-map-modal" role="dialog" aria-modal="true" aria-labelledby="lo-contribution-title" onClick={(event) => event.stopPropagation()}>
           <span className="confirm-modal-tag">Edit LO coverage</span>
-          <h3>{editingUlo} contribution mapping</h3>
+          <h3 id="lo-contribution-title">{editingUlo} contribution mapping</h3>
           <p className="lo-map-intro">Set how much of each assessment's mark counts toward {editingUlo}. Percentages are independent per assessment — the total below should reach 100% for {editingUlo} to be fully covered.</p>
           {editingSources.length === 0 ? <p className="lo-map-intro">No assessment currently covers {editingUlo}.</p> : <>
             <div className="lo-map-canvas">
@@ -443,7 +443,7 @@ export default function Assessments() {
                 {editingSources.map((row) => <div className="lo-map-row" key={row.key}>
                   <div className="lo-map-node source">{row.assessment_name}</div>
                   <div className="lo-map-wire" />
-                  <input type="number" className="lo-map-pct" min={0} max={100} step={0.5} onWheel={blurOnWheel}
+                  <input aria-label={`${row.assessment_name} contribution to ${editingUlo} (%)`} type="number" className="lo-map-pct" min={0} max={100} step={0.5} onWheel={blurOnWheel}
                     value={modalDraft[row.assessment_id as number] ?? 0}
                     onChange={(event) => { const value = Math.min(100, Math.max(0, Number(event.target.value) || 0)); setModalDraft((previous) => ({ ...previous, [row.assessment_id as number]: value })); }} />
                   <span className="pct-sign">%</span>
@@ -456,7 +456,7 @@ export default function Assessments() {
           </>}
           <div className="confirm-modal-actions">
             <button className="btn" onClick={() => setEditingUlo(null)}>Cancel</button>
-            <button className="btn primary" onClick={commitUloEditor}>Done</button>
+            <button className="btn primary" disabled={!modalOk || editingSources.length === 0} onClick={commitUloEditor}>Done</button>
           </div>
         </div>
       </div>}

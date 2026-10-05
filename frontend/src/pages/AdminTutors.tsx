@@ -28,6 +28,7 @@ const ROLE_ORDER: OfferingStaffingRow["role_type"][] = ["lecture", "tutorial", "
 type GroupedStaffingRow = { key: string; name: string; email: string | null; linked: boolean; userId: number | null; roles: OfferingStaffingRow["role_type"][] };
 
 type Status = {
+  staffing_import_id: number;
   source_filename: string;
   imported_at: string;
   committed: boolean;
@@ -35,9 +36,10 @@ type Status = {
   matched_offerings: number;
   staffing_rows_created: number;
   unmatched_units: ReviewUnit[];
+  review_units: ReviewUnit[];
 };
 
-type Pending = { units_in_file: number; matched_offerings: number; unmatched_units: ReviewUnit[] };
+type Pending = { staffing_import_id: number; units_in_file: number; matched_offerings: number; unmatched_units: ReviewUnit[]; review_units: ReviewUnit[] };
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -70,7 +72,7 @@ function CoordinatorReviewPanel({
   return (
     <div className="adm-card">
       <div className="adm-card-head">
-        <div><h4>Set unit coordinators</h4><div className="h-sub">{units.length} unit{units.length === 1 ? "" : "s"} in the roster don't have an offering yet. A coordinator was pre-filled where the Handbook's published coordinator is also in this unit's roster list — check it, or choose someone else from the same list. Leaving it unassigned is fine too.</div></div>
+        <div><h4>Unit coordinators</h4><div className="h-sub">{units.length} units in this roster</div></div>
       </div>
       <div className="add-units-list">
         {units.map((unit) => {
@@ -85,6 +87,7 @@ function CoordinatorReviewPanel({
               </div>
               <div>
                 <select value={value} onChange={(event) => onChange(unit.unit_code, event.target.value)}>
+                  {unit.has_existing_offering && <option value="__keep__">Keep current coordinator</option>}
                   <option value="">Unassigned for now</option>
                   {options.map(([email, name]) => <option key={email} value={email}>{name}</option>)}
                 </select>
@@ -100,7 +103,8 @@ function CoordinatorReviewPanel({
 }
 
 export default function AdminTutors() {
-  const { session, data, error, loading, reload } = useAdminContext();
+  const { session, data, error, loading, reload, selectedPeriod: active, selectPeriod } = useAdminContext();
+  const archived = active?.status === "archived";
 
   const [file, setFile] = useState<File | null>(null);
   const [replacing, setReplacing] = useState(false);
@@ -124,15 +128,15 @@ export default function AdminTutors() {
   const [unitQuery, setUnitQuery] = useState("");
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
 
-  const active = data?.periods.find((period) => period.status === "active") ?? null;
   const offeringsThisSemester = data?.offerings.filter((offering) => offering.semester_id === active?.semester_id && offering.status !== "discontinued") ?? [];
 
   useEffect(() => {
-    if (staffingOfferingId || !offeringsThisSemester.length) return;
-    setStaffingOfferingId(offeringsThisSemester[0].offering_id);
+    if (offeringsThisSemester.some((offering) => offering.offering_id === staffingOfferingId)) return;
+    setStaffing(null);
+    setStaffingOfferingId(offeringsThisSemester[0]?.offering_id ?? null);
     // Only auto-select once, the first time offerings become available.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offeringsThisSemester.length]);
+  }, [active?.semester_id, offeringsThisSemester.length]);
 
   useEffect(() => {
     if (!staffingOfferingId || !session) return;
@@ -148,7 +152,7 @@ export default function AdminTutors() {
     setCoordinatorByUnit((previous) => {
       const next = { ...previous };
       for (const unit of units) {
-        if (next[unit.unit_code] === undefined) next[unit.unit_code] = unit.prefilled_coordinator?.email ?? "";
+        if (next[unit.unit_code] === undefined) next[unit.unit_code] = unit.has_existing_offering ? "__keep__" : unit.prefilled_coordinator?.email ?? "";
       }
       return next;
     });
@@ -162,11 +166,13 @@ export default function AdminTutors() {
       setStatus(response.snapshot);
       if (response.snapshot && !response.snapshot.committed) {
         setPending({
+          staffing_import_id: response.snapshot.staffing_import_id,
           units_in_file: response.snapshot.units_in_file,
           matched_offerings: response.snapshot.matched_offerings,
           unmatched_units: response.snapshot.unmatched_units,
+          review_units: response.snapshot.review_units ?? response.snapshot.unmatched_units,
         });
-        applyCoordinatorPrefill(response.snapshot.unmatched_units);
+        applyCoordinatorPrefill(response.snapshot.review_units ?? response.snapshot.unmatched_units);
       }
     } catch (err) {
       setUploadError(errorMessage(err));
@@ -218,9 +224,9 @@ export default function AdminTutors() {
     setUploadError("");
     try {
       const response = await reviewStaffingRoster(session.access_token, active.semester_id, file);
-      setPending({ units_in_file: response.units_in_file, matched_offerings: response.matched_offerings, unmatched_units: response.unmatched_units });
+      setPending({ staffing_import_id: response.staffing_import_id, units_in_file: response.units_in_file, matched_offerings: response.matched_offerings, unmatched_units: response.unmatched_units, review_units: response.review_units });
       setReviewWarnings(response.warnings);
-      applyCoordinatorPrefill(response.unmatched_units);
+      applyCoordinatorPrefill(response.review_units);
       setInspectResult(null);
     } catch (err) {
       setUploadError(errorMessage(err));
@@ -234,7 +240,8 @@ export default function AdminTutors() {
     setCommitting(true);
     setUploadError("");
     try {
-      const response = await commitStaffingRoster(session.access_token, active.semester_id, coordinatorByUnit);
+      const choices = Object.fromEntries(Object.entries(coordinatorByUnit).filter(([, email]) => email !== "__keep__"));
+      const response = await commitStaffingRoster(session.access_token, active.semester_id, pending.staffing_import_id, choices);
       setCommitResult(response);
       setFile(null);
       setInspectResult(null);
@@ -284,17 +291,22 @@ export default function AdminTutors() {
   }, [offeringsThisSemester, unitQuery]);
 
   return (
-    <div className="app">
+    <div className="app admin-period-page">
       <AdminSidebar user={session.user} />
       <main className="main">
         <div className="topbar">
           <div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester Setup</Link><span className="sep">›</span><strong>Tutor List</strong></div>
         </div>
         <div className="content">
-          <div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Tutor List</h1><div className="sub">Upload the School of IT staffing roster for {active ? `${active.year} ${active.period}` : "the current semester"}. Lecture, tutorial and laboratory rows are matched to unit offerings by unit code.</div></div></div>
+          <div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Tutor List</h1><div className="sub">{active ? `${active.year} ${active.period}` : "No semester selected"}</div></div>
+            <label className="adm-field"><span className="lbl">Semester</span><select className="adm-select" aria-label="Semester" value={active?.semester_id ?? ""} disabled={loading || statusLoading || staffingLoading || inspecting || reviewing || committing} onChange={(event) => { resetUploadState(); setReplacing(false); setStatus(null); selectPeriod(Number(event.target.value)); }}>
+              {data?.periods.map((period) => <option key={period.semester_id} value={period.semester_id}>{period.year} {period.period} · {period.status}</option>)}
+            </select></label>
+          </div>
 
           {(error || uploadError) && <div className="banner"><div className="ico">!</div><div className="body">{error || uploadError}<span className="x" style={{ marginLeft: 8, cursor: "pointer" }} onClick={() => setUploadError("")}>✕</span></div></div>}
-          {!active && !loading && <div className="banner"><div className="ico">!</div><div className="body">No active semester was found, so a roster can't be matched yet.</div></div>}
+          {!active && !loading && <div className="banner"><div className="ico">!</div><div className="body">No semester was found.</div></div>}
+          {archived && <div className="banner"><div className="body">Archived semester. Staff assignments are read-only.</div></div>}
 
           <div className="adm-card">
             <div className="adm-card-head"><div><h4>Upload Tutor List</h4><div className="h-sub">Use the .xlsx roster export — column headers stay the same each semester.</div></div></div>
@@ -302,13 +314,13 @@ export default function AdminTutors() {
               <div className="adm-file-card">
                 <div className="icn">XLS</div>
                 <div><div className="nm">{file.name}</div><div className="sub">{formatFileSize(file.size)}</div></div>
-                <button className="btn" disabled={inspecting || reviewing || committing} onClick={startReplacing}>Replace file</button>
+                <button className="btn" disabled={archived || inspecting || reviewing || committing} onClick={startReplacing}>Replace file</button>
               </div>
             ) : status && !replacing ? (
               <div className="adm-file-card">
                 <div className="icn">XLS</div>
                 <div><div className="nm">{status.source_filename}</div><div className="sub">Uploaded {formatDateTime(status.imported_at)}{!status.committed ? " · pending review" : ""}</div></div>
-                <button className="btn" onClick={startReplacing}>Replace file</button>
+                <button className="btn" disabled={archived} onClick={startReplacing}>Replace file</button>
               </div>
             ) : (
               <div style={{ padding: 20 }}>
@@ -316,7 +328,7 @@ export default function AdminTutors() {
                   <div className="icn">XLS</div>
                   <div className="t">Upload Tutor List</div>
                   <div className="s">.xlsx workbook only. The first sheet is read; each unit block may span several staff rows.</div>
-                  <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={!active} onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} />
+                  <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={!active || archived} onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} />
                 </label>
               </div>
             )}
@@ -325,7 +337,7 @@ export default function AdminTutors() {
           {inspecting && <div className="panel">Checking the file...</div>}
 
           {/* Step 1: file is valid, ready to submit — no matched/unmatched detail shown yet. */}
-          {inspectResult && !pending && (
+          {inspectResult && !pending && !archived && (
             <div className="save-bar">
               <div className="stat"><strong>{inspectResult.units_in_file} units found</strong> in the file. Submit to check them against this semester's unit offerings.</div>
               <div className="actions"><button className="btn primary" disabled={reviewing} onClick={() => void submitReview()}>{reviewing ? "Checking Handbook coordinators..." : "Submit"}</button></div>
@@ -333,7 +345,7 @@ export default function AdminTutors() {
           )}
 
           {/* Step 2: after Submit, review (and optionally adjust) each new unit's coordinator. */}
-          {pending && (
+          {pending && !archived && (
             <>
               <div className="adm-stats">
                 <div className="adm-stat navy"><div className="lbl"><span className="b" />Units in file</div><div className="v">{pending.units_in_file}</div><div className="sub">Rows read from the roster</div></div>
@@ -347,12 +359,12 @@ export default function AdminTutors() {
                 </div>
               )}
               <CoordinatorReviewPanel
-                units={pending.unmatched_units}
+                units={pending.review_units}
                 coordinatorByUnit={coordinatorByUnit}
                 onChange={(unitCode, email) => setCoordinatorByUnit((previous) => ({ ...previous, [unitCode]: email }))}
               />
               <div className="save-bar">
-                <div className="stat">Ready to commit {pending.matched_offerings} matched unit{pending.matched_offerings === 1 ? "" : "s"} and create {pending.unmatched_units.length} new one{pending.unmatched_units.length === 1 ? "" : "s"}.</div>
+                <div className="stat">Replace imported assignments for {active?.year} {active?.period}, including units absent from this file. Staff accounts, manual assignments, grades, and reports will remain.</div>
                 <div className="actions"><button className="btn primary" disabled={committing} onClick={() => void submitCommit()}>{committing ? "Committing..." : "Commit to database"}</button></div>
               </div>
             </>

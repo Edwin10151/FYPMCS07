@@ -21,6 +21,32 @@ def test_password_requires_twelve_characters():
     assert is_valid_password("twelve-chars")
 
 
+@pytest.mark.parametrize("url", ["", "http://example.test", "https://user:pass@example.test", "https://example.test/path", "https://example.test?redirect=bad", "https://example.test#bad", "https://example.test:bad"])
+def test_reset_url_rejects_untrusted_configuration(monkeypatch, url):
+    from app.config import Settings
+    monkeypatch.setattr(main, "settings", Settings(public_app_url=url))
+    with pytest.raises(HTTPException) as error:
+        main._password_reset_url("test-token")
+    assert error.value.status_code == 503
+
+
+@pytest.mark.parametrize("url", ["https://dashboard.example.test", "http://localhost:8080", "http://127.0.0.1:5180"])
+def test_reset_url_uses_fragment_and_configured_origin(monkeypatch, url):
+    from app.config import Settings
+    monkeypatch.setattr(main, "settings", Settings(public_app_url=url + "/"))
+    assert main._password_reset_url("test-token") == url + "/reset-password#token=test-token"
+
+
+def test_changed_password_rejects_old_session(monkeypatch):
+    monkeypatch.setattr(auth.jwt, "decode", lambda *args, **kwargs: {"sub": "42", "auth_version": 0})
+    monkeypatch.setattr(auth, "fetch_one", lambda *args, **kwargs: {"user_id": 42, "is_active": True, "auth_version": 1})
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="old-token")
+    request = Request({"type": "http", "method": "GET", "path": "/api/me", "headers": []})
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials, request)
+    assert error.value.status_code == 401
+
+
 class FakeCursor:
     def __init__(self):
         self.results = iter([{"role_id": 2}, {"user_id": 42}])

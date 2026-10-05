@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import {
   errorMessage,
   generateReportDraft,
@@ -110,9 +111,19 @@ export default function Report() {
     || coordinatorContext !== (report?.coordinator_comment ?? "");
   const complete = Object.values(sections).every((value) => value.trim());
   const teachingUser = session?.user.role_name === "lecturer" || session?.user.role_name === "coordinator";
-  const canEdit = !!teachingUser && (!report || report.status === "draft" || report.status === "changes_requested");
+  const archived = offering?.semester_status === "archived";
+  const canEdit = !archived && !!teachingUser && (!report || report.status === "draft" || report.status === "changes_requested");
   const isAdminTier = session?.user.role_name === "management" || session?.user.role_name === "super_admin";
-  const canReview = isAdminTier && report?.status === "submitted";
+  const canReview = !archived && isAdminTier && report?.status === "submitted";
+  const evidence = report?.evidence_stale ? null : report?.evidence_snapshot;
+  const frozen = report?.status === "submitted" || report?.status === "approved";
+  const reportOffering = evidence ?? dashboard?.offering;
+  const reportOutcomes = evidence?.learning_outcomes ?? (frozen ? [] : (dashboard?.learning_outcomes ?? []).map((outcome) => ({
+    code: outcome.ulo_code,
+    average_attainment_pct: outcome.average_attainment_pct,
+    attainment_grade: outcome.attainment_grade,
+  })));
+  const chartData = reportOutcomes.map((outcome) => ({ code: outcome.code, attainment: Number(outcome.average_attainment_pct) }));
 
   useEffect(() => {
     if (!dirty) return;
@@ -201,10 +212,11 @@ export default function Report() {
               </div>
               {canEdit && <div className="report-actions">
                 <button className="btn" disabled={!!busy} onClick={generate}>{busy === "generate" ? "Generating..." : report ? "Regenerate draft" : "Generate draft"}</button>
-                <button className="btn" disabled={!!busy || !dirty || !complete} onClick={save}>{busy === "save" ? "Saving..." : "Save draft"}</button>
-                <button className="btn primary" disabled={!!busy || !complete} onClick={submit}>{busy === "submit" ? "Submitting..." : "Submit for approval"}</button>
+                <button className="btn" disabled={!!busy || (!dirty && !report?.evidence_stale) || !complete} onClick={save}>{busy === "save" ? "Saving..." : "Save draft"}</button>
+                <button className="btn primary" disabled={!!busy || !complete || report?.evidence_stale} onClick={submit}>{busy === "submit" ? "Submitting..." : "Submit for approval"}</button>
               </div>}
             </div>
+            {report?.evidence_stale && <div className="review-note no-print" role="status"><strong>Report data changed</strong><p>Review the updated figures and draft text, then save or regenerate before submitting.</p></div>}
 
             {report?.status === "changes_requested" && <div className="review-note no-print"><strong>Changes requested</strong><p>{report.reviewer_comment}</p></div>}
             {report?.status === "submitted" && teachingUser && <div className="review-note no-print"><strong>Awaiting QAG review</strong><p>The submitted report is read-only until it is approved or returned for changes.</p></div>}
@@ -216,16 +228,33 @@ export default function Report() {
 
             <article className="report-sheet">
               <header className="report-title">
-                <div><span>Semester Offering</span><strong>{dashboard.offering.period} {dashboard.offering.year}</strong></div>
+                <div><span>Semester Offering</span><strong>{reportOffering?.period} {reportOffering?.year}</strong></div>
                 <h2>Unit-level CQI Plan</h2>
-                <div><span>Unit</span><strong>{dashboard.offering.unit_code} - {dashboard.offering.unit_name}</strong></div>
+                <div><span>Unit</span><strong>{reportOffering?.unit_code} - {reportOffering?.unit_name}</strong></div>
               </header>
+
+              {frozen && !evidence && <p role="status">Saved attainment evidence is unavailable for this older report. Its original figures cannot be verified.</p>}
+              {chartData.length > 0 && <figure className="report-chart" aria-label="Average ULO attainment; exact figures are listed in the following table">
+                <figcaption>Average ULO attainment (%)</figcaption>
+                <div className="report-chart-canvas">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 28, right: 16, bottom: 8, left: 0 }} accessibilityLayer>
+                      <CartesianGrid vertical={false} stroke="#dde3e8" />
+                      <XAxis dataKey="code" tickLine={false} />
+                      <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} tickLine={false} />
+                      <Bar dataKey="attainment" fill="#16868a" isAnimationActive={false} maxBarSize={52}>
+                        <LabelList dataKey="attainment" position="top" formatter={(value) => `${Number(value).toFixed(1)}%`} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </figure>}
 
               <div className="report-table-wrap">
                 <table className="report-table">
                   <thead><tr><th>LO Code</th><th>Weightage based Attainment %</th><th>Attainment Grade</th></tr></thead>
-                  <tbody>{dashboard.learning_outcomes.map((outcome) => <tr key={outcome.offering_ulo_id}>
-                    <td>{outcome.ulo_code}</td><td>{Number(outcome.average_attainment_pct).toFixed(1)}</td><td>{outcome.attainment_grade}</td>
+                  <tbody>{reportOutcomes.map((outcome) => <tr key={outcome.code}>
+                    <td>{outcome.code}</td><td>{Number(outcome.average_attainment_pct).toFixed(1)}</td><td>{outcome.attainment_grade}</td>
                   </tr>)}</tbody>
                 </table>
               </div>

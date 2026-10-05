@@ -17,11 +17,12 @@ function TaskStatusBadge({ status }: { status: TaskStatus }) {
 }
 
 export default function AdminSetup() {
-  const { session, data, error, loading, reload } = useAdminContext();
+  const { session, data, error, loading, reload, selectedPeriod: active, selectPeriod } = useAdminContext();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [working, setWorking] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState("");
   const [flash, setFlash] = useState("");
   const [flashError, setFlashError] = useState("");
   const [staffingSnapshot, setStaffingSnapshot] = useState<{ committed: boolean; unmatched_units: UnmatchedUnit[] } | null>(null);
@@ -34,7 +35,7 @@ export default function AdminSetup() {
   const [createOpen, setCreateOpen] = useState(false);
   const [periodForm, setPeriodForm] = useState({ year: new Date().getFullYear(), period: "S1" as "S1" | "S2", start_date: "", end_date: "" });
 
-  const active = data?.periods.find((period) => period.status === "active") ?? null;
+  const current = data?.periods.find((period) => period.status === "active") ?? null;
   const planning = data?.periods.find((period) => period.status === "planning") ?? null;
 
   const loadStaffingStatus = (semesterId: number) => {
@@ -84,7 +85,7 @@ export default function AdminSetup() {
   const createSemester = async () => {
     setWorking(true); setFlashError("");
     try {
-      const status = active ? "planning" : "active";
+      const status = current ? "planning" : "active";
       await createAdminPeriod(session.access_token, {
         year: periodForm.year,
         period: periodForm.period,
@@ -99,15 +100,16 @@ export default function AdminSetup() {
   };
 
   const activatePlanningSemester = async () => {
-    if (!planning) return;
+    const target = active?.status === "planning" ? active : planning;
+    if (!target) return;
     setWorking(true); setFlashError("");
     try {
-      await updateAdminPeriod(session.access_token, planning.semester_id, {
-        start_date: planning.start_date,
-        end_date: planning.end_date,
+      await updateAdminPeriod(session.access_token, target.semester_id, {
+        start_date: target.start_date,
+        end_date: target.end_date,
         status: "active",
       });
-      setFlash(`${planning.year} ${planning.period} is now the active semester.`);
+      setFlash(`${target.year} ${target.period} is now the active semester.`);
       await reload();
     } catch (err) { setFlashError(errorMessage(err)); } finally { setWorking(false); }
   };
@@ -133,9 +135,8 @@ export default function AdminSetup() {
     setResetting(true);
     setFlashError("");
     try {
-      const result = await resetAdminPeriod(session.access_token, active.semester_id);
-      const accountsNote = result.accounts_deleted > 0 ? ` ${result.accounts_deleted} staff account${result.accounts_deleted === 1 ? "" : "s"} with no other ties were removed too.` : "";
-      setFlash(`${active.year} ${active.period} was reset — ${result.offerings_deleted} unit offering${result.offerings_deleted === 1 ? "" : "s"} and everything built on them were removed.${accountsNote} Ready to start over.`);
+      const result = await resetAdminPeriod(session.access_token, active.semester_id, resetConfirmation);
+      setFlash(`${active.year} ${active.period} was reset: ${result.offerings_deleted} unit offerings removed. All staff accounts and other semesters were retained.`);
       setResetConfirmOpen(false);
       await Promise.all([reload(), loadStaffingStatus(active.semester_id)]);
     } catch (err) {
@@ -165,7 +166,7 @@ export default function AdminSetup() {
   };
 
   return (
-    <div className="app">
+    <div className="app admin-period-page">
       <AdminSidebar user={session.user} />
       <main className="main">
         <div className="topbar">
@@ -173,10 +174,13 @@ export default function AdminSetup() {
         </div>
         <div className="content">
           <div className="unit-banner">
-            <div><h1 style={{ fontSize: 26 }}>Semester Setup</h1><div className="sub">Manage the current teaching semester, then reach the Tutor List and Student List uploads.</div></div>
+            <div><h1 style={{ fontSize: 26 }}>Semester Setup</h1></div>
             <div className="unit-banner-right">
+              <label className="adm-field"><span className="lbl">Semester</span><select className="adm-select" aria-label="Semester" value={active?.semester_id ?? ""} disabled={working || resetting} onChange={(event) => { selectPeriod(Number(event.target.value)); setResetConfirmOpen(false); setConfirmOpen(false); setEmailOpen(false); setFlash(""); setFlashError(""); }}>
+                {data?.periods.map((period) => <option key={period.semester_id} value={period.semester_id}>{period.year} {period.period} · {period.status}</option>)}
+              </select></label>
               <button className="btn" disabled={working} onClick={openCreate}>Add semester</button>
-              <button className="btn danger" disabled={!active} onClick={() => setResetConfirmOpen(true)}>Reset Data</button>
+              {session.user.role_name === "super_admin" && <button className="btn danger" disabled={!active || active.status === "archived"} onClick={() => { setResetConfirmation(""); setFlashError(""); setResetConfirmOpen(true); }}>Reset semester data</button>}
               <button
                 className="btn primary"
                 disabled={!active || emailBusy}
@@ -215,11 +219,12 @@ export default function AdminSetup() {
             <div className="current-sem-card">
               <div className="current-sem-top">
                 <div>
-                  <div className="current-sem-eye">Current semester</div>
+                  <div className="current-sem-eye">Selected semester</div>
                   <div className="current-sem-title">{active.year} {active.period}</div>
-                  <span className="adm-status active"><span className="d" />Active</span>
+                  <span className={`adm-status ${active.status}`}><span className="d" />{active.status}</span>
                 </div>
-                <button className="btn danger" onClick={() => setConfirmOpen(true)}>Deactivate semester</button>
+                {active.status === "active" && <button className="btn danger" onClick={() => setConfirmOpen(true)}>Archive semester</button>}
+                {active.status === "planning" && !current && <button className="btn primary" disabled={working} onClick={() => void activatePlanningSemester()}>Activate semester</button>}
               </div>
               <div className="current-sem-stats">
                 <div className="current-sem-stat"><span className="v">{active.offering_count}</span><span className="l">Unit offerings</span></div>
@@ -231,7 +236,7 @@ export default function AdminSetup() {
 
           <div className="us-section-label" style={{ marginTop: 24 }}>Uploads for this semester</div>
           <div className="admin-portal-grid">
-            <Link className="admin-portal-tile" to="/admin/tutors">
+            <Link className="admin-portal-tile" to={active ? `/admin/tutors?semester_id=${active.semester_id}` : "/admin/tutors"}>
               <div className="admin-portal-tile-head">
                 <div className="admin-portal-tile-icon">◨</div>
                 <TaskStatusBadge status={tutorListStatus} />
@@ -240,7 +245,7 @@ export default function AdminSetup() {
               <p>Upload the semester's staffing roster spreadsheet (lecture, tutorial and laboratory allocations) and match it against unit offerings.</p>
               <div className="admin-portal-tile-cta">Open Tutor List <span className="unit-arrow">→</span></div>
             </Link>
-            <Link className="admin-portal-tile" to="/admin/enrolments">
+            <Link className="admin-portal-tile" to={active ? `/admin/enrolments?semester_id=${active.semester_id}` : "/admin/enrolments"}>
               <div className="admin-portal-tile-head">
                 <div className="admin-portal-tile-icon">◧</div>
                 <TaskStatusBadge status={studentListStatus} />
@@ -296,11 +301,13 @@ export default function AdminSetup() {
             <div className="adm-modal-sub">
               This permanently deletes every unit offering for this semester, and everything built on them: Tutor List staffing and dashboard access, Student List enrolments, assessments, ULOs, PLO mappings, grade uploads and AI reports. Use this when there are too many changes to fix by hand and you'd rather redo the semester from scratch.
               <br /><br />
-              A coordinator or lecturer account is also removed, but only if it has no other tie anywhere in the system once this semester is cleared — so an account still linked to another semester, past or present, keeps working. Management and super admin accounts are never touched, including your own, and no other semester's data is ever modified.
+              All staff accounts, passwords, roles, student identities and other semesters remain unchanged. Semesters containing approved reports cannot be reset.
             </div>
+            <label className="adm-field"><span className="lbl">Type {active.year} {active.period} to confirm</span><input autoComplete="off" value={resetConfirmation} onChange={(event) => setResetConfirmation(event.target.value)} /></label>
+            {flashError && <p role="alert">{flashError}</p>}
             <div className="adm-modal-actions">
               <button className="btn" disabled={resetting} onClick={() => setResetConfirmOpen(false)}>Cancel</button>
-              <button className="btn danger" disabled={resetting} onClick={() => void resetSemesterData()}>{resetting ? "Resetting..." : "Reset all data"}</button>
+              <button className="btn danger" disabled={resetting || resetConfirmation.trim() !== `${active.year} ${active.period}`} onClick={() => void resetSemesterData()}>{resetting ? "Resetting..." : "Reset semester data"}</button>
             </div>
           </div>
         </div>

@@ -93,6 +93,30 @@
 .adm-modal-overlay { position: fixed; inset: 0; background: rgba(0, 27, 43, 0.55); display: grid; place-items: center; z-index: 100; padding: 24px; }
 .adm-modal { background: #fff; border-radius: 14px; width: 100%; max-width: 520px; max-height: 86vh; overflow-y: auto; padding: 24px 26px; box-shadow: 0 20px 60px rgba(0, 27, 43, 0.25); animation: adm-modal-in .18s ease-out; }
 .adm-modal.wide { max-width: 620px; }
+.adm-password-dialog { border: 0; margin: auto; width: calc(100% - 32px); border-radius: 8px; }
+.adm-password-dialog::backdrop { background: rgba(0, 27, 43, 0.55); }
+.adm-password-dialog h3 { letter-spacing: 0; }
+.adm-password-dialog .adm-modal-sub { overflow-wrap: anywhere; }
+.adm-password-dialog .adm-modal-actions { flex-wrap: wrap; }
+.adm-password-dialog .btn { white-space: normal; }
+.adm-password-fallback { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 12px; }
+.adm-password-fallback p { color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+.admin-staff-page .adm-card { overflow-x: auto; }
+.admin-staff-page .adm-tbl { min-width: 800px; }
+.admin-staff-page .adm-flash > span { min-width: 0; overflow-wrap: anywhere; }
+.admin-staff-page .adm-flash .x { border: 0; background: transparent; flex-shrink: 0; color: inherit; }
+@media (max-width: 800px) {
+  .app.admin-staff-page { display: block; }
+  .admin-staff-page .side { position: static; height: auto; }
+  .admin-staff-page .side .sec, .admin-staff-page .side .user { display: none; }
+  .admin-staff-page .side nav { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+  .admin-staff-page .side nav a { font-size: 12px; padding: 8px; }
+  .admin-staff-page .topbar { height: auto; padding: 16px; flex-wrap: wrap; }
+  .admin-staff-page .top-actions { margin-left: 0; flex-wrap: wrap; }
+  .admin-staff-page .content { padding: 20px 16px; }
+  .admin-staff-page .adm-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-staff-page .adm-toolbar > * { max-width: 100%; }
+}
 @keyframes adm-modal-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
 .adm-modal h3 { font-family: 'Nunito', sans-serif; font-weight: 550; font-size: 20px; margin: 0 0 5px; color: var(--ink); letter-spacing: -0.01em; }
 .adm-modal-sub { font-size: 12.5px; color: var(--ink-3); margin-bottom: 18px; line-height: 1.55; }
@@ -161,4 +185,17 @@
 
 @media (max-width: 1180px) {
   .adm-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 800px) {
+  .app.admin-period-page { display: block; }
+  .admin-period-page .side { position: static; height: auto; }
+  .admin-period-page .side .sec, .admin-period-page .side .user { display: none; }
+  .admin-period-page .side nav { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+  .admin-period-page .side nav a { font-size: 12px; padding: 8px; }
+  .admin-period-page .content { padding: 20px 16px; }
+  .admin-period-page .unit-banner { grid-template-columns: minmax(0, 1fr); }
+  .admin-period-page .unit-banner-right { flex-wrap: wrap; }
+  .admin-period-page .current-sem-stats { flex-wrap: wrap; gap: 20px; }
+  .admin-period-page .adm-modal { padding: 20px; border-radius: 8px; }
 }

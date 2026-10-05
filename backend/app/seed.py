@@ -3,7 +3,7 @@ from decimal import Decimal
 from app.auth import hash_password
 from app.config import get_settings
 from app.db import get_conn
-from app.services.calculation import attainment_percentage, even_ulo_contributions
+from app.services.calculation import even_ulo_contributions
 
 
 def _one(cur, query: str, params: tuple):
@@ -229,40 +229,10 @@ def seed_demo_data() -> None:
                         (offering_id, enrollment_id, assessment_id, raw_mark, raw_mark),
                     )
 
-            cohort_rates = [
-                (ulo_ids[0], Decimal("81.20"), Decimal("86.00"), 5, 4),
-                (ulo_ids[1], Decimal("75.40"), Decimal("80.00"), 5, 4),
-                (ulo_ids[2], Decimal("78.60"), Decimal("80.00"), 5, 4),
-                (ulo_ids[3], Decimal("61.30"), Decimal("60.00"), 5, 3),
-            ]
-            for offering_ulo_id, average_pct, pass_rate, enrolled, achieved in cohort_rates:
-                cur.execute(
-                    """
-                    INSERT INTO cohort_ulo_attainment (
-                        offering_id, offering_ulo_id, enrolled_count, achieved_count, average_attainment_pct, pass_rate_pct
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (offering_id, offering_ulo_id, enrolled, achieved, average_pct, pass_rate),
-                )
-                for enrollment_id in range(1, 6):
-                    cur.execute(
-                        """
-                        INSERT INTO student_ulo_attainment (
-                            offering_id, enrollment_id, offering_ulo_id, total_available_weight, achieved_weight, attainment_pct, is_achieved
-                        )
-                        VALUES (%s, %s, %s, 100.00, %s, %s, %s)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        (
-                            offering_id,
-                            enrollment_id,
-                            offering_ulo_id,
-                            average_pct,
-                            attainment_percentage(average_pct, Decimal("100.00")),
-                            average_pct >= 50,
-                        ),
-                    )
+            cur.execute(
+                "INSERT INTO attainment_refresh_pending (offering_id) VALUES (%s) ON CONFLICT DO NOTHING",
+                (offering_id,),
+            )
 
             cur.execute(
                 """

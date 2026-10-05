@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.services.calculation import attainment_percentage, even_ulo_contributions
+from app.services.calculation import attainment_percentage, even_ulo_contributions, validate_ulo_contributions
 
 
 def test_a_ulo_covered_by_four_assessments_gives_each_a_quarter():
@@ -42,6 +42,22 @@ def test_no_links_produces_no_contributions():
     assert even_ulo_contributions([]) == {}
 
 
+def test_valid_contributions_are_independent_per_outcome():
+    validate_ulo_contributions({(10, 1): Decimal("50"), (11, 1): Decimal("50"),
+                                (10, 2): Decimal("100")})
+
+
+@pytest.mark.parametrize("values", [[40, 40], [60, 60], [-10, 110], [0, 0]])
+def test_invalid_contribution_totals(values):
+    with pytest.raises(ValueError):
+        validate_ulo_contributions({(i, 1): Decimal(value) for i, value in enumerate(values)})
+
+
+def test_nonfinite_contributions_are_rejected():
+    with pytest.raises(ValueError):
+        validate_ulo_contributions({(10, 1): Decimal("NaN")})
+
+
 def test_a_repeated_link_is_counted_once():
     assert even_ulo_contributions([(10, 1), (10, 1)]) == {(10, 1): Decimal("100.00")}
 
@@ -49,7 +65,7 @@ def test_a_repeated_link_is_counted_once():
 def test_the_worked_example_from_the_coordinator():
     """Student A's ULO attainment, using the coordinator's own figures.
 
-        marks        A1 8/10   A2 30/40   A3 15/20   A4 10/15   A5 10/15
+        unit marks   A1 8/10   A2 30/40   A3 15/20   A4 10/15   A5 10/15
         contribution    20%       30%        20%        15%        15%
 
         achieved = 8x.2 + 30x.3 + 15x.2 + 10x.15 + 10x.15 = 16.6

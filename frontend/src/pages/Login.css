@@ -251,3 +251,10 @@
   font-size: 15px;
   color: var(--ink-3);
 }
+
+.password-recovery-card .signin h2 { letter-spacing: 0; }
+.password-recovery-card .monash-logo { max-width: 100%; height: auto; max-height: 60px; }
+@media (max-width: 480px) {
+  .password-recovery-card .signin { padding: 24px; }
+  .password-recovery-card .monash-header { padding: 24px; }
+}

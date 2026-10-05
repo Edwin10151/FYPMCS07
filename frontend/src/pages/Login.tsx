@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
 import { errorMessage, login, saveSession, type Session } from "../api";
 import "./Login.css";
@@ -30,6 +30,8 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+  const notice = (location.state as { notice?: string } | null)?.notice;
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +82,7 @@ export default function Login() {
         </div>
 
         <div className="signin">
+          {notice && <p className="deck" role="status">{notice}</p>}
           {step === "email" ? (
             <>
               <div className="eye">Sign in</div>

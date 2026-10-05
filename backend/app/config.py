@@ -30,6 +30,7 @@ class Settings(BaseModel):
     smtp_username: str = os.getenv("SMTP_USERNAME", "").strip()
     smtp_app_password: str = os.getenv("SMTP_APP_PASSWORD", "").strip()
     email_from: str = os.getenv("EMAIL_FROM", "").strip()
+    public_app_url: str = os.getenv("PUBLIC_APP_URL", "").strip()
 
     @property
     def email_configured(self) -> bool:

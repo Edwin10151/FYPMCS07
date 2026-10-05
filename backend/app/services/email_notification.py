@@ -1,5 +1,6 @@
 from email.message import EmailMessage
 import smtplib
+import ssl
 
 from app.config import Settings
 
@@ -22,7 +23,7 @@ def send_reminders(
     results: list[dict] = []
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-            smtp.starttls()
+            smtp.starttls(context=ssl.create_default_context())
             smtp.login(settings.smtp_username, settings.smtp_app_password)
             for recipient in recipients:
                 message = EmailMessage()

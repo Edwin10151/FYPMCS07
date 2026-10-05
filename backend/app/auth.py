@@ -60,6 +60,7 @@ def create_access_token(user: dict) -> str:
         "sub": str(user["user_id"]),
         "email": user["email"],
         "role": user["role_name"],
+        "auth_version": user.get("auth_version", 0),
         "exp": datetime.now(timezone.utc) + timedelta(hours=12),
     }
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
@@ -84,7 +85,7 @@ def get_current_user(
     user = fetch_one(
         """
         SELECT u.user_id, u.staff_id, u.full_name, u.email, u.is_active, u.must_change_password,
-               r.role_name, r.permission_level
+               u.auth_version, r.role_name, r.permission_level
         FROM app_user u
         JOIN role r ON r.role_id = u.role_id
         WHERE u.user_id = %s
@@ -93,6 +94,8 @@ def get_current_user(
     )
     if not user or not user["is_active"]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+    if payload.get("auth_version", 0) != user.get("auth_version", 0):
+        raise HTTPException(status_code=401, detail="Session expired. Sign in again.")
     if user["must_change_password"] and request.url.path != "/api/auth/change-password":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Change the temporary password before continuing")
     return user

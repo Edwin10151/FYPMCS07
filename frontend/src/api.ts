@@ -52,6 +52,7 @@ export type DashboardAssessment = {
 
 export type DashboardPayload = {
   offering: {
+    semester_status: "planning" | "active" | "archived";
     offering_id: number;
     unit_code: string;
     unit_name: string;
@@ -66,6 +67,18 @@ export type DashboardPayload = {
 };
 
 export type Report = {
+  evidence_stale: boolean;
+  evidence_snapshot: {
+    unit_code: string;
+    unit_name: string;
+    year: number;
+    period: string;
+    learning_outcomes: Array<{
+      code: string;
+      average_attainment_pct: string;
+      attainment_grade: string;
+    }>;
+  } | null;
   report_id: number;
   offering_id: number;
   ai_summary: string | null;
@@ -390,8 +403,8 @@ export function deactivateAdminPeriod(token: string, semesterId: number) {
   );
 }
 
-export function resetAdminPeriod(token: string, semesterId: number) {
-  return apiFetch<{ status: string; offerings_deleted: number; accounts_deleted: number }>(`/admin/periods/${semesterId}/reset`, token, { method: "POST" });
+export function resetAdminPeriod(token: string, semesterId: number, confirmation: string) {
+  return apiFetch<{ status: string; offerings_deleted: number; accounts_deleted: number }>(`/admin/periods/${semesterId}/reset`, token, { method: "POST", body: JSON.stringify({ confirmation }) });
 }
 
 export type OfferingInput = {
@@ -453,6 +466,7 @@ export type NewStaffAccount = { email: string; full_name: string; temporary_pass
 export type RosterPersonOption = { name: string; email: string | null; role_type: "lecture" | "tutorial" | "laboratory" };
 
 export type ReviewUnit = UnmatchedUnit & {
+  has_existing_offering?: boolean;
   staffing: RosterPersonOption[];
   prefilled_coordinator: { name: string; email: string } | null;
   // Only present when the roster lists no staff at all for this unit (e.g. a placement unit) —
@@ -462,14 +476,16 @@ export type ReviewUnit = UnmatchedUnit & {
 
 export function reviewStaffingRoster(token: string, semesterId: number, file: File) {
   return uploadForm(token, "/admin/staffing/roster-review", { semester_id: String(semesterId) }, file) as Promise<{
+    staffing_import_id: number;
     units_in_file: number;
     matched_offerings: number;
     unmatched_units: ReviewUnit[];
+    review_units: ReviewUnit[];
     warnings: string[];
   }>;
 }
 
-export function commitStaffingRoster(token: string, semesterId: number, coordinators: Record<string, string | null>) {
+export function commitStaffingRoster(token: string, semesterId: number, snapshotId: number, coordinators: Record<string, string | null>) {
   return apiFetch<{
     status: string;
     offerings_created: number;
@@ -479,13 +495,14 @@ export function commitStaffingRoster(token: string, semesterId: number, coordina
     warnings: string[];
   }>("/admin/staffing/roster-commit", token, {
     method: "POST",
-    body: JSON.stringify({ semester_id: semesterId, coordinators }),
+    body: JSON.stringify({ semester_id: semesterId, staffing_import_id: snapshotId, coordinators }),
   });
 }
 
 export function getStaffingStatus(token: string, semesterId: number) {
   return apiFetch<{
     snapshot: {
+      staffing_import_id: number;
       source_filename: string;
       imported_at: string;
       committed: boolean;
@@ -493,6 +510,7 @@ export function getStaffingStatus(token: string, semesterId: number) {
       matched_offerings: number;
       staffing_rows_created: number;
       unmatched_units: ReviewUnit[];
+      review_units: ReviewUnit[];
     } | null;
   }>(`/admin/staffing/status?semester_id=${semesterId}`, token);
 }
@@ -532,8 +550,18 @@ export function setAdminUserRole(token: string, userId: number, roleName: "super
 }
 
 export function resetAdminUserPassword(token: string, userId: number) {
-  return apiFetch<{ full_name: string; temporary_password: string }>(`/admin/users/${userId}/reset-password`, token, {
+  return apiFetch<{ full_name: string; email: string; temporary_password: string }>(`/admin/users/${userId}/reset-password`, token, {
     method: "POST",
+  });
+}
+
+export function emailAdminPasswordReset(token: string, userId: number) {
+  return apiFetch<{ status: string; email: string; expires_minutes: number }>(`/admin/users/${userId}/password-reset-link`, token, { method: "POST" });
+}
+
+export function completePasswordReset(token: string, newPassword: string) {
+  return apiFetch<{ status: string; notification_status: string }>("/auth/reset-password", undefined, {
+    method: "POST", body: JSON.stringify({ token, new_password: newPassword }),
   });
 }
 

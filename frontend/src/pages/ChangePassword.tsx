@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import monashLogo from "../assets/monash-logo-big.jpg";
-import { changePassword, clearSession, errorMessage, loadSession, saveSession } from "../api";
+import { changePassword, clearSession, errorMessage, loadSession } from "../api";
 import "./Login.css";
 
 export default function ChangePassword() {
@@ -25,10 +25,8 @@ export default function ChangePassword() {
     setError("");
     try {
       await changePassword(session.access_token, currentPassword, newPassword);
-      const remember = localStorage.getItem("mcs07.session") !== null;
       clearSession();
-      saveSession({ ...session, user: { ...session.user, must_change_password: false } }, remember);
-      navigate("/units");
+      navigate("/login", { replace: true, state: { notice: "Password changed. Sign in with your new password." } });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

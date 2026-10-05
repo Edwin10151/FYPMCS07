@@ -1,4 +1,4 @@
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useSearchParams } from "react-router-dom";
 import { avatarClass, initials, roleLabel, type SessionUser } from "../api";
 
 // Dedicated sidebar for the Admin Portal (Semester Setup, Tutor List, Student
@@ -13,6 +13,8 @@ const NAV_ADMIN = [
 ];
 
 export default function AdminSidebar({ user }: { user: SessionUser }) {
+  const [searchParams] = useSearchParams();
+  const semesterId = searchParams.get("semester_id");
   return (
     <aside className="side">
       <Link to="/units" className="brand">
@@ -28,7 +30,7 @@ export default function AdminSidebar({ user }: { user: SessionUser }) {
       <div className="sec">Semester setup</div>
       <nav>
         {NAV_ADMIN.map(({ to, label, ic, end }) => (
-          <NavLink key={label} to={to} end={end} className={({ isActive }) => (isActive ? "active" : "")}>
+          <NavLink key={label} to={semesterId ? `${to}?semester_id=${encodeURIComponent(semesterId)}` : to} end={end} className={({ isActive }) => (isActive ? "active" : "")}>
             <span className={`ic ${ic}`} />
             {label}
           </NavLink>

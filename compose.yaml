@@ -38,6 +38,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_APP_PASSWORD: ${SMTP_APP_PASSWORD:-}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"

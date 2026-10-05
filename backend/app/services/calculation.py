@@ -42,9 +42,9 @@ def even_ulo_contributions(
 def attainment_percentage(achieved_marks: Decimal, total_available_marks: Decimal) -> Decimal:
     """A ULO's attainment: marks earned toward it over marks available for it.
 
-    Both sides are already contribution-weighted, so this is the final ratio:
-        achieved = sum(raw_mark  x contribution%)
-        total    = sum(max_mark  x contribution%)
+    Both sides use normalized unit marks and are already contribution-weighted:
+        achieved = sum(raw_mark / max_mark x assessment_weight x contribution%)
+        total    = sum(assessment_weight x contribution%)
     """
     if total_available_marks <= 0:
         return Decimal("0.00")
@@ -52,3 +52,13 @@ def attainment_percentage(achieved_marks: Decimal, total_available_marks: Decima
         Decimal("0.01"),
         rounding=ROUND_HALF_UP,
     )
+
+
+def validate_ulo_contributions(weights: dict[tuple[int, int], Decimal]) -> None:
+    totals: dict[int, Decimal] = {}
+    for (_, ulo_id), weight in weights.items():
+        if weight is None or not weight.is_finite() or not Decimal(0) <= weight <= Decimal(100):
+            raise ValueError("Each assessment contribution must be between 0% and 100%")
+        totals[ulo_id] = totals.get(ulo_id, Decimal(0)) + weight
+    if any(total != Decimal(100) for total in totals.values()):
+        raise ValueError("Assessment contributions must total 100% for each learning outcome")

@@ -2,10 +2,14 @@ from contextlib import asynccontextmanager
 import csv
 import io
 import json
+import hashlib
+import logging
 import re
+import secrets
 from datetime import date
 from decimal import Decimal
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +33,7 @@ from app.config import get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
 from app.seed import ensure_super_admin, seed_demo_data
-from app.services.calculation import even_ulo_contributions
+from app.services.calculation import even_ulo_contributions, validate_ulo_contributions
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
 from app.services.email_notification import send_reminders
@@ -53,6 +57,7 @@ async def lifespan(app: FastAPI):
     run_migrations()
     seed_demo_data()
     ensure_super_admin()
+    _refresh_pending_attainment()
     yield
 
 
@@ -68,14 +73,27 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def prevent_credential_caching(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/api/auth/", "/api/admin/users")):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=1024)
 
 
 class PasswordChangeRequest(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(min_length=12, max_length=1024)
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=128)
+    new_password: str = Field(min_length=12, max_length=1024)
 
 
 class AdminUserCreate(BaseModel):
@@ -108,7 +126,7 @@ class MappingUpdate(BaseModel):
 class AssessmentRowInput(BaseModel):
     assessment_id: int | None = None
     assessment_name: str
-    weight: Decimal
+    weight: Decimal = Field(ge=0, le=100, decimal_places=2)
     ulo_codes: list[str] = []
 
 
@@ -207,7 +225,7 @@ def login(payload: LoginRequest):
     user = fetch_one(
         """
         SELECT u.user_id, u.staff_id, u.full_name, u.email, u.password_hash, u.is_active,
-               u.must_change_password, r.role_name, r.permission_level
+               u.must_change_password, u.auth_version, r.role_name, r.permission_level
         FROM app_user u
         JOIN role r ON r.role_id = u.role_id
         WHERE u.email = %s
@@ -233,21 +251,20 @@ def change_password(
     payload: PasswordChangeRequest,
     user: Annotated[dict, Depends(get_current_user)],
 ):
-    user_with_password = fetch_one(
-        "SELECT password_hash FROM app_user WHERE user_id = %s",
-        (user["user_id"],),
-    )
-    if not user_with_password or not verify_password(payload.current_password, user_with_password["password_hash"]):
-        raise HTTPException(status_code=401, detail="Current password is incorrect")
     if not is_valid_password(payload.new_password):
         raise HTTPException(status_code=422, detail="New password must be at least 12 characters")
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT password_hash, auth_version FROM app_user WHERE user_id = %s FOR UPDATE", (user["user_id"],))
+            stored = cur.fetchone()
+            if not stored or stored["auth_version"] != user.get("auth_version", 0) or not verify_password(payload.current_password, stored["password_hash"]):
+                raise HTTPException(status_code=401, detail="Current password is incorrect or session expired")
             cur.execute(
-                "UPDATE app_user SET password_hash = %s, must_change_password = FALSE WHERE user_id = %s",
+                "UPDATE app_user SET password_hash = %s, must_change_password = FALSE, auth_version = auth_version + 1 WHERE user_id = %s",
                 (hash_password(payload.new_password), user["user_id"]),
             )
+            _revoke_password_links(cur, user["user_id"])
     return {"status": "changed"}
 
 
@@ -304,7 +321,7 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
         # the assigned coordinator for that offering (admin workflows live in
         # the Admin Portal, not the per-unit workspace). super_admin is the
         # exception: it can edit every unit's workspace too.
-        row["can_edit"] = row["coordinator_id"] == user["user_id"] or user["role_name"] == "super_admin"
+        row["can_edit"] = row["semester_status"] != "archived" and (row["coordinator_id"] == user["user_id"] or user["role_name"] == "super_admin")
         del row["coordinator_id"]
     return {"offerings": rows}
 
@@ -344,6 +361,7 @@ def create_handbook_import(
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
             cur.execute(
                 """
                 INSERT INTO handbook_import_snapshot (offering_id, source_url, handbook_version, payload)
@@ -388,6 +406,7 @@ def confirm_handbook_import(
     ensure_offering_access(user, offering_id, min_permission_level=20)
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
             cur.execute(
                 """
                 SELECT handbook_import_id, source_url, payload
@@ -520,7 +539,7 @@ def confirm_handbook_import(
 def dashboard(user: Annotated[dict, Depends(require_offering_access())], offering_id: int = 1):
     offering = fetch_one(
         """
-        SELECT o.offering_id, u.unit_code, u.unit_name, s.year, s.period,
+        SELECT o.offering_id, u.unit_code, u.unit_name, s.year, s.period, s.status AS semester_status,
                ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.program_name ORDER BY p.program_name), NULL) AS program_names
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
@@ -528,7 +547,7 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
         LEFT JOIN program p ON p.program_id = op.program_id
         JOIN semester s ON s.semester_id = o.semester_id
         WHERE o.offering_id = %s
-        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period
+        GROUP BY o.offering_id, u.unit_code, u.unit_name, s.year, s.period, s.status
         """,
         (offering_id,),
     )
@@ -607,7 +626,7 @@ def _report_row(offering_id: int):
         """
         SELECT r.report_id, r.offering_id, r.ai_summary, r.coordinator_comment, r.is_finalized,
                r.status, r.attainment_analysis, r.previous_cohort_outcomes, r.next_cohort_action_plan,
-               r.provider, r.model, r.prompt_version, r.generated_by, r.generated_at, r.updated_at,
+               r.provider, r.model, r.prompt_version, r.evidence_snapshot, r.evidence_stale, r.generated_by, r.generated_at, r.updated_at,
                r.submitted_by, r.submitted_at, r.reviewed_by, r.reviewed_at, r.reviewer_comment,
                r.finalized_by, r.finalized_at, reviewer.full_name AS reviewed_by_name
         FROM ai_report r
@@ -768,6 +787,9 @@ def generate_report_draft(
     evidence_json = json.dumps(evidence.model_dump(mode="json"))
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
+            if _build_report_evidence(offering_id, payload.coordinator_context) != evidence:
+                raise HTTPException(status_code=409, detail="Report data changed during generation. Generate the draft again")
             cur.execute(
                 "SELECT report_id, status FROM ai_report WHERE offering_id = %s ORDER BY generated_at DESC LIMIT 1",
                 (offering_id,),
@@ -795,7 +817,7 @@ def generate_report_draft(
                         next_cohort_action_plan = %s, ai_summary = %s, coordinator_comment = %s,
                         evidence_snapshot = %s, provider = %s, model = %s, prompt_version = %s,
                         generated_by = %s, generated_at = CURRENT_TIMESTAMP,
-                        updated_at = CURRENT_TIMESTAMP, status = 'draft'
+                        updated_at = CURRENT_TIMESTAMP, status = 'draft', evidence_stale = FALSE
                     WHERE report_id = %s
                     """,
                     (*values, existing["report_id"]),
@@ -833,9 +855,10 @@ def save_report(payload: ReportUpdate, user: Annotated[dict, Depends(get_current
         previous_cohort_outcomes=sections[1],
         next_cohort_action_plan=sections[2],
     )
-
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, payload.offering_id)
+            evidence = _build_report_evidence(payload.offering_id, payload.coordinator_context)
             cur.execute(
                 "SELECT report_id, status FROM ai_report WHERE offering_id = %s ORDER BY generated_at DESC LIMIT 1",
                 (payload.offering_id,),
@@ -856,10 +879,11 @@ def save_report(payload: ReportUpdate, user: Annotated[dict, Depends(get_current
                     UPDATE ai_report
                     SET attainment_analysis = %s, previous_cohort_outcomes = %s,
                         next_cohort_action_plan = %s, ai_summary = %s,
-                        coordinator_comment = %s, status = 'draft', updated_at = CURRENT_TIMESTAMP
+                        coordinator_comment = %s, status = 'draft', updated_at = CURRENT_TIMESTAMP,
+                        evidence_snapshot = %s, evidence_stale = FALSE
                     WHERE report_id = %s
                     """,
-                    (*values, existing["report_id"]),
+                    (*values, json.dumps(evidence.model_dump(mode="json")), existing["report_id"]),
                 )
                 report_id = existing["report_id"]
             else:
@@ -867,12 +891,12 @@ def save_report(payload: ReportUpdate, user: Annotated[dict, Depends(get_current
                     """
                     INSERT INTO ai_report (
                         offering_id, generated_by, attainment_analysis, previous_cohort_outcomes,
-                        next_cohort_action_plan, ai_summary, coordinator_comment, provider
+                        next_cohort_action_plan, ai_summary, coordinator_comment, provider, evidence_snapshot
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'manual')
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'manual', %s)
                     RETURNING report_id
                     """,
-                    (payload.offering_id, user["user_id"], *values),
+                    (payload.offering_id, user["user_id"], *values, json.dumps(evidence.model_dump(mode="json"))),
                 )
                 report_id = cur.fetchone()["report_id"]
     return {"report_id": report_id, "status": "draft"}
@@ -888,20 +912,30 @@ def submit_report(payload: ReportAction, user: Annotated[dict, Depends(get_curre
         raise HTTPException(status_code=404, detail="Save a report draft before submitting")
     if report["status"] not in ("draft", "changes_requested"):
         raise HTTPException(status_code=409, detail="This report cannot be submitted in its current state")
+    if report.get("evidence_stale"):
+        raise HTTPException(status_code=409, detail="Report data changed. Review and save or regenerate the draft before submitting")
     required = (report["attainment_analysis"], report["previous_cohort_outcomes"], report["next_cohort_action_plan"])
     if not all(value and value.strip() for value in required):
         raise HTTPException(status_code=422, detail="Complete all three CQI sections before submitting")
+    evidence_json = None
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, payload.offering_id)
+            if not report.get("evidence_snapshot"):
+                evidence = _build_report_evidence(payload.offering_id, report["coordinator_comment"] or "")
+                evidence_json = json.dumps(evidence.model_dump(mode="json"))
             cur.execute(
                 """
                 UPDATE ai_report
                 SET status = 'submitted', submitted_by = %s, submitted_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE report_id = %s
+                    updated_at = CURRENT_TIMESTAMP,
+                    evidence_snapshot = COALESCE(evidence_snapshot, %s)
+                WHERE report_id = %s AND status IN ('draft', 'changes_requested') AND NOT evidence_stale
                 """,
-                (user["user_id"], report["report_id"]),
+                (user["user_id"], evidence_json, report["report_id"]),
             )
+            if cur.rowcount != 1:
+                raise HTTPException(status_code=409, detail="Report changed before submission. Reload and review it")
     return {"status": "submitted"}
 
 
@@ -920,6 +954,7 @@ def review_report(payload: ReportReview, user: Annotated[dict, Depends(require_p
     approved = payload.decision == "approved"
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, payload.offering_id)
             cur.execute(
                 """
                 UPDATE ai_report
@@ -928,7 +963,7 @@ def review_report(payload: ReportReview, user: Annotated[dict, Depends(require_p
                     is_finalized = %s,
                     finalized_by = CASE WHEN %s THEN %s ELSE NULL END,
                     finalized_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END
-                WHERE report_id = %s
+                WHERE report_id = %s AND status = 'submitted' AND NOT evidence_stale
                 """,
                 (
                     payload.decision,
@@ -941,6 +976,8 @@ def review_report(payload: ReportReview, user: Annotated[dict, Depends(require_p
                     report["report_id"],
                 ),
             )
+            if cur.rowcount != 1:
+                raise HTTPException(status_code=409, detail="Report changed before review. Reload and review it")
     return {"status": payload.decision}
 
 
@@ -980,6 +1017,7 @@ def save_mappings(
     ensure_offering_access(user, payload.offering_id, min_permission_level=20)
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, payload.offering_id)
             cur.execute(
                 "UPDATE ulo_plo_mapping SET is_active = FALSE, removed_by = %s, removed_at = CURRENT_TIMESTAMP WHERE offering_id = %s",
                 (user["user_id"], payload.offering_id),
@@ -1042,6 +1080,7 @@ def save_assessments(
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, payload.offering_id)
             cur.execute(
                 "SELECT offering_ulo_id, ulo_code FROM offering_ulo WHERE offering_id = %s",
                 (payload.offering_id,),
@@ -1050,9 +1089,24 @@ def save_assessments(
 
             cur.execute("SELECT assessment_id FROM assessment WHERE offering_id = %s", (payload.offering_id,))
             existing_ids = {row["assessment_id"] for row in cur.fetchall()}
+            cur.execute("SELECT assessment_id, offering_ulo_id FROM assessment_ulo WHERE offering_id = %s", (payload.offering_id,))
+            previous_links = {(row["assessment_id"], row["offering_ulo_id"]) for row in cur.fetchall()}
             keep_ids = {item.assessment_id for item in payload.assessments if item.assessment_id is not None}
+            if not keep_ids.issubset(existing_ids) or len(keep_ids) != sum(item.assessment_id is not None for item in payload.assessments):
+                raise HTTPException(status_code=422, detail="Assessment IDs must be unique and belong to this offering")
+            if any(len(item.ulo_codes) != len(set(item.ulo_codes)) or not set(item.ulo_codes).issubset(ulo_ids) for item in payload.assessments):
+                raise HTTPException(status_code=422, detail="Select valid, non-duplicate ULOs for each assessment")
             remove_ids = existing_ids - keep_ids
             if remove_ids:
+                cur.execute("""
+                    SELECT 1 FROM student_grade WHERE assessment_id = ANY(%s)
+                    UNION ALL SELECT 1 FROM grade_upload_cell WHERE assessment_id = ANY(%s)
+                    UNION ALL SELECT 1 FROM grade_upload_column_mapping WHERE assessment_id = ANY(%s)
+                    UNION ALL SELECT 1 FROM grade_upload_batch WHERE assessment_id = ANY(%s)
+                    LIMIT 1
+                """, (list(remove_ids),) * 4)
+                if cur.fetchone():
+                    raise HTTPException(status_code=409, detail="An assessment with uploaded grades or previews cannot be deleted")
                 cur.execute(
                     "DELETE FROM assessment WHERE offering_id = %s AND assessment_id = ANY(%s)",
                     (payload.offering_id, list(remove_ids)),
@@ -1107,9 +1161,10 @@ def save_assessments(
 
             # A ULO's default share depends on how many assessments end up covering
             # it, so this can only be settled once every assessment has been saved.
-            # A contribution the coordinator tuned in the coverage editor wins over
-            # the default.
+            # Preserve custom percentages only when that ULO's linked assessments
+            # are unchanged; adding/removing a source requires a fresh default.
             defaults = even_ulo_contributions(saved_links)
+            changed_ulos = {ulo_id for _, ulo_id in previous_links.symmetric_difference(set(saved_links))}
             for link in saved_links:
                 assessment_id, offering_ulo_id = link
                 cur.execute(
@@ -1124,22 +1179,23 @@ def save_assessments(
                         payload.offering_id,
                         assessment_id,
                         offering_ulo_id,
-                        kept_contributions.get(link, defaults.get(link, Decimal("0.00"))),
+                        defaults[link] if offering_ulo_id in changed_ulos else kept_contributions.get(link, defaults[link]),
                         user["user_id"],
                     ),
                 )
+            _refresh_offering_results(cur, payload.offering_id)
     return {"status": "saved"}
 
 
 class AssessmentUloWeightInput(BaseModel):
     assessment_id: int
     offering_ulo_id: int
-    allocated_weight: Decimal
+    allocated_weight: Decimal = Field(ge=0, le=100, decimal_places=2)
 
 
 class AssessmentUloWeightsUpdate(BaseModel):
     offering_id: int
-    weights: list[AssessmentUloWeightInput]
+    weights: list[AssessmentUloWeightInput] = Field(min_length=1)
 
 
 @app.put("/api/assessment-ulo-weights")
@@ -1150,6 +1206,16 @@ def save_assessment_ulo_weights(
     ensure_offering_access(user, payload.offering_id, min_permission_level=20)
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, payload.offering_id)
+            cur.execute("SELECT assessment_id, offering_ulo_id, allocated_weight FROM assessment_ulo WHERE offering_id = %s", (payload.offering_id,))
+            links = {(row["assessment_id"], row["offering_ulo_id"]): row["allocated_weight"] for row in cur.fetchall()}
+            incoming = {(item.assessment_id, item.offering_ulo_id): item.allocated_weight for item in payload.weights}
+            if len(incoming) != len(payload.weights) or not incoming.keys() <= links.keys():
+                raise HTTPException(status_code=422, detail="Contribution links must be unique and belong to this offering")
+            try:
+                validate_ulo_contributions({**links, **incoming})
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             for item in payload.weights:
                 cur.execute(
                     """
@@ -1159,6 +1225,7 @@ def save_assessment_ulo_weights(
                     """,
                     (item.allocated_weight, user["user_id"], payload.offering_id, item.assessment_id, item.offering_ulo_id),
                 )
+            _refresh_offering_results(cur, payload.offering_id)
     return {"status": "saved"}
 
 
@@ -1274,11 +1341,15 @@ def update_admin_user_status(
             existing = cur.fetchone()
             if not existing:
                 raise HTTPException(status_code=404, detail="Staff account not found")
+            if existing["current_role_name"] in _ADMIN_ROLE_NAMES and user["role_name"] != "super_admin":
+                raise HTTPException(status_code=403, detail="Only a super admin can manage management or super admin accounts")
             updates: list[str] = []
             values: list = []
             if payload.is_active is not None:
                 updates.append("is_active = %s")
                 values.append(payload.is_active)
+                updates.append("auth_version = auth_version + 1")
+                _revoke_password_links(cur, user_id)
             if payload.role_name is not None:
                 role_name = payload.role_name.strip().lower()
                 cur.execute("SELECT role_id FROM role WHERE role_name = %s", (role_name,))
@@ -1304,29 +1375,142 @@ def update_admin_user_status(
     return {"status": "updated"}
 
 
+def _revoke_password_links(cur, user_id: int):
+    cur.execute("UPDATE password_reset_token SET used_at = CURRENT_TIMESTAMP WHERE user_id = %s AND used_at IS NULL", (user_id,))
+
+
+def _password_reset_target(cur, user_id: int, actor: dict) -> dict:
+    if user_id == actor["user_id"]:
+        raise HTTPException(status_code=409, detail="Use account settings to change your own password")
+    cur.execute("""
+        SELECT u.user_id, u.full_name, u.email, u.is_active, r.role_name
+        FROM app_user u JOIN role r ON r.role_id = u.role_id
+        WHERE u.user_id = %s FOR UPDATE OF u
+    """, (user_id,))
+    target = cur.fetchone()
+    if not target:
+        raise HTTPException(status_code=404, detail="Staff account not found")
+    if target["role_name"] in _ADMIN_ROLE_NAMES and actor["role_name"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Only a super admin can reset management or super admin passwords")
+    if not target["is_active"]:
+        raise HTTPException(status_code=409, detail="Activate this staff account before resetting its password")
+    return target
+
+
+def _password_reset_url(token: str) -> str:
+    base = settings.public_app_url.rstrip("/")
+    try:
+        url = urlsplit(base)
+        valid = (url.scheme == "https" or (url.scheme == "http" and url.hostname in {"localhost", "127.0.0.1", "::1"}))
+        valid = valid and bool(url.hostname) and not (url.username or url.password or url.query or url.fragment or url.path)
+        url.port  # Validate malformed ports before sending an email.
+    except ValueError:
+        valid = False
+    if not valid:
+        raise HTTPException(status_code=503, detail="Set PUBLIC_APP_URL to the trusted HTTPS website address (HTTP is allowed only for localhost testing)")
+    return f"{base}/reset-password#token={token}"
+
+
+@app.post("/api/admin/users/{user_id}/password-reset-link")
+def email_admin_password_reset(
+    user_id: int,
+    user: Annotated[dict, Depends(require_permission(30))],
+):
+    if not settings.email_configured:
+        raise HTTPException(status_code=503, detail="Email delivery is not configured. Use the temporary-password fallback if needed.")
+    token = secrets.token_urlsafe(32)
+    link = _password_reset_url(token)
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            target = _password_reset_target(cur, user_id, user)
+            cur.execute("SELECT 1 FROM password_reset_token WHERE user_id = %s AND created_at > CURRENT_TIMESTAMP - INTERVAL '1 minute' LIMIT 1", (user_id,))
+            if cur.fetchone():
+                raise HTTPException(status_code=429, detail="A reset link was requested recently. Wait one minute before trying again.")
+            _revoke_password_links(cur, user_id)
+            cur.execute("""
+                INSERT INTO password_reset_token (token_hash, user_id, requested_by, expires_at)
+                VALUES (%s, %s, %s, CURRENT_TIMESTAMP + INTERVAL '30 minutes')
+            """, (digest, user_id, user["user_id"]))
+    try:
+        deliveries = send_reminders(settings, [target], "Reset your Curriculum Analytics password", (
+            "An administrator requested a password reset for your dashboard account. "
+            "Choose a new password using this one-use link within 30 minutes:\n\n"
+            f"{link}\n\nYour current password is unchanged until you complete the reset. "
+            "If you did not request this, ignore the link and contact your administrator."
+        ))
+        if len(deliveries) != 1 or deliveries[0]["status"] != "sent":
+            raise RuntimeError("Delivery failed")
+    except RuntimeError as exc:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE password_reset_token SET used_at = CURRENT_TIMESTAMP WHERE token_hash = %s", (digest,))
+        raise HTTPException(status_code=502, detail="Could not send the reset email. The password has not changed. Use the temporary-password fallback if needed.") from exc
+    return {"status": "sent", "email": target["email"], "expires_minutes": 30}
+
+
+@app.post("/api/auth/reset-password")
+def complete_password_reset(payload: PasswordResetRequest):
+    digest = hashlib.sha256(payload.token.encode()).hexdigest()
+    invalid = "This reset link is invalid or expired. Contact your administrator for a new link."
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT user_id FROM password_reset_token WHERE token_hash = %s", (digest,))
+            token_row = cur.fetchone()
+            if not token_row:
+                raise HTTPException(status_code=400, detail=invalid)
+            # All password operations lock the account first, making token consumption one-use.
+            cur.execute("SELECT user_id, full_name, email, is_active FROM app_user WHERE user_id = %s FOR UPDATE", (token_row["user_id"],))
+            target = cur.fetchone()
+            if not target or not target["is_active"]:
+                raise HTTPException(status_code=400, detail=invalid)
+            cur.execute("""
+                UPDATE password_reset_token SET used_at = CURRENT_TIMESTAMP
+                WHERE token_hash = %s AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+                RETURNING user_id
+            """, (digest,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=400, detail=invalid)
+            cur.execute("""
+                UPDATE app_user SET password_hash = %s, must_change_password = FALSE, auth_version = auth_version + 1
+                WHERE user_id = %s
+            """, (hash_password(payload.new_password), target["user_id"]))
+            _revoke_password_links(cur, target["user_id"])
+    notification = "not_configured"
+    if settings.email_configured:
+        try:
+            deliveries = send_reminders(settings, [target], "Your Curriculum Analytics password was changed", "Your dashboard password was changed and previous sessions were signed out. If you did not make this change, contact your administrator immediately.")
+            notification = "sent" if deliveries and deliveries[0]["status"] == "sent" else "failed"
+        except RuntimeError:
+            notification = "failed"
+        if notification == "failed":
+            logging.getLogger(__name__).warning("Password-change confirmation delivery failed for user %s", target["user_id"])
+    return {"status": "changed", "notification_status": notification}
+
+
 @app.post("/api/admin/users/{user_id}/reset-password")
 def reset_admin_user_password(
     user_id: int,
     user: Annotated[dict, Depends(require_permission(30))],
 ):
-    if user_id == user["user_id"]:
-        raise HTTPException(status_code=409, detail="You cannot reset your own password here")
     temporary_password = generate_temporary_password()
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _password_reset_target(cur, user_id, user)
             cur.execute(
                 """
                 UPDATE app_user
-                SET password_hash = %s, must_change_password = TRUE
+                SET password_hash = %s, must_change_password = TRUE, auth_version = auth_version + 1
                 WHERE user_id = %s
-                RETURNING full_name
+                RETURNING full_name, email
                 """,
                 (hash_password(temporary_password), user_id),
             )
             account = cur.fetchone()
             if not account:
                 raise HTTPException(status_code=404, detail="Staff account not found")
-    return {"full_name": account["full_name"], "temporary_password": temporary_password}
+            _revoke_password_links(cur, user_id)
+    return {"full_name": account["full_name"], "email": account["email"], "temporary_password": temporary_password}
 
 
 def _email_reminder_preview(semester_id: int) -> dict:
@@ -1610,6 +1794,26 @@ def _validate_offering_status(status: str) -> None:
         raise HTTPException(status_code=422, detail="Offering status must be draft, active, or discontinued")
 
 
+def _lock_editable_semester(cur, semester_id: int) -> None:
+    cur.execute("SELECT status FROM semester WHERE semester_id = %s FOR UPDATE", (semester_id,))
+    semester = cur.fetchone()
+    if not semester:
+        raise HTTPException(status_code=404, detail="Academic period not found")
+    if semester["status"] == "archived":
+        raise HTTPException(status_code=409, detail="Archived semesters are read-only")
+
+
+def _lock_editable_offering(cur, offering_id: int) -> None:
+    cur.execute("SELECT semester_id FROM unit_offering WHERE offering_id = %s", (offering_id,))
+    offering = cur.fetchone()
+    if not offering:
+        raise HTTPException(status_code=404, detail="Offering not found")
+    _lock_editable_semester(cur, offering["semester_id"])
+    cur.execute("SELECT 1 FROM unit_offering WHERE offering_id = %s FOR UPDATE", (offering_id,))
+    if not cur.fetchone():
+        raise HTTPException(status_code=404, detail="Offering not found")
+
+
 def _validate_offering_staff(cur, coordinator_id: int | None, lecturer_ids: list[int]) -> list[int]:
     staff_ids = [*([coordinator_id] if coordinator_id is not None else []), *lecturer_ids]
     rows = []
@@ -1637,7 +1841,7 @@ def _validate_offering_staff(cur, coordinator_id: int | None, lecturer_ids: list
 
 
 def _save_offering_staff(cur, offering_id: int, coordinator_id: int, lecturer_ids: list[int]) -> None:
-    cur.execute("UPDATE unit_offering SET coordinator_id = %s WHERE offering_id = %s", (coordinator_id, offering_id))
+    cur.execute("UPDATE unit_offering SET coordinator_id = %s, coordinator_source = 'manual' WHERE offering_id = %s", (coordinator_id, offering_id))
     cur.execute("DELETE FROM offering_lecturer WHERE offering_id = %s", (offering_id,))
     for lecturer_id in lecturer_ids:
         cur.execute(
@@ -1772,39 +1976,54 @@ def deactivate_admin_period(
     }
 
 
+class SemesterResetRequest(BaseModel):
+    confirmation: str
+
+
 @app.post("/api/admin/periods/{semester_id}/reset")
 def reset_admin_period(
     semester_id: int,
-    user: Annotated[dict, Depends(require_permission(30))],
+    payload: SemesterResetRequest,
+    user: Annotated[dict, Depends(require_permission(40))],
 ):
     """Wipe this semester's unit offerings back to nothing — the Tutor List and Student
     List commit flows both build on unit_offering, so deleting it here cascades to every
     offering_staffing/offering_lecturer/offering_program row, every assessment, ULO,
     PLO mapping, grade upload and AI report tied to those offerings for this semester.
 
-    A lecturer/coordinator-tier account is removed too, but only if it now has zero
-    remaining ties anywhere in the system (no other semester's offering, staffing row,
-    or audit trail) — i.e. it existed only for the semester just cleared. Management and
-    super_admin accounts are never touched, and neither is any account still tied to a
-    different semester, past or present, so nothing about an already-finalized semester
-    is ever modified by resetting a later one."""
+    All staff accounts and other semesters are retained. Archived semesters and
+    semesters with approved reports cannot be reset."""
+    if user["role_name"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Only a super admin can reset semester data")
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,))
-            if not cur.fetchone():
+            cur.execute("SELECT year, period, status FROM semester WHERE semester_id = %s FOR UPDATE", (semester_id,))
+            semester = cur.fetchone()
+            if not semester:
                 raise HTTPException(status_code=404, detail="Academic period not found")
+            if payload.confirmation.strip() != f"{semester['year']} {semester['period']}":
+                raise HTTPException(status_code=422, detail="Type the semester year and period to confirm the reset")
+            if semester["status"] == "archived":
+                raise HTTPException(status_code=409, detail="Archived semester history cannot be reset")
 
-            cur.execute("SELECT offering_id FROM unit_offering WHERE semester_id = %s", (semester_id,))
+            cur.execute("SELECT offering_id FROM unit_offering WHERE semester_id = %s FOR UPDATE", (semester_id,))
             offering_ids = [row["offering_id"] for row in cur.fetchall()]
+            if offering_ids:
+                cur.execute("SELECT status FROM ai_report WHERE offering_id = ANY(%s) FOR UPDATE", (offering_ids,))
+                if any(row["status"] == "approved" for row in cur.fetchall()):
+                    raise HTTPException(status_code=409, detail="Semester contains approved reports and cannot be reset")
 
             if offering_ids:
                 # These two don't cascade from unit_offering, so they must be cleared first
                 # or the DELETE below fails with a foreign-key violation.
                 cur.execute("DELETE FROM enrollment WHERE offering_id = ANY(%s)", (offering_ids,))
-                cur.execute(
-                    "UPDATE ulo_plo_mapping_suggestion SET source_offering_id = NULL WHERE source_offering_id = ANY(%s)",
-                    (offering_ids,),
-                )
+                # Legacy installations still have this table; fresh schemas do not.
+                cur.execute("SELECT to_regclass('ulo_plo_mapping_suggestion') AS legacy_table")
+                if cur.fetchone()["legacy_table"]:
+                    cur.execute(
+                        "UPDATE ulo_plo_mapping_suggestion SET source_offering_id = NULL WHERE source_offering_id = ANY(%s)",
+                        (offering_ids,),
+                    )
 
             cur.execute("DELETE FROM unit_offering WHERE semester_id = %s", (semester_id,))
             offerings_deleted = cur.rowcount
@@ -1812,37 +2031,7 @@ def reset_admin_period(
             cur.execute("DELETE FROM staffing_import_snapshot WHERE semester_id = %s", (semester_id,))
             cur.execute("DELETE FROM email_notification_delivery WHERE semester_id = %s", (semester_id,))
 
-            cur.execute(
-                """
-                DELETE FROM app_user u
-                WHERE u.role_id IN (SELECT role_id FROM role WHERE role_name IN ('lecturer', 'coordinator'))
-                AND NOT EXISTS (SELECT 1 FROM unit_offering o WHERE o.coordinator_id = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM offering_lecturer ol WHERE ol.lecturer_id = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM offering_staffing os WHERE os.staff_user_id = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM enrollment_upload_batch b WHERE b.uploaded_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM grade_upload_batch b WHERE b.uploaded_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM grade_upload_issue i WHERE i.resolved_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM assessment a WHERE a.confirmed_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM assessment_ulo au WHERE au.confirmed_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM offering_ulo ou WHERE ou.confirmed_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM ulo_plo_mapping m WHERE m.confirmed_by = u.user_id OR m.removed_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM ulo_plo_mapping_suggestion s WHERE s.reviewed_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM handbook_import_snapshot h WHERE h.confirmed_by = u.user_id)
-                AND NOT EXISTS (SELECT 1 FROM staffing_import_snapshot sn WHERE sn.imported_by = u.user_id)
-                AND NOT EXISTS (
-                    SELECT 1 FROM ai_report r
-                    WHERE r.generated_by = u.user_id OR r.finalized_by = u.user_id
-                       OR r.submitted_by = u.user_id OR r.reviewed_by = u.user_id
-                )
-                AND NOT EXISTS (
-                    SELECT 1 FROM email_notification_delivery e
-                    WHERE e.sent_by = u.user_id OR e.recipient_user_id = u.user_id
-                )
-                """
-            )
-            accounts_deleted = cur.rowcount
-
-    return {"status": "reset", "offerings_deleted": offerings_deleted, "accounts_deleted": accounts_deleted}
+    return {"status": "reset", "offerings_deleted": offerings_deleted, "accounts_deleted": 0}
 
 
 @app.post("/api/admin/offerings", status_code=201)
@@ -1857,6 +2046,7 @@ def create_admin_offering(
         raise HTTPException(status_code=422, detail="Use a valid unit code and unit name")
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_semester(cur, payload.semester_id)
             lecturer_ids = _validate_offering_staff(cur, payload.coordinator_id, payload.lecturer_ids)
             program_ids = _validate_program_ids(cur, payload.program_ids)
             cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (payload.semester_id,))
@@ -1913,6 +2103,7 @@ def update_admin_offering(
         raise HTTPException(status_code=422, detail="Replacement unit code must look like FIT3161")
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
             lecturer_ids = _validate_offering_staff(cur, payload.coordinator_id, payload.lecturer_ids)
             program_ids = _validate_program_ids(cur, payload.program_ids)
             cur.execute("SELECT unit_id FROM unit_offering WHERE offering_id = %s FOR UPDATE", (offering_id,))
@@ -1957,6 +2148,10 @@ def delete_admin_offering(
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
+                _lock_editable_offering(cur, offering_id)
+                cur.execute("SELECT 1 FROM ai_report WHERE offering_id = %s AND status = 'approved'", (offering_id,))
+                if cur.fetchone():
+                    raise HTTPException(status_code=409, detail="Offering has an approved report and cannot be deleted")
                 cur.execute("SELECT 1 FROM unit_offering WHERE offering_id = %s", (offering_id,))
                 if not cur.fetchone():
                     raise HTTPException(status_code=404, detail="Unit offering not found")
@@ -1977,6 +2172,7 @@ def create_offerings_from_roster(
     warnings: list[str] = []
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_semester(cur, payload.semester_id)
             cur.execute("SELECT 1 FROM semester WHERE semester_id = %s", (payload.semester_id,))
             if not cur.fetchone():
                 raise HTTPException(status_code=422, detail="Academic period not found")
@@ -2142,6 +2338,7 @@ async def commit_enrolment_upload(
         raise HTTPException(status_code=422, detail="Fix all student-list errors before committing")
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
             cur.execute(
                 "SELECT 1 FROM unit_offering WHERE offering_id = %s FOR UPDATE",
                 (offering_id,),
@@ -2180,6 +2377,7 @@ async def commit_enrolment_upload(
                 (offering_id, user["user_id"], filename, len(rows), accepted_count, len(issues)),
             )
             batch_id = cur.fetchone()["enrollment_upload_batch_id"]
+            _refresh_offering_results(cur, offering_id)
     return {"status": "committed", "batch_id": batch_id, "accepted_count": accepted_count}
 
 
@@ -2287,6 +2485,7 @@ async def preview_grade_upload(
     _require_columns(headers, student_code_column)
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
             assessment_by_id = _load_offering_assessments(cur, offering_id)
             if not assessment_by_id:
                 raise HTTPException(status_code=422, detail="Confirm the assessment setup before importing grades")
@@ -2434,17 +2633,17 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
             SELECT
                 e.enrollment_id,
                 au.offering_ulo_id,
-                -- A contribution is the share of an assessment's marks that counts
-                -- toward this ULO, so both sides are marks, not unit weightings:
-                --   available = sum of (max_mark x contribution)
-                --   achieved  = sum of (raw_mark x contribution)
+                -- Normalise onto unit marks before applying the LO contribution.
+                -- Otherwise 80/100 and 4/5 would have different influence on an LO.
+                --   available = sum of (unit weight x contribution)
+                --   achieved  = sum of (raw/max x unit weight x contribution)
                 -- An assessment the student has no grade for stays in the
                 -- denominator and scores zero, so a missing mark counts against
                 -- attainment rather than quietly shrinking what was expected.
                 -- (Percent signs are avoided in this comment: psycopg scans the
                 -- whole statement for placeholders, comments included.)
-                SUM(COALESCE(sg.max_mark, a.max_mark) * au.allocated_weight / 100) AS total_available_weight,
-                SUM(COALESCE(sg.raw_mark, 0) * au.allocated_weight / 100) AS achieved_weight
+                SUM(a.weight * au.allocated_weight / 100) AS total_available_weight,
+                SUM(COALESCE(sg.raw_mark / sg.max_mark, 0) * a.weight * au.allocated_weight / 100) AS achieved_weight
             FROM enrollment e
             JOIN assessment_ulo au ON au.offering_id = e.offering_id
             JOIN assessment a ON a.assessment_id = au.assessment_id
@@ -2501,6 +2700,34 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
     return attainment_count
 
 
+def _mark_report_evidence_stale(cur, offering_id: int) -> None:
+    cur.execute("""
+        UPDATE ai_report SET evidence_stale = TRUE, updated_at = CURRENT_TIMESTAMP,
+            status = CASE WHEN status = 'submitted' THEN 'changes_requested' ELSE status END
+        WHERE offering_id = %s AND status <> 'approved'
+    """, (offering_id,))
+
+
+def _refresh_offering_results(cur, offering_id: int) -> None:
+    cur.execute("SELECT 1 FROM student_grade WHERE offering_id = %s LIMIT 1", (offering_id,))
+    if cur.fetchone():
+        cur.execute("UPDATE student_grade sg SET weighted_score = ROUND(sg.raw_mark / sg.max_mark * a.weight, 2) FROM assessment a WHERE sg.assessment_id = a.assessment_id AND sg.offering_id = %s", (offering_id,))
+        _recalculate_attainment(cur, offering_id)
+    else:
+        cur.execute("DELETE FROM student_ulo_attainment WHERE offering_id = %s", (offering_id,))
+        cur.execute("DELETE FROM cohort_ulo_attainment WHERE offering_id = %s", (offering_id,))
+    _mark_report_evidence_stale(cur, offering_id)
+
+
+def _refresh_pending_attainment() -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT offering_id FROM attainment_refresh_pending ORDER BY offering_id FOR UPDATE")
+            for row in cur.fetchall():
+                _refresh_offering_results(cur, row["offering_id"])
+                cur.execute("DELETE FROM attainment_refresh_pending WHERE offering_id = %s", (row["offering_id"],))
+
+
 @app.post("/api/grade-uploads/{upload_batch_id}/commit")
 def commit_grade_upload(
     upload_batch_id: int,
@@ -2511,7 +2738,7 @@ def commit_grade_upload(
             cur.execute(
                 """
                 SELECT upload_batch_id, offering_id, status
-                FROM grade_upload_batch WHERE upload_batch_id = %s FOR UPDATE
+                FROM grade_upload_batch WHERE upload_batch_id = %s
                 """,
                 (upload_batch_id,),
             )
@@ -2519,6 +2746,9 @@ def commit_grade_upload(
             if not batch:
                 raise HTTPException(status_code=404, detail="Grade upload preview not found")
             ensure_offering_access(user, batch["offering_id"], min_permission_level=10)
+            _lock_editable_offering(cur, batch["offering_id"])
+            cur.execute("SELECT status FROM grade_upload_batch WHERE upload_batch_id = %s FOR UPDATE", (upload_batch_id,))
+            batch["status"] = cur.fetchone()["status"]
             if batch["status"] != "validated":
                 raise HTTPException(status_code=409, detail="This grade upload has errors and cannot be committed")
             cur.execute(
@@ -2591,6 +2821,7 @@ def commit_grade_upload(
                 (upload_batch_id,),
             )
             attainment_count = _recalculate_attainment(cur, batch["offering_id"])
+            _mark_report_evidence_stale(cur, batch["offering_id"])
             cur.execute(
                 """
                 UPDATE grade_upload_batch
@@ -2659,18 +2890,25 @@ def _parse_staffing_roster(content: bytes) -> list[dict]:
     sheet = workbook.worksheets[0]
     _validate_roster_headers(sheet)
     units: list[dict] = []
+    by_code: dict[str, dict] = {}
     current: dict | None = None
     for row in sheet.iter_rows(min_row=4, values_only=True):
         unit_code = _roster_cell(row, 2).upper()
         if unit_code:
             programme_raw = _roster_cell(row, 1)
-            current = {
-                "unit_code": unit_code,
-                "unit_name": _roster_cell(row, 3),
-                "programme_codes": [item.strip().upper() for item in programme_raw.split("/") if item.strip()],
-                "staffing": [],
-            }
-            units.append(current)
+            programme_codes = [item.strip().upper() for item in programme_raw.split("/") if item.strip()]
+            if unit_code in by_code:
+                current = by_code[unit_code]
+                current["programme_codes"] = list(dict.fromkeys([*current["programme_codes"], *programme_codes]))
+            else:
+                current = {
+                    "unit_code": unit_code,
+                    "unit_name": _roster_cell(row, 3),
+                    "programme_codes": programme_codes,
+                    "staffing": [],
+                }
+                by_code[unit_code] = current
+                units.append(current)
         if current is None:
             continue
         for role_type, name_col, email_col in _ROSTER_ROLE_COLUMNS:
@@ -2679,6 +2917,13 @@ def _parse_staffing_roster(content: bytes) -> list[dict]:
                 continue
             email = _roster_cell(row, email_col).lower() or None
             current["staffing"].append({"role_type": role_type, "name": name, "email": email})
+    workbook.close()
+    seen_codes = set()
+    for unit in units:
+        codes = set(_split_unit_codes(unit["unit_code"]))
+        if seen_codes & codes:
+            raise HTTPException(status_code=422, detail="Overlapping unit-code groups in roster; combine their staff into one unit block")
+        seen_codes.update(codes)
     return units
 
 
@@ -2711,6 +2956,8 @@ def _unmatched_units(units: list[dict], semester_id: int) -> tuple[set[str], lis
         (semester_id, list(all_codes)),
     )
     matched_codes = {row["unit_code"] for row in matched_rows}
+    for unit in units:
+        unit["has_existing_offering"] = any(code in matched_codes for code in _split_unit_codes(unit["unit_code"]))
 
     def _fully_matched(unit: dict) -> bool:
         codes = _split_unit_codes(unit["unit_code"])
@@ -2806,6 +3053,7 @@ def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[s
     `unit_code` labels warnings for this specific offering — a roster row can cover more than
     one real unit code (see _split_unit_codes), so it may differ from unit["unit_code"]."""
     unit_code = unit_code or unit["unit_code"]
+    cur.execute("DELETE FROM offering_lecturer WHERE offering_id = %s AND source = 'roster_import'", (offering_id,))
     if unit["programme_codes"]:
         cur.execute(
             "SELECT program_id, program_code FROM program WHERE UPPER(program_code) = ANY(%s)",
@@ -2822,13 +3070,19 @@ def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[s
                 (offering_id, program["program_id"]),
             )
 
-    cur.execute("SELECT coordinator_id FROM unit_offering WHERE offering_id = %s", (offering_id,))
-    coordinator_id = cur.fetchone()["coordinator_id"]
+    cur.execute("SELECT o.coordinator_id, o.coordinator_source, u.email FROM unit_offering o LEFT JOIN app_user u ON u.user_id = o.coordinator_id WHERE offering_id = %s", (offering_id,))
+    coordinator = cur.fetchone()
+    coordinator_id = coordinator["coordinator_id"]
+    roster_emails = {(entry["email"] or "").strip().lower() for entry in unit["staffing"]}
+    if coordinator["coordinator_source"] == "roster_import" and coordinator["email"] and coordinator["email"].lower() not in roster_emails and coordinator["email"].lower() not in {entry["email"].lower() for entry in unit.get("coordinator_candidates", [])}:
+        cur.execute("UPDATE unit_offering SET coordinator_id = NULL WHERE offering_id = %s", (offering_id,))
+        coordinator_id = None
+        warnings.append(f"{unit_code}: previous imported coordinator is no longer in the roster; choose a replacement")
     if coordinator_id is not None:
         # A coordinator assigned after roster staffing was already applied (e.g. picked manually
         # later) must not be left with a stale lecturer-access row from an earlier import.
         cur.execute(
-            "DELETE FROM offering_lecturer WHERE offering_id = %s AND lecturer_id = %s",
+            "DELETE FROM offering_lecturer WHERE offering_id = %s AND lecturer_id = %s AND source = 'roster_import'",
             (offering_id, coordinator_id),
         )
 
@@ -2838,7 +3092,13 @@ def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[s
     )
     staffing_rows_created = 0
     new_accounts: list[dict] = []
+    seen = set()
     for entry in unit["staffing"]:
+        entry = {**entry, "email": (entry["email"] or "").strip().lower() or None}
+        identity = (entry["role_type"], entry["email"] or entry["name"].strip().casefold())
+        if identity in seen:
+            continue
+        seen.add(identity)
         staff_user_id = None
         if entry["email"]:
             cur.execute("SELECT user_id FROM app_user WHERE LOWER(email) = %s", (entry["email"],))
@@ -2851,7 +3111,7 @@ def _apply_staffing_for_unit(cur, offering_id: int, unit: dict, warnings: list[s
                 new_accounts.append({key: value for key, value in account.items() if key != "user_id"})
             if staff_user_id != coordinator_id:
                 cur.execute(
-                    "INSERT INTO offering_lecturer (offering_id, lecturer_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    "INSERT INTO offering_lecturer (offering_id, lecturer_id, source) VALUES (%s, %s, 'roster_import') ON CONFLICT DO NOTHING",
                     (offering_id, staff_user_id),
                 )
         cur.execute(
@@ -2872,8 +3132,8 @@ def _sync_staffing_from_latest_snapshot(cur, semester_id: int, unit_code: str, o
     cur.execute(
         """
         SELECT payload FROM staffing_import_snapshot
-        WHERE semester_id = %s
-        ORDER BY imported_at DESC
+        WHERE semester_id = %s AND committed_at IS NOT NULL
+        ORDER BY imported_at DESC, staffing_import_id DESC
         LIMIT 1
         """,
         (semester_id,),
@@ -2926,8 +3186,8 @@ def _create_offering_for_unit(cur, semester_id: int, unit_code: str, unit: dict,
     unit_id = cur.fetchone()["unit_id"]
     cur.execute(
         """
-        INSERT INTO unit_offering (unit_id, semester_id, coordinator_id, status)
-        VALUES (%s, %s, %s, 'active')
+        INSERT INTO unit_offering (unit_id, semester_id, coordinator_id, coordinator_source, status)
+        VALUES (%s, %s, %s, 'roster_import', 'active')
         RETURNING offering_id
         """,
         (unit_id, semester_id, coordinator_user_id),
@@ -3012,24 +3272,30 @@ async def review_staffing_roster(
     # Persist so the review survives a refresh and Commit acts on exactly what was reviewed.
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_semester(cur, semester_id)
             cur.execute(
                 """
                 INSERT INTO staffing_import_snapshot (semester_id, source_filename, payload, imported_by)
                 VALUES (%s, %s, %s, %s)
+                RETURNING staffing_import_id
                 """,
                 (semester_id, file.filename, json.dumps(units), user["user_id"]),
             )
+            snapshot_id = cur.fetchone()["staffing_import_id"]
 
     return {
+        "staffing_import_id": snapshot_id,
         "units_in_file": len(units),
         "matched_offerings": len(matched_codes),
         "unmatched_units": unmatched_units,
+        "review_units": [unit for unit in units if _split_unit_codes(unit["unit_code"])],
         "warnings": scrape_warnings,
     }
 
 
 class RosterCommitRequest(BaseModel):
     semester_id: int
+    staffing_import_id: int
     coordinators: dict[str, str | None] = {}  # unit_code -> chosen coordinator email, or None/absent for unassigned
 
 
@@ -3043,16 +3309,17 @@ def commit_staffing_roster(
     newly-created alike — from the most recently reviewed, not-yet-committed snapshot."""
     with get_conn() as conn:
         with conn.cursor() as cur:
+            _lock_editable_semester(cur, payload.semester_id)
             cur.execute(
                 """
-                SELECT staffing_import_id, payload FROM staffing_import_snapshot
-                WHERE semester_id = %s AND committed_at IS NULL
-                ORDER BY imported_at DESC LIMIT 1
+                SELECT staffing_import_id, payload, committed_at FROM staffing_import_snapshot
+                WHERE semester_id = %s
+                ORDER BY imported_at DESC, staffing_import_id DESC LIMIT 1 FOR UPDATE
                 """,
                 (payload.semester_id,),
             )
             snapshot = cur.fetchone()
-            if not snapshot:
+            if not snapshot or snapshot["committed_at"] is not None or snapshot["staffing_import_id"] != payload.staffing_import_id:
                 raise HTTPException(status_code=409, detail="No reviewed roster is waiting to be committed for this semester — upload and submit one first.")
             units = snapshot["payload"]
 
@@ -3061,6 +3328,17 @@ def commit_staffing_roster(
             staffing_rows_created = 0
             accounts_created: list[dict] = []
             warnings: list[str] = []
+
+            # Replace only imported assignments. Unit data and manual grants stay intact.
+            cur.execute("DELETE FROM offering_lecturer WHERE source = 'roster_import' AND offering_id IN (SELECT offering_id FROM unit_offering WHERE semester_id = %s)", (payload.semester_id,))
+            cur.execute("DELETE FROM offering_staffing WHERE source = 'roster_import' AND offering_id IN (SELECT offering_id FROM unit_offering WHERE semester_id = %s)", (payload.semester_id,))
+            roster_codes = sorted({code for unit in units for code in _split_unit_codes(unit["unit_code"])})
+            if not roster_codes:
+                raise HTTPException(status_code=422, detail="Roster contains no valid unit codes; nothing was replaced")
+            cur.execute("UPDATE unit_offering SET coordinator_id = NULL WHERE semester_id = %s AND coordinator_source = 'roster_import' AND unit_id NOT IN (SELECT unit_id FROM unit WHERE unit_code = ANY(%s))", (payload.semester_id, roster_codes))
+            cur.execute("SELECT COUNT(*) AS count FROM offering_lecturer WHERE source = 'manual' AND offering_id IN (SELECT offering_id FROM unit_offering WHERE semester_id = %s)", (payload.semester_id,))
+            if cur.fetchone()["count"]:
+                warnings.append("Manual and legacy assignments were retained. Review Unit Offerings to remove any obsolete legacy access whose origin was not recorded.")
 
             for unit in units:
                 codes = _split_unit_codes(unit["unit_code"])
@@ -3092,6 +3370,8 @@ def commit_staffing_roster(
                     if existing:
                         offering_id = existing["offering_id"]
                         matched_offerings += 1
+                        if unit["unit_code"] in payload.coordinators:
+                            cur.execute("UPDATE unit_offering SET coordinator_id = %s, coordinator_source = 'roster_import' WHERE offering_id = %s", (coordinator_user_id, offering_id))
                     else:
                         offering_id = _create_offering_for_unit(cur, payload.semester_id, code, unit, coordinator_user_id)
                         offerings_created += 1
@@ -3122,10 +3402,10 @@ def staffing_status(
 ):
     snapshot = fetch_one(
         """
-        SELECT source_filename, payload, imported_at, committed_at
+        SELECT staffing_import_id, source_filename, payload, imported_at, committed_at
         FROM staffing_import_snapshot
         WHERE semester_id = %s
-        ORDER BY imported_at DESC
+        ORDER BY imported_at DESC, staffing_import_id DESC
         LIMIT 1
         """,
         (semester_id,),
@@ -3145,6 +3425,7 @@ def staffing_status(
     )["count"]
     return {
         "snapshot": {
+            "staffing_import_id": snapshot["staffing_import_id"],
             "source_filename": snapshot["source_filename"],
             "imported_at": snapshot["imported_at"],
             "committed": snapshot["committed_at"] is not None,
@@ -3152,6 +3433,7 @@ def staffing_status(
             "matched_offerings": len(matched_codes),
             "staffing_rows_created": staffing_rows_created,
             "unmatched_units": unmatched_units,
+            "review_units": [unit for unit in units if _split_unit_codes(unit["unit_code"])],
         }
     }
 
