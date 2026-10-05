@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { createOfferingsFromRoster, deleteAdminOffering, errorMessage, type AdminOffering, type NewStaffAccount } from "../api";
+import { assignOfferingCoordinator, createOfferingsFromRoster, deleteAdminOffering, errorMessage, type AdminOffering, type NewStaffAccount } from "../api";
 import AdminSidebar from "../components/AdminSidebar";
 import "../components/AdminNav.css";
 import { useAdminContext } from "../useAdminContext";
@@ -17,6 +17,7 @@ export default function AdminOfferings() {
   const [flashError, setFlashError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<AdminOffering | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [savingCoordinator, setSavingCoordinator] = useState<number | null>(null);
 
   if (!session) return null;
   const isSuperAdmin = session.user.role_name === "super_admin";
@@ -24,6 +25,21 @@ export default function AdminOfferings() {
   const offerings = data?.offerings.filter((offering) => offering.semester_id === semesterId) ?? [];
   const unassignedCount = offerings.filter((offering) => offering.coordinator_id === null).length;
   const coordinators = data?.staff.filter((staff) => staff.role_name === "coordinator" && staff.is_active) ?? [];
+
+  const assignCoordinator = async (offering: AdminOffering, value: string) => {
+    if (!session) return;
+    setSavingCoordinator(offering.offering_id);
+    setFlashError("");
+    try {
+      await assignOfferingCoordinator(session.access_token, offering.offering_id, value ? Number(value) : null);
+      setFlash(`${offering.unit_code} coordinator ${value ? "updated" : "cleared"}.`);
+      await reload();
+    } catch (err) {
+      setFlashError(errorMessage(err));
+    } finally {
+      setSavingCoordinator(null);
+    }
+  };
 
   const openAdd = () => {
     setForm({ unit_code: "", unit_name: "", program_ids: [], coordinator_id: "" });
@@ -110,7 +126,7 @@ export default function AdminOfferings() {
           {(error || flashError) && <div className="banner"><div className="ico">!</div><div className="body">{error || flashError}</div></div>}
           {flash && <div className="adm-flash"><span>{flash}{newAccounts.length > 0 && <span style={{ display: "block", marginTop: 8 }}><strong>Share these temporary passwords securely.</strong>{newAccounts.map((account) => <span key={account.email} style={{ display: "block", marginTop: 8 }}>{account.full_name} ({account.email}): <code>{account.temporary_password}</code></span>)}</span>}</span><span className="x" onClick={() => { setFlash(""); setNewAccounts([]); }}>✕</span></div>}
           {unassignedCount > 0 && (
-            <div className="banner warn"><div className="ico">!</div><div className="body">{unassignedCount} unit{unassignedCount === 1 ? "" : "s"} in {period ? `${period.year} ${period.period}` : "this semester"} {unassignedCount === 1 ? "has" : "have"} no coordinator assigned yet.</div></div>
+            <div className="banner warn"><div className="ico">!</div><div className="body">{unassignedCount} unit{unassignedCount === 1 ? "" : "s"} in {period ? `${period.year} ${period.period}` : "this semester"} {unassignedCount === 1 ? "has" : "have"} no coordinator assigned yet.{isSuperAdmin && coordinators.length === 0 && " No coordinator accounts exist yet — create one under Staff Accounts first."}</div></div>
           )}
 
           <div className="adm-card">
@@ -123,7 +139,12 @@ export default function AdminOfferings() {
                   <td className="mono">{offering.unit_code}</td>
                   <td>{offering.unit_name}</td>
                   <td className="muted">{offering.program_codes.join(", ") || "—"}</td>
-                  <td>{offering.coordinator_name ?? <span className="unassigned">Unassigned</span>}</td>
+                  <td>{isSuperAdmin && period?.status !== "archived" ? (
+                    <select className="adm-select" value={offering.coordinator_id ?? ""} disabled={savingCoordinator === offering.offering_id} onChange={(event) => void assignCoordinator(offering, event.target.value)}>
+                      <option value="">Unassigned</option>
+                      {coordinators.map((staff) => <option key={staff.user_id} value={staff.user_id}>{staff.full_name}</option>)}
+                    </select>
+                  ) : (offering.coordinator_name ?? <span className="unassigned">Unassigned</span>)}</td>
                   <td style={{ textAlign: "right" }}><div className="row-tools"><button type="button" className="ic danger" disabled={!isSuperAdmin || period?.status === "archived"} title={isSuperAdmin ? `Delete ${offering.unit_code}` : "Only a super admin can remove unit offerings"} onClick={() => setDeleteTarget(offering)}>×</button></div></td>
                 </tr>)}
               </tbody></table>

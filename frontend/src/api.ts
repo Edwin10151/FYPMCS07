@@ -427,6 +427,13 @@ export function updateAdminOffering(token: string, offeringId: number, payload: 
   return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
+export function assignOfferingCoordinator(token: string, offeringId: number, coordinatorId: number | null) {
+  return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}/coordinator`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ coordinator_id: coordinatorId }),
+  });
+}
+
 export function deleteAdminOffering(token: string, offeringId: number) {
   return apiFetch<{ status: string }>(`/admin/offerings/${offeringId}`, token, { method: "DELETE" });
 }
