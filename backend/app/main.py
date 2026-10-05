@@ -2653,6 +2653,8 @@ async def inspect_grade_upload(
     file: UploadFile = File(...),
 ):
     ensure_offering_access(user, offering_id, min_permission_level=10)
+    if not fetch_one("SELECT 1 FROM enrollment WHERE offering_id = %s LIMIT 1", (offering_id,)):
+        raise HTTPException(status_code=422, detail="This offering has no student list yet. An admin must upload the Student List before grades can be imported.")
     filename, headers, rows, sheet_names, selected_sheet = await _read_grade_upload(file, sheet_name)
     return {
         "filename": filename,
@@ -2694,6 +2696,8 @@ async def preview_grade_upload(
                 (offering_id,),
             )
             enrolled_by_code = {row["student_code"]: row for row in cur.fetchall()}
+            if not enrolled_by_code:
+                raise HTTPException(status_code=422, detail="This offering has no student list yet. An admin must upload the Student List before grades can be imported.")
             cur.execute(
                 """
                 INSERT INTO grade_upload_batch (offering_id, uploaded_by, original_filename, status)
@@ -2734,7 +2738,7 @@ async def preview_grade_upload(
                 elif student_code in seen_codes:
                     row_issues.append(("duplicate_student_id", "error", "Duplicate student ID in this file"))
                 elif student_code not in enrolled_by_code:
-                    row_issues.append(("unmatched_student", "error", "Student ID is not enrolled in this offering"))
+                    row_issues.append(("not_in_student_list", "warning", "Not in the Student List for this offering. This row is skipped and will not be committed."))
                 else:
                     for mapping in mappings:
                         try:
@@ -2774,7 +2778,8 @@ async def preview_grade_upload(
                         row_issues.append(("no_marks", "warning", "No grade values were found for the mapped assessment columns"))
                 if student_code:
                     seen_codes.add(student_code)
-                severity = "error" if any(issue[1] == "error" for issue in row_issues) else "warning" if row_issues else "valid"
+                not_listed = bool(student_code) and student_code not in enrolled_by_code
+                severity = "error" if any(issue[1] == "error" for issue in row_issues) else "skipped" if not_listed else "warning" if row_issues else "valid"
                 matched_student_id = enrolled_by_code.get(student_code, {}).get("student_id")
                 cur.execute(
                     """
@@ -2794,7 +2799,7 @@ async def preview_grade_upload(
                         (batch_id, upload_row_id, issue_type, issue_severity, message),
                     )
                     issues.append({"row": row_number, "severity": issue_severity, "message": message})
-                if severity != "error":
+                if severity not in ("error", "skipped"):
                     for assessment_id, raw_mark, max_mark, component_id in cells:
                         assessment = assessment_by_id[assessment_id]
                         component = next((c for c in assessment["components"] if c["component_id"] == component_id), None)
@@ -2837,6 +2842,7 @@ async def preview_grade_upload(
         "filename": filename,
         "row_count": len(rows),
         "matched_count": matched_count,
+        "skipped_count": sum(1 for issue in issues if issue["severity"] == "warning" and issue["message"].startswith("Not in the Student List")),
         "score_preview": score_preview,
         "score_preview_total": preview_score_count,
         "issues": issues,

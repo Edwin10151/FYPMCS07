@@ -275,6 +275,7 @@ export type GradePreview = {
   filename: string;
   row_count: number;
   matched_count: number;
+  skipped_count?: number;
   score_preview?: Array<{ row: number; student_code: string; assessment_name: string; component_name: string | null; score: string; maximum: string; unit_weight: string; earned_unit_marks: string }>;
   score_preview_total?: number;
   issues: Array<{ row: number | null; severity: "warning" | "error"; message: string }>;
