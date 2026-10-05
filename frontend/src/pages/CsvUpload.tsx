@@ -126,7 +126,7 @@ export default function CsvUpload() {
   const goToStep = (index: number) => { if (index === 0) replaceFile(); else if (index === 1) setPreview(null); };
   const unitLabel = dashboard ? `${dashboard.offering.unit_code} ${dashboard.offering.unit_name}` : "Grade upload";
 
-  return <div className="app"><Sidebar user={session.user} /><main className="main">
+  return <div className="app grade-upload-page"><Sidebar user={session.user} /><main className="main">
     <div className="topbar"><div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/dashboard">{dashboard?.offering.unit_code ?? "Unit"}</Link><span className="sep">›</span><strong>Grade upload</strong></div></div>
     <div className="content">
       {(error || offeringError) && <div className="banner"><div className="ico">!</div><div className="body">{error || offeringError}</div></div>}
