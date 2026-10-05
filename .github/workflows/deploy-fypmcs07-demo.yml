@@ -19,6 +19,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fyp_workflow_test
+          POSTGRES_USER: mcs07
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mcs07 -d fyp_workflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://mcs07:test-password@localhost:5432/fyp_workflow_test
+      WORKFLOW_TEST_DATABASE_URL: postgresql://mcs07:test-password@localhost:5432/fyp_workflow_test
+      PYTHONPATH: backend
+
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +50,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt
-          PYTHONPATH=backend pytest backend/tests
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg
+          from app import migrations
+          with psycopg.connect(os.environ["WORKFLOW_TEST_DATABASE_URL"]) as conn:
+              assert conn.info.dbname == "fyp_workflow_test"
+              conn.execute(Path("database/init/002_schema.sql").read_text(), prepare=False)
+          migrations.MIGRATIONS_DIR = Path("database/migrations").resolve()
+          migrations.run_migrations()
+          PY
+          pytest backend/tests
 
       - uses: actions/setup-node@v4
         with:
@@ -42,6 +73,7 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          node --test tests/gradebook.test.mjs
           npm run build
 
   deploy:

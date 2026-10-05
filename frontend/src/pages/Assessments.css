@@ -36,6 +36,46 @@
   transition: border-color .12s, box-shadow .12s, opacity .22s ease, transform .22s ease;
 }
 .ass-row.dragging { opacity: 0.45; }
+.assessment-components { grid-column: 2 / -1; min-width: 0; }
+.component-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.component-actions .btn { height: 30px; font-size: 12px; }
+.component-panel { border-top: 1px solid var(--line); margin-bottom: 12px; padding-top: 16px; }
+.component-heading { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; font-size: 13px; }
+.component-heading span, .component-empty, .component-note { color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+.component-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 120px 28px; gap: 12px; align-items: end; margin-top: 12px; }
+.component-number { color: var(--ink-3); font-size: 12px; padding-bottom: 10px; }
+.component-row label { display: grid; gap: 5px; min-width: 0; }
+.component-row label span { font-size: 11px; color: var(--ink-3); }
+.component-row input { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--paper); color: var(--ink); font: inherit; font-size: 13px; }
+.component-row input:focus { outline: 2px solid var(--navy-3); outline-offset: 1px; }
+.component-row input:disabled { opacity: .75; }
+.component-remove { height: 34px; background: transparent; border: 1px solid var(--line); border-radius: 6px; color: var(--risk); cursor: pointer; font-size: 18px; }
+.component-total { text-align: right; margin-top: 14px; font-size: 12px; }
+.component-total.valid { color: var(--ok); }
+.component-total.invalid { color: var(--risk); }
+.component-note { margin: 8px 0 0; }
+@media (max-width: 700px) {
+  .app.assessments-page { grid-template-columns: minmax(0, 1fr); }
+  .assessments-page .side { position: static; height: auto; padding: 10px 12px; flex-direction: row; align-items: center; gap: 8px; min-width: 0; }
+  .assessments-page .side .brand { padding: 0; margin: 0; border: 0; flex-shrink: 0; }
+  .assessments-page .side .name, .assessments-page .side .sec, .assessments-page .side .user { display: none; }
+  .assessments-page .side nav { display: flex; overflow-x: auto; min-width: 0; }
+  .assessments-page .side nav a { white-space: nowrap; font-size: 12px; }
+  .assessments-page .content { padding: 18px 14px; }
+  .assessments-page .topbar { padding: 12px 14px; }
+  .assessments-page .save-bar { flex-wrap: wrap; }
+  .assessments-page .per-lo-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .assessments-page .alloc-bar { grid-column: 1 / -1; grid-row: 2; }
+  .assessments-page .per-lo-actions { grid-column: 2; grid-row: 1; }
+  .assessments-page .lo-l .sub { overflow-wrap: anywhere; }
+  .ass-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; padding: 16px; }
+  .ass-row .weight-cell { grid-column: 2; width: fit-content; }
+  .ass-row .lo-chips { grid-column: 2 / -1; }
+  .ass-row .row-tools { grid-column: 3; grid-row: 1; }
+  .assessment-components { grid-column: 1 / -1; }
+  .component-row { grid-template-columns: minmax(0, 1fr) 95px 28px; gap: 8px; }
+  .component-number { display: none; }
+}
 .ass-row.drag-over { border-color: var(--navy-3); box-shadow: 0 0 0 2px rgba(45,90,158,0.18); }
 .ass-row.removing { opacity: 0; transform: scale(0.97); pointer-events: none; }
 .grip { width: 16px; height: 24px; color: var(--ink-3); cursor: grab; display: grid; place-items: center; font-size: 18px; line-height: 1; }

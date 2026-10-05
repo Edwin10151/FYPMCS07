@@ -116,6 +116,12 @@ export type MappingPayload = {
   mappings: Array<{ mapping_id: number; offering_ulo_id: number; plo_id: number }>;
 };
 
+export type AssessmentComponent = {
+  component_id: number;
+  component_name: string;
+  weight: string;
+};
+
 export type Assessment = {
   assessment_id: number;
   assessment_name: string;
@@ -125,6 +131,8 @@ export type Assessment = {
   source: string;
   covers: string[];
   allocated_weights: string[];
+  components: AssessmentComponent[];
+  components_locked: boolean;
 };
 
 export type OfferingUlo = {
@@ -142,6 +150,7 @@ export type AssessmentInput = {
   assessment_name: string;
   weight: number;
   ulo_codes: string[];
+  components?: Array<{ component_id: number | null; component_name: string; weight: number }>;
 };
 
 export type AssessmentUloWeightInput = {
@@ -249,6 +258,8 @@ export type GradePreview = {
   filename: string;
   row_count: number;
   matched_count: number;
+  score_preview?: Array<{ row: number; student_code: string; assessment_name: string; component_name: string | null; score: string; maximum: string; unit_weight: string; earned_unit_marks: string }>;
+  score_preview_total?: number;
   issues: Array<{ row: number | null; severity: "warning" | "error"; message: string }>;
   status: "valid" | "needs_review";
 };
@@ -633,7 +644,7 @@ export function previewGradeUpload(
   token: string,
   offeringId: number,
   studentCodeColumn: string,
-  assessmentColumns: Array<{ assessment_id: number; csv_column: string; max_mark: number }>,
+  assessmentColumns: Array<{ assessment_id: number; component_id?: number; csv_column: string; max_mark: number; score_type?: "percentage" | "raw" }>,
   file: File,
   sheetName = "",
 ) {
@@ -644,7 +655,7 @@ export function previewGradeUpload(
 }
 
 export function commitGradeUpload(token: string, uploadBatchId: number) {
-  return apiFetch<{ status: string; grades_saved: number; attainment_records: number }>(`/grade-uploads/${uploadBatchId}/commit`, token, { method: "POST" });
+  return apiFetch<{ status: string; grades_saved: number; component_grades_saved?: number; attainment_records: number }>(`/grade-uploads/${uploadBatchId}/commit`, token, { method: "POST" });
 }
 
 export function isForbidden(error: unknown) {

@@ -26,6 +26,8 @@ type EditableRow = {
   is_hurdle: boolean;
   covers: string[];
   allocated_weights: number[];
+  components: Array<{ key: string; component_id: number | null; component_name: string; weight: number }>;
+  components_locked: boolean;
 };
 
 let newRowSeq = 0;
@@ -39,6 +41,8 @@ function toRows(assessments: Awaited<ReturnType<typeof getAssessments>>["assessm
     is_hurdle: assessment.is_hurdle,
     covers: assessment.covers,
     allocated_weights: assessment.allocated_weights.map(Number),
+    components: (assessment.components ?? []).map((c) => ({ ...c, key: String(c.component_id), weight: Number(c.weight) })),
+    components_locked: assessment.components_locked ?? false,
   }));
 }
 
@@ -114,6 +118,7 @@ export default function Assessments() {
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [editingUlo, setEditingUlo] = useState<string | null>(null);
   const [modalDraft, setModalDraft] = useState<Record<number, number>>({});
+  const [expandedComponents, setExpandedComponents] = useState<Set<string>>(new Set());
   const canEdit = (offering?.can_edit ?? false) && offering?.semester_status !== "archived";
 
   const load = async () => {
@@ -181,6 +186,14 @@ export default function Assessments() {
     if (rows.some((row) => !row.assessment_name.trim())) return "Every assessment needs a name.";
     const names = rows.map((row) => row.assessment_name.trim().toLowerCase());
     if (new Set(names).size !== names.length) return "Assessment names must be unique.";
+    for (const row of rows) {
+      if (!row.components.length) continue;
+      const names = row.components.map((c) => c.component_name.trim().toLowerCase());
+      if (names.some((name) => !name) || new Set(names).size !== names.length) return `${row.assessment_name}: components need unique names.`;
+      if (row.components.some((c) => !Number.isFinite(c.weight) || c.weight <= 0)) return `${row.assessment_name}: each component needs a positive weight.`;
+      const total = row.components.reduce((sum, c) => sum + Math.round(c.weight * 100), 0);
+      if (total !== Math.round(row.weight * 100)) return `${row.assessment_name}: component weights must total ${row.weight}%.`;
+    }
     return "";
   }, [rows]);
 
@@ -238,6 +251,8 @@ export default function Assessments() {
       is_hurdle: false,
       covers: [],
       allocated_weights: [],
+      components: [],
+      components_locked: false,
     }]);
     setNotice("");
   };
@@ -255,6 +270,17 @@ export default function Assessments() {
     }, 220);
   };
 
+  const addComponent = (row: EditableRow) => {
+    newRowSeq += 1;
+    const remaining = Math.max(0, row.weight - row.components.reduce((sum, c) => sum + c.weight, 0));
+    updateRow(row.key, { components: [...row.components, { key: `component-${newRowSeq}`, component_id: null, component_name: "", weight: Number(remaining.toFixed(2)) }] });
+    setExpandedComponents((previous) => new Set(previous).add(row.key));
+  };
+
+  const updateComponent = (row: EditableRow, key: string, patch: { component_name?: string; weight?: number }) => {
+    updateRow(row.key, { components: row.components.map((c) => c.key === key ? { ...c, ...patch } : c) });
+  };
+
   const persistRows = async (): Promise<boolean> => {
     if (!offeringId || !session || invalidReason) return false;
     setSavingSetup(true);
@@ -265,6 +291,7 @@ export default function Assessments() {
         assessment_name: row.assessment_name.trim(),
         weight: row.weight,
         ulo_codes: row.covers,
+        components: row.components.map(({ component_id, component_name, weight }) => ({ component_id, component_name: component_name.trim(), weight })),
       }));
       await saveAssessments(session.access_token, offeringId, payload);
       return true;
@@ -366,7 +393,7 @@ export default function Assessments() {
   const modalOk = Math.abs(modalTotal - 100) < 0.01;
 
   return (
-    <div className="app">
+    <div className="app assessments-page">
       <Sidebar user={session.user} />
       <main className="main">
         <div className="topbar">
@@ -417,6 +444,23 @@ export default function Assessments() {
               </div>
               <div className="lo-chips">{allUlos.length ? allUlos.map((ulo) => <button key={ulo.ulo_code} type="button" className={`lo-chip${row.covers.includes(ulo.ulo_code) ? " on" : ""}`} disabled={!canEdit} onClick={() => toggleUlo(row.key, ulo.ulo_code)} aria-pressed={row.covers.includes(ulo.ulo_code)}>{ulo.ulo_code}</button>) : <span className="h-sub">No ULOs set up for this offering</span>}</div>
               <div className="row-tools">{canEdit && <button type="button" className="ic danger" title="Delete this assessment" aria-label={`Delete ${row.assessment_name || "assessment"}`} onClick={() => removeRow(row.key)}>×</button>}</div>
+              <div className="assessment-components">
+                {expandedComponents.has(row.key) && <div id={`components-${row.key}`} className="component-panel">
+                  <div className="component-heading"><strong>Assessment components</strong><span>These weights are part of the assessment's {row.weight}%, not additional unit marks.</span></div>
+                  {row.components.length === 0 ? <p className="component-empty">Add components when the gradebook splits this assessment into several tasks.</p> : row.components.map((component, componentIndex) => <div className="component-row" key={component.key}>
+                    <span className="component-number">{componentIndex + 1}</span>
+                    <label className="component-name"><span>Component name</span><input disabled={!canEdit || row.components_locked} value={component.component_name} placeholder="e.g. Week 5 vlog" maxLength={255} aria-label={`Component ${componentIndex + 1} name for ${row.assessment_name}`} onChange={(event) => updateComponent(row, component.key, { component_name: event.target.value })} /></label>
+                    <label className="component-weight"><span>Unit weight (%)</span><input disabled={!canEdit || row.components_locked} type="number" min="0.01" max={row.weight} step="0.01" value={component.weight} onWheel={blurOnWheel} onChange={(event) => updateComponent(row, component.key, { weight: Number(event.target.value) })} /></label>
+                    {canEdit && !row.components_locked && <button className="component-remove" type="button" aria-label={`Remove component ${componentIndex + 1} from ${row.assessment_name}`} onClick={() => updateRow(row.key, { components: row.components.filter((c) => c.key !== component.key) })}>×</button>}
+                  </div>)}
+                  {row.components.length > 0 && <div className={`component-total ${Math.round(row.components.reduce((sum, c) => sum + c.weight, 0) * 100) === Math.round(row.weight * 100) ? "valid" : "invalid"}`} role="status">Component total: <strong>{row.components.reduce((sum, c) => sum + c.weight, 0).toFixed(2)}% / {row.weight}%</strong></div>}
+                  <p className="component-note">Components use this assessment's LO coverage. Configure them before uploading grades.{row.components_locked ? " Component setup is locked because grade evidence already exists." : ""}</p>
+                </div>}
+                <div className="component-actions">
+                  {(row.components.length > 0 || expandedComponents.has(row.key)) && <button className="btn ghost" type="button" aria-expanded={expandedComponents.has(row.key)} aria-controls={`components-${row.key}`} onClick={() => setExpandedComponents((previous) => { const next = new Set(previous); if (next.has(row.key)) next.delete(row.key); else next.add(row.key); return next; })}>{expandedComponents.has(row.key) ? "Hide components" : `${row.components.length} component${row.components.length === 1 ? "" : "s"} · Show`}</button>}
+                  {canEdit && <button className="btn ghost" type="button" disabled={row.components_locked} title={row.components_locked ? "Component setup is locked because grade uploads or previews already exist." : "Add a task within this assessment"} onClick={() => addComponent(row)}>+ Add component</button>}
+                </div>
+              </div>
             </div>)}
             {canEdit && <div className="add-row" role="button" tabIndex={0} onClick={addRow} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") addRow(); }}>+ Add assessment row</div>}
             <div className="per-lo-breakdown">

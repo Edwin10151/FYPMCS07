@@ -6,8 +6,9 @@ import hashlib
 import logging
 import re
 import secrets
+import uuid
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated
 from urllib.parse import urlsplit
 
@@ -34,7 +35,7 @@ from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
 from app.seed import ensure_super_admin, seed_demo_data
 from app.services.calculation import even_ulo_contributions, rebalance_contributions, validate_ulo_contributions
-from app.services.grade_import import parse_mark, weighted_score
+from app.services.grade_import import grade_column_details, parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
 from app.services.email_notification import send_reminders
 from app.services.unit_coordinator import fetch_unit_coordinators_for_units
@@ -123,11 +124,19 @@ class MappingUpdate(BaseModel):
     mappings: list[dict[str, int]]
 
 
+class AssessmentComponentInput(BaseModel):
+    component_id: int | None = None
+    component_name: str = Field(min_length=1, max_length=255)
+    weight: Decimal = Field(gt=0, le=100, decimal_places=2)
+
+
+
 class AssessmentRowInput(BaseModel):
     assessment_id: int | None = None
     assessment_name: str
     weight: Decimal = Field(ge=0, le=100, decimal_places=2)
     ulo_codes: list[str] = []
+    components: list[AssessmentComponentInput] | None = None
 
 
 class AssessmentsUpdate(BaseModel):
@@ -426,6 +435,11 @@ def confirm_handbook_import(
                     status_code=409,
                     detail="Assessment setup cannot be replaced after grades exist. Record an amendment and recalculate before changing it.",
                 )
+
+            cur.execute("""SELECT 1 FROM assessment_component c JOIN assessment a USING (assessment_id)
+                           WHERE a.offering_id = %s LIMIT 1""", (offering_id,))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Assessment setup cannot be replaced while assessment components are configured. Keep the existing component structure.")
 
             payload = snapshot["payload"]
             if not isinstance(payload, dict):
@@ -1060,7 +1074,62 @@ def assessments(user: Annotated[dict, Depends(require_offering_access())], offer
         "SELECT offering_ulo_id, ulo_code FROM offering_ulo WHERE offering_id = %s ORDER BY ulo_code",
         (offering_id,),
     )
+    components = fetch_all(
+        """SELECT c.component_id, c.assessment_id, c.component_name, c.weight
+           FROM assessment_component c JOIN assessment a USING (assessment_id)
+           WHERE a.offering_id = %s ORDER BY c.component_order, c.component_id""",
+        (offering_id,),
+    )
+    locked = fetch_all(
+        """SELECT DISTINCT assessment_id FROM (
+           SELECT assessment_id FROM student_grade WHERE offering_id = %s
+           UNION ALL
+           SELECT c.assessment_id FROM grade_upload_cell c
+           JOIN grade_upload_row r USING (upload_row_id)
+           JOIN grade_upload_batch b USING (upload_batch_id) WHERE b.offering_id = %s
+           UNION ALL
+           SELECT m.assessment_id FROM grade_upload_column_mapping m
+           JOIN grade_upload_batch b USING (upload_batch_id) WHERE b.offering_id = %s
+           ) evidence""", (offering_id, offering_id, offering_id),
+    )
+    locked_ids = {item["assessment_id"] for item in locked}
+    for row in rows:
+        row["components"] = [c for c in components if c["assessment_id"] == row["assessment_id"]]
+        row["components_locked"] = row["assessment_id"] in locked_ids
     return {"assessments": rows, "all_ulos": all_ulos}
+
+
+def _save_assessment_components(cur, assessment_id: int, components: list[AssessmentComponentInput]) -> None:
+    cur.execute("SELECT component_id, component_name, weight FROM assessment_component WHERE assessment_id = %s ORDER BY component_order, component_id", (assessment_id,))
+    existing = cur.fetchall()
+    ids = {c["component_id"] for c in existing}
+    incoming_ids = [c.component_id for c in components if c.component_id is not None]
+    if len(incoming_ids) != len(set(incoming_ids)) or not set(incoming_ids).issubset(ids):
+        raise HTTPException(status_code=422, detail="Component IDs must be unique and belong to this assessment")
+    before = [(c["component_id"], c["component_name"], c["weight"]) for c in existing]
+    after = [(c.component_id, c.component_name.strip(), c.weight) for c in components]
+    if before == after:
+        return
+    cur.execute("""SELECT 1 FROM student_grade WHERE assessment_id = %s
+                   UNION ALL SELECT 1 FROM grade_upload_cell WHERE assessment_id = %s
+                   UNION ALL SELECT 1 FROM grade_upload_column_mapping WHERE assessment_id = %s LIMIT 1""",
+                (assessment_id, assessment_id, assessment_id))
+    if cur.fetchone():
+        raise HTTPException(status_code=409, detail="Components cannot change after grade uploads or previews. Keep the existing assessment structure.")
+    remove = ids - set(incoming_ids)
+    if remove:
+        cur.execute("DELETE FROM assessment_component WHERE component_id = ANY(%s)", (list(remove),))
+    # Temporary names allow components to exchange names within this transaction.
+    for component_id in incoming_ids:
+        cur.execute("UPDATE assessment_component SET component_name = %s WHERE component_id = %s", (f"__editing_{uuid.uuid4()}", component_id))
+    for order, component in enumerate(components, start=1):
+        if component.component_id is None:
+            cur.execute("INSERT INTO assessment_component (assessment_id, component_name, weight, component_order) VALUES (%s, %s, %s, %s)",
+                        (assessment_id, component.component_name.strip(), component.weight, order))
+        else:
+            cur.execute("UPDATE assessment_component SET component_name = %s, weight = %s, component_order = %s WHERE component_id = %s",
+                        (component.component_name.strip(), component.weight, order, component.component_id))
+
 
 
 @app.put("/api/assessments")
@@ -1077,6 +1146,13 @@ def save_assessments(
         raise HTTPException(status_code=422, detail="Every assessment needs a name")
     if len(names) != len(set(names)):
         raise HTTPException(status_code=422, detail="Assessment names must be unique")
+    for item in payload.assessments:
+        if item.components:
+            component_names = [c.component_name.strip().casefold() for c in item.components]
+            if any(not name for name in component_names) or len(set(component_names)) != len(component_names):
+                raise HTTPException(status_code=422, detail="Components need unique, non-empty names within their assessment")
+            if sum(c.weight for c in item.components) != item.weight:
+                raise HTTPException(status_code=422, detail=f"Component weights for {item.assessment_name} must total {item.weight}%")
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -1135,11 +1211,11 @@ def save_assessments(
                         """
                         UPDATE assessment
                         SET assessment_name = %s, weight = %s, assessment_order = %s,
-                            source = CASE WHEN source = 'handbook' THEN 'manual' ELSE source END,
+                            source = CASE WHEN source = 'handbook' AND (assessment_name IS DISTINCT FROM %s OR weight IS DISTINCT FROM %s) THEN 'manual' ELSE source END,
                             confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP
                         WHERE assessment_id = %s AND offering_id = %s
                         """,
-                        (name, item.weight, order, user["user_id"], item.assessment_id, payload.offering_id),
+                        (name, item.weight, order, name, item.weight, user["user_id"], item.assessment_id, payload.offering_id),
                     )
                     assessment_id = item.assessment_id
                 else:
@@ -1156,6 +1232,21 @@ def save_assessments(
                     )
                     assessment_id = cur.fetchone()["assessment_id"]
 
+                if item.components is not None:
+                    _save_assessment_components(cur, assessment_id, item.components)
+                else:
+                    cur.execute("SELECT SUM(weight) AS total FROM assessment_component WHERE assessment_id = %s", (assessment_id,))
+                    total = cur.fetchone()["total"]
+                    if total is not None and total != item.weight:
+                        raise HTTPException(status_code=422, detail="Saved component weights must match the assessment weight")
+
+                cur.execute(
+                    "SELECT offering_ulo_id, allocated_weight FROM assessment_ulo WHERE assessment_id = %s",
+                    (assessment_id,),
+                )
+                existing_links = {row["offering_ulo_id"]: row["allocated_weight"] for row in cur.fetchall()}
+                if set(existing_links) != {ulo_ids[code] for code in item.ulo_codes}:
+                    cur.execute("UPDATE assessment SET source = 'manual' WHERE assessment_id = %s AND source = 'handbook'", (assessment_id,))
                 cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
 
                 for code in item.ulo_codes:
@@ -2473,7 +2564,8 @@ def _grade_column_mappings(raw_mapping: str, headers: list[str], assessment_by_i
         raise HTTPException(status_code=422, detail="Map at least one assessment column")
     mappings: list[dict] = []
     used_columns: set[str] = set()
-    used_assessments: set[int] = set()
+    used_tasks: set[str] = set()
+    used_targets: set[tuple[int, int | None]] = set()
     for item in parsed:
         if not isinstance(item, dict):
             raise HTTPException(status_code=422, detail="Grade column mapping is invalid")
@@ -2481,19 +2573,41 @@ def _grade_column_mappings(raw_mapping: str, headers: list[str], assessment_by_i
             assessment_id = int(item["assessment_id"])
             csv_column = str(item["csv_column"])
             max_mark = Decimal(str(item["max_mark"]))
+            component_id = int(item["component_id"]) if item.get("component_id") is not None else None
         except (KeyError, ValueError, ArithmeticError) as exc:
             raise HTTPException(status_code=422, detail="Each grade column needs an assessment and maximum mark") from exc
         if assessment_id not in assessment_by_id:
             raise HTTPException(status_code=422, detail="Selected assessment does not belong to this offering")
         if csv_column not in headers:
             raise HTTPException(status_code=422, detail=f"Selected CSV column was not found: {csv_column}")
-        if max_mark <= 0 or max_mark > _MAX_RAW_MARK:
+        kind, task, column_weight = grade_column_details(csv_column)
+        score_type = item.get("score_type", "percentage" if kind == "percentage" else "raw")
+        if kind == "excluded" or score_type not in {"percentage", "raw"}:
+            raise HTTPException(status_code=422, detail="Choose a numeric assessment score column, not a total, letter or contribution field")
+        if kind in {"percentage", "raw"} and score_type != kind:
+            raise HTTPException(status_code=422, detail="The selected score format does not match the gradebook column")
+        if score_type == "percentage" and max_mark != Decimal(100):
+            raise HTTPException(status_code=422, detail="Percentage scores must be marked out of 100")
+        if not max_mark.is_finite() or max_mark <= 0 or max_mark > _MAX_RAW_MARK:
             raise HTTPException(status_code=422, detail="Maximum mark must be between 0 and 9999.99")
-        if csv_column in used_columns or assessment_id in used_assessments:
-            raise HTTPException(status_code=422, detail="Each assessment and CSV column can only be mapped once")
+        components = assessment_by_id[assessment_id].get("components", [])
+        if components:
+            if component_id not in {c["component_id"] for c in components}:
+                raise HTTPException(status_code=422, detail="Map a saved component for this assessment")
+            if sum(c["weight"] for c in components) != assessment_by_id[assessment_id]["weight"]:
+                raise HTTPException(status_code=422, detail="Component weights must match the parent assessment")
+        elif component_id is not None:
+            raise HTTPException(status_code=422, detail="Component does not belong to this assessment")
+        target_weight = next((c["weight"] for c in components if c["component_id"] == component_id), assessment_by_id[assessment_id]["weight"])
+        if column_weight is not None and column_weight != target_weight:
+            raise HTTPException(status_code=422, detail=f"{csv_column} states {column_weight}%, but the selected assessment or component is worth {target_weight}%")
+        target = (assessment_id, component_id)
+        if csv_column in used_columns or task in used_tasks or target in used_targets:
+            raise HTTPException(status_code=422, detail="Each assessment component and CSV column can only be mapped once")
         used_columns.add(csv_column)
-        used_assessments.add(assessment_id)
-        mappings.append({"assessment_id": assessment_id, "csv_column": csv_column, "max_mark": max_mark})
+        used_tasks.add(task)
+        used_targets.add(target)
+        mappings.append({"assessment_id": assessment_id, "component_id": component_id, "csv_column": csv_column, "max_mark": max_mark, "score_type": score_type})
     return mappings
 
 
@@ -2506,6 +2620,25 @@ def _load_offering_assessments(cur, offering_id: int) -> dict[int, dict]:
         (offering_id,),
     )
     return {row["assessment_id"]: row for row in cur.fetchall()}
+
+
+def _load_offering_assessments(cur, offering_id: int) -> dict[int, dict]:
+    cur.execute(
+        """
+        SELECT assessment_id, assessment_name, weight
+        FROM assessment WHERE offering_id = %s ORDER BY assessment_order
+        """,
+        (offering_id,),
+    )
+    assessments = {row["assessment_id"]: row for row in cur.fetchall()}
+    cur.execute("""SELECT c.component_id, c.assessment_id, c.component_name, c.weight
+                   FROM assessment_component c JOIN assessment a USING (assessment_id)
+                   WHERE a.offering_id = %s ORDER BY c.component_order, c.component_id""", (offering_id,))
+    components = cur.fetchall()
+    for assessment in assessments.values():
+        assessment["components"] = [c for c in components if c["assessment_id"] == assessment["assessment_id"]]
+    return assessments
+
 
 
 @app.post("/api/grade-uploads/inspect")
@@ -2546,6 +2679,8 @@ async def preview_grade_upload(
             if not assessment_by_id:
                 raise HTTPException(status_code=422, detail="Confirm the assessment setup before importing grades")
             mappings = _grade_column_mappings(assessment_columns, headers, assessment_by_id)
+            if any(m["csv_column"] == student_code_column for m in mappings):
+                raise HTTPException(status_code=422, detail="The student ID column cannot also be a score column")
             cur.execute(
                 """
                 SELECT e.enrollment_id, s.student_id, s.student_code, s.full_name
@@ -2575,19 +2710,21 @@ async def preview_grade_upload(
                 cur.execute(
                     """
                     INSERT INTO grade_upload_column_mapping (
-                        upload_batch_id, csv_column_name, system_field, assessment_id, max_mark
-                    ) VALUES (%s, %s, 'raw_mark', %s, %s)
+                        upload_batch_id, csv_column_name, system_field, assessment_id, max_mark, component_id
+                    ) VALUES (%s, %s, 'raw_mark', %s, %s, %s)
                     """,
-                    (batch_id, mapping["csv_column"], mapping["assessment_id"], mapping["max_mark"]),
+                    (batch_id, mapping["csv_column"], mapping["assessment_id"], mapping["max_mark"], mapping["component_id"]),
                 )
 
             issues: list[dict] = []
+            score_preview: list[dict] = []
+            preview_score_count = 0
             seen_codes: set[str] = set()
             matched_count = 0
             for row_number, row in rows:
                 student_code = row[student_code_column].strip().replace(" ", "")
                 row_issues: list[tuple[str, str, str]] = []
-                cells: list[tuple[int, Decimal, Decimal]] = []
+                cells: list[tuple[int, Decimal, Decimal, int | None]] = []
                 if not student_code:
                     row_issues.append(("missing_student_id", "error", "Missing student ID"))
                 elif student_code in seen_codes:
@@ -2604,6 +2741,7 @@ async def preview_grade_upload(
                             )
                             continue
                         if mark is None:
+                            row_issues.append(("missing_mark", "warning", f"{mapping['csv_column']} is blank: any saved score is retained; no new score is recorded"))
                             continue
                         if mark > _MAX_RAW_MARK:
                             row_issues.append(
@@ -2617,7 +2755,17 @@ async def preview_grade_upload(
                                 ("mark_out_of_range", "error", f"{mapping['csv_column']} must be between 0 and {mapping['max_mark']}")
                             )
                             continue
-                        cells.append((mapping["assessment_id"], mark, mapping["max_mark"]))
+                        cells.append((mapping["assessment_id"], mark, mapping["max_mark"], mapping["component_id"]))
+                    component_assessments = {m["assessment_id"] for m in mappings if m["component_id"] is not None}
+                    for assessment_id in component_assessments:
+                        cur.execute("""SELECT g.component_id FROM student_component_grade g
+                                       JOIN assessment_component c USING (component_id)
+                                       WHERE g.enrollment_id = %s AND c.assessment_id = %s""",
+                                    (enrolled_by_code[student_code]["enrollment_id"], assessment_id))
+                        available = {g["component_id"] for g in cur.fetchall()} | {c[3] for c in cells if c[0] == assessment_id}
+                        missing = [c["component_name"] for c in assessment_by_id[assessment_id]["components"] if c["component_id"] not in available]
+                        if missing:
+                            row_issues.append(("incomplete_assessment", "warning", f"{assessment_by_id[assessment_id]['assessment_name']} is incomplete: {', '.join(missing)}. Component scores can be saved, but a final total is not created. LO results remain provisional."))
                     if not cells and not row_issues:
                         row_issues.append(("no_marks", "warning", "No grade values were found for the mapped assessment columns"))
                 if student_code:
@@ -2643,13 +2791,23 @@ async def preview_grade_upload(
                     )
                     issues.append({"row": row_number, "severity": issue_severity, "message": message})
                 if severity != "error":
-                    for assessment_id, raw_mark, max_mark in cells:
+                    for assessment_id, raw_mark, max_mark, component_id in cells:
+                        assessment = assessment_by_id[assessment_id]
+                        component = next((c for c in assessment["components"] if c["component_id"] == component_id), None)
+                        weight = component["weight"] if component else assessment["weight"]
+                        preview_score_count += 1
+                        if len(score_preview) < 200:
+                            score_preview.append({"row": row_number, "student_code": student_code,
+                                "assessment_name": assessment["assessment_name"],
+                                "component_name": component["component_name"] if component else None,
+                                "score": str(raw_mark), "maximum": str(max_mark), "unit_weight": str(weight),
+                                "earned_unit_marks": str(weighted_score(raw_mark, max_mark, weight))})
                         cur.execute(
                             """
-                            INSERT INTO grade_upload_cell (upload_row_id, assessment_id, raw_mark, max_mark)
-                            VALUES (%s, %s, %s, %s)
+                            INSERT INTO grade_upload_cell (upload_row_id, assessment_id, raw_mark, max_mark, component_id)
+                            VALUES (%s, %s, %s, %s, %s)
                             """,
-                            (upload_row_id, assessment_id, raw_mark, max_mark),
+                            (upload_row_id, assessment_id, raw_mark, max_mark, component_id),
                         )
                     if student_code in enrolled_by_code:
                         matched_count += 1
@@ -2675,6 +2833,8 @@ async def preview_grade_upload(
         "filename": filename,
         "row_count": len(rows),
         "matched_count": matched_count,
+        "score_preview": score_preview,
+        "score_preview_total": preview_score_count,
         "issues": issues,
         "status": "needs_review" if has_errors else "valid",
     }
@@ -2699,12 +2859,21 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
                 -- (Percent signs are avoided in this comment: psycopg scans the
                 -- whole statement for placeholders, comments included.)
                 SUM(a.weight * au.allocated_weight / 100) AS total_available_weight,
-                SUM(COALESCE(sg.raw_mark / sg.max_mark, 0) * a.weight * au.allocated_weight / 100) AS achieved_weight
+                SUM(COALESCE(cg.performance, sg.raw_mark / sg.max_mark, 0) * a.weight * au.allocated_weight / 100) AS achieved_weight
             FROM enrollment e
             JOIN assessment_ulo au ON au.offering_id = e.offering_id
             JOIN assessment a ON a.assessment_id = au.assessment_id
             LEFT JOIN student_grade sg ON sg.enrollment_id = e.enrollment_id
                 AND sg.assessment_id = au.assessment_id
+            LEFT JOIN LATERAL (
+                SELECT CASE WHEN COUNT(*) = COUNT(g.component_id)
+                       THEN SUM(g.raw_mark / g.max_mark * c.weight) / NULLIF(a.weight, 0)
+                       END AS performance
+                FROM assessment_component c
+                LEFT JOIN student_component_grade g ON g.component_id = c.component_id
+                    AND g.enrollment_id = e.enrollment_id
+                WHERE c.assessment_id = a.assessment_id
+            ) cg ON TRUE
             WHERE e.offering_id = %s AND au.allocated_weight > 0
             GROUP BY e.enrollment_id, au.offering_ulo_id
         )
@@ -2831,6 +3000,7 @@ def commit_grade_upload(
                   AND m.assessment_id = a.assessment_id
                   AND a.offering_id = %s
                   AND m.max_mark IS NOT NULL
+                  AND m.component_id IS NULL
                   AND a.max_mark IS DISTINCT FROM m.max_mark
                 """,
                 (upload_batch_id, batch["offering_id"]),
@@ -2838,7 +3008,7 @@ def commit_grade_upload(
 
             cur.execute(
                 """
-                SELECT e.enrollment_id, c.assessment_id, c.raw_mark, c.max_mark, a.weight, r.upload_row_id
+                SELECT e.enrollment_id, c.assessment_id, c.component_id, c.raw_mark, c.max_mark, a.weight, r.upload_row_id
                 FROM grade_upload_cell c
                 JOIN grade_upload_row r ON r.upload_row_id = c.upload_row_id
                 JOIN enrollment e ON e.student_id = r.matched_student_id AND e.offering_id = %s
@@ -2848,6 +3018,31 @@ def commit_grade_upload(
                 (batch["offering_id"], batch["offering_id"], upload_batch_id),
             )
             grade_rows = cur.fetchall()
+            component_rows = [g for g in grade_rows if g["component_id"] is not None]
+            grade_rows = [g for g in grade_rows if g["component_id"] is None]
+            for grade in component_rows:
+                cur.execute("""INSERT INTO student_component_grade
+                    (enrollment_id, component_id, upload_batch_id, source_row_id, raw_mark, max_mark)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (enrollment_id, component_id) DO UPDATE SET
+                    upload_batch_id = EXCLUDED.upload_batch_id, source_row_id = EXCLUDED.source_row_id,
+                    raw_mark = EXCLUDED.raw_mark, max_mark = EXCLUDED.max_mark""",
+                    (grade["enrollment_id"], grade["component_id"], upload_batch_id, grade["upload_row_id"], grade["raw_mark"], grade["max_mark"]))
+            touched = {(g["enrollment_id"], g["assessment_id"]) for g in component_rows}
+            for enrollment_id, assessment_id in touched:
+                cur.execute("""SELECT COUNT(*) = COUNT(g.component_id) AS complete,
+                    SUM(c.weight) AS component_weight, a.weight,
+                    SUM(g.raw_mark / g.max_mark * c.weight) / NULLIF(a.weight, 0) * 100 AS percentage
+                    FROM assessment_component c JOIN assessment a USING (assessment_id)
+                    LEFT JOIN student_component_grade g ON g.component_id = c.component_id AND g.enrollment_id = %s
+                    WHERE c.assessment_id = %s GROUP BY a.weight""", (enrollment_id, assessment_id))
+                combined = cur.fetchone()
+                if not combined or combined["component_weight"] != combined["weight"]:
+                    raise HTTPException(status_code=409, detail="Assessment component setup changed; validate the upload again")
+                if combined["complete"]:
+                    source = next(g for g in component_rows if g["enrollment_id"] == enrollment_id and g["assessment_id"] == assessment_id)
+                    grade_rows.append({**source, "component_id": None, "raw_mark": combined["percentage"].quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "max_mark": Decimal(100), "weight": combined["weight"]})
+                    cur.execute("UPDATE assessment SET max_mark = 100 WHERE assessment_id = %s", (assessment_id,))
             for grade in grade_rows:
                 score = weighted_score(grade["raw_mark"], grade["max_mark"], grade["weight"])
                 cur.execute(
@@ -2889,6 +3084,7 @@ def commit_grade_upload(
     return {
         "status": "committed",
         "grades_saved": len(grade_rows),
+        "component_grades_saved": len(component_rows),
         "attainment_records": attainment_count,
     }
 

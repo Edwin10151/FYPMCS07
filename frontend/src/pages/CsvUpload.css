@@ -58,6 +58,29 @@
 .mapping-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; margin-bottom: 16px; }
 .mapping-card .hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .mapping-card h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.grade-assessment-groups { margin-top: 18px; }
+.grade-assessment-group { border-top: 1px solid var(--line); padding: 18px 0 8px; }
+.grade-assessment-heading { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 12px; }
+.grade-assessment-heading h4 { line-height: 1.5; }
+.grade-assessment-heading span { color: var(--ink-3); font-size: 12px; }
+.grade-assessment-heading .btn { flex-shrink: 0; font-size: 12px; }
+.grade-assessment-group .col-edit { border-bottom: 1px solid var(--line); padding: 14px 0; }
+.grade-component-total { text-align: right; font-size: 12px; margin-top: 12px; color: var(--ink-2); }
+.score-scale { font-size: 12px; color: var(--navy); padding: 8px 0; }
+.score-format { display: grid; gap: 5px; font-size: 12px; color: var(--ink-3); margin-bottom: 8px; }
+.grade-mapping-error { color: var(--risk); font-size: 12px; line-height: 1.5; }
+.mapping-summary { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: left; }
+.mapping-summary h4 { margin: 0 0 12px; font-size: 14px; }
+.score-preview summary { cursor: pointer; font-size: 14px; }
+.score-preview[open] summary { margin-bottom: 12px; }
+.mapping-summary-scroll { overflow-x: auto; }
+.mapping-summary .recon-tbl { margin: 0; min-width: 600px; }
+.mapping-summary td { overflow-wrap: anywhere; }
+.confirm-final-card:has(.mapping-summary) { max-width: 850px; max-height: 90dvh; overflow-y: auto; }
+@media (max-width: 700px) {
+  .grade-assessment-heading { flex-wrap: wrap; }
+  .grade-assessment-group .col-edit { grid-template-columns: minmax(0, 1fr); }
+}
 .col-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 .col { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper-2); }
 .col .src { padding: 8px 12px; background: white; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--ink); font-weight: 600; }
