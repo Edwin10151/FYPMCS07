@@ -11,3 +11,23 @@ multiple redundant Moodle fields and assessed columns with different maximum
 marks, so the application deliberately asks staff to select score columns and
 their raw maximum marks. The runtime importer accepts Moodle CSV exports, not
 the supplied workbook directly.
+
+Handbook review compares the draft with the current offering before confirmation.
+Equivalent LO/ULO labels reuse the same outcome ID; cosmetic terminal punctuation
+does not change an outcome's meaning. Changed definitions require review, and a
+semantic change to a graded outcome cannot be applied through import. Existing
+outcomes missing from the draft are retained and identified for coordinator review.
+
+Choose **ULOs only** to preserve all assessment records, grades, contribution
+percentages and equivalent ULO/PLO links. The snapshot records which mode was
+applied; confirming this mode does not mean its assessment preview was applied.
+Full application updates matching assessments in place, preserves raw mark
+scales and unchanged contributions, and blocks structural changes while grades,
+upload previews or reviewed assessment components would be affected. A changed
+outcome definition invalidates its PLO links for review. Superseded drafts and
+reviews of changed offering data cannot be confirmed.
+
+BCS, BCSDS, BSE, BCS (HONS), MAI, MBIS and MDS are registered as labels from the
+supplied Tutor List. Roster import can link them to an offering without supplying
+PLO definitions. The mapping page shows those definitions as pending; it never
+substitutes DEV-BIT outcomes for them. DEV-BIT remains a separate demo programme.

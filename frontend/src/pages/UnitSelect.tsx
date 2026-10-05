@@ -127,7 +127,7 @@ export default function UnitSelect() {
 }
 
 function OfferingCard({ offering, role, onOpen, archived }: { offering: Offering; role: string; onOpen: (offering: Offering) => void; archived?: boolean }) {
-  const handbookStatus = offering.last_scraped_at ? "Handbook record stored" : "Handbook not imported";
+  const handbookStatus = offering.handbook_application_mode === "ulos_only" ? "Handbook ULOs confirmed; assessments retained" : offering.handbook_application_mode === "full" ? "Handbook setup confirmed" : "Handbook not confirmed";
   return (
     <button className={`unit-card${archived ? " past" : ""}`} onClick={() => onOpen(offering)}>
       <div className="unit-card-top">
@@ -138,7 +138,7 @@ function OfferingCard({ offering, role, onOpen, archived }: { offering: Offering
       <div className="unit-meta">{offering.year} {offering.period} · {offering.program_names.join(" / ")}</div>
       <div className="unit-stats">
         <div className="unit-stat"><span className="unit-stat-val">{offering.period}</span><span className="unit-stat-lbl">Teaching period</span></div>
-        <div className="unit-stat"><span className="unit-stat-val">{offering.handbook_url ? "Ready" : "Setup"}</span><span className="unit-stat-lbl">{handbookStatus}</span></div>
+        <div className="unit-stat"><span className="unit-stat-val">{offering.handbook_application_mode ? "Imported" : "Setup"}</span><span className="unit-stat-lbl">{handbookStatus}</span></div>
       </div>
       <div className="unit-cta">Open unit workspace <span className="unit-arrow">→</span></div>
     </button>

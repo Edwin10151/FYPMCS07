@@ -9,7 +9,7 @@ import secrets
 import uuid
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
@@ -37,6 +37,7 @@ from app.seed import ensure_super_admin, seed_demo_data
 from app.services.calculation import even_ulo_contributions, rebalance_contributions, validate_ulo_contributions
 from app.services.grade_import import grade_column_details, parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
+from app.services.handbook_review import review_handbook, same_description
 from app.services.email_notification import send_reminders
 from app.services.unit_coordinator import fetch_unit_coordinators_for_units
 from app.services.report_generation import (
@@ -146,6 +147,8 @@ class AssessmentsUpdate(BaseModel):
 
 class HandbookImportConfirmation(BaseModel):
     handbook_import_id: int
+    review_revision: str
+    application_mode: Literal["full", "ulos_only"] = "full"
 
 
 class ReportUpdate(BaseModel):
@@ -296,7 +299,10 @@ def offerings(user: Annotated[dict, Depends(get_current_user)]):
             s.status AS semester_status,
             o.coordinator_id,
             o.handbook_url,
-            o.last_scraped_at
+            o.last_scraped_at,
+            (SELECT COALESCE(h.payload->'application'->>'mode', 'full') FROM handbook_import_snapshot h
+             WHERE h.offering_id = o.offering_id AND h.status = 'confirmed'
+             ORDER BY h.handbook_import_id DESC LIMIT 1) AS handbook_application_mode
         FROM unit_offering o
         JOIN unit u ON u.unit_id = o.unit_id
         LEFT JOIN offering_program op ON op.offering_id = o.offering_id
@@ -368,6 +374,7 @@ def create_handbook_import(
     except HandbookImportError as exc:
         raise HTTPException(status_code=502, detail="Could not import the public Monash Handbook record") from exc
 
+    imported["payload"]["imported_year"] = offering["year"]
     with get_conn() as conn:
         with conn.cursor() as cur:
             _lock_editable_offering(cur, offering_id)
@@ -385,7 +392,7 @@ def create_handbook_import(
                 ),
             )
             snapshot = cur.fetchone()
-    return {"import": snapshot}
+    return {"import": _with_handbook_review(snapshot, offering_id)}
 
 
 @app.get("/api/offerings/{offering_id}/handbook-import")
@@ -403,7 +410,41 @@ def latest_handbook_import(
         """,
         (offering_id,),
     )
-    return {"import": snapshot}
+    return {"import": _with_handbook_review(snapshot, offering_id)}
+
+
+def _handbook_state(cur, offering_id: int) -> dict:
+    state = {}
+    queries = {
+        "ulos": "SELECT offering_ulo_id, ulo_code, description, source, handbook_reference FROM offering_ulo WHERE offering_id = %s ORDER BY offering_ulo_id",
+        "assessments": "SELECT assessment_id, assessment_name, weight, max_mark, is_hurdle, source, assessment_order FROM assessment WHERE offering_id = %s ORDER BY assessment_id",
+        "links": "SELECT assessment_id, offering_ulo_id, allocated_weight FROM assessment_ulo WHERE offering_id = %s ORDER BY assessment_id, offering_ulo_id",
+        "mappings": "SELECT offering_ulo_id, plo_id FROM ulo_plo_mapping WHERE offering_id = %s AND is_active ORDER BY offering_ulo_id, plo_id",
+        "programs": "SELECT program_id FROM offering_program WHERE offering_id = %s ORDER BY program_id",
+        "offering": "SELECT u.unit_code, s.year, s.period, o.handbook_location FROM unit_offering o JOIN unit u USING(unit_id) JOIN semester s USING(semester_id) WHERE o.offering_id = %s",
+        "components": "SELECT c.component_id, c.assessment_id, c.component_name, c.weight FROM assessment_component c JOIN assessment a USING(assessment_id) WHERE a.offering_id = %s ORDER BY c.component_id",
+    }
+    for key, query in queries.items():
+        cur.execute(query, (offering_id,))
+        state[key] = cur.fetchall()
+    cur.execute("SELECT COUNT(*) AS n FROM student_grade WHERE offering_id = %s", (offering_id,))
+    state["grades"] = cur.fetchone()["n"]
+    cur.execute("SELECT COUNT(*) AS n FROM student_component_grade g JOIN enrollment e USING(enrollment_id) WHERE e.offering_id = %s", (offering_id,))
+    state["grades"] += cur.fetchone()["n"]
+    cur.execute("SELECT COUNT(*) AS n FROM grade_upload_batch WHERE offering_id = %s", (offering_id,))
+    state["previews"] = cur.fetchone()["n"]
+    return state
+
+
+
+def _with_handbook_review(snapshot: dict | None, offering_id: int):
+    if snapshot is None or snapshot["status"] != "draft":
+        return snapshot
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            snapshot["review"] = review_handbook(snapshot["payload"], _handbook_state(cur, offering_id))
+    return snapshot
+
 
 
 @app.post("/api/offerings/{offering_id}/handbook-import/confirm")
@@ -416,137 +457,67 @@ def confirm_handbook_import(
     with get_conn() as conn:
         with conn.cursor() as cur:
             _lock_editable_offering(cur, offering_id)
-            cur.execute(
-                """
-                SELECT handbook_import_id, source_url, payload
-                FROM handbook_import_snapshot
-                WHERE handbook_import_id = %s AND offering_id = %s AND status = 'draft'
-                FOR UPDATE
-                """,
-                (confirmation.handbook_import_id, offering_id),
-            )
+            cur.execute("SELECT handbook_import_id, source_url, payload, status FROM handbook_import_snapshot WHERE offering_id = %s ORDER BY handbook_import_id DESC LIMIT 1 FOR UPDATE", (offering_id,))
             snapshot = cur.fetchone()
-            if not snapshot:
-                raise HTTPException(status_code=404, detail="Draft Handbook import not found")
-
-            cur.execute("SELECT EXISTS(SELECT 1 FROM student_grade WHERE offering_id = %s) AS has_grades", (offering_id,))
-            if cur.fetchone()["has_grades"]:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Assessment setup cannot be replaced after grades exist. Record an amendment and recalculate before changing it.",
-                )
-
-            cur.execute("""SELECT 1 FROM assessment_component c JOIN assessment a USING (assessment_id)
-                           WHERE a.offering_id = %s LIMIT 1""", (offering_id,))
-            if cur.fetchone():
-                raise HTTPException(status_code=409, detail="Assessment setup cannot be replaced while assessment components are configured. Keep the existing component structure.")
-
+            if not snapshot or snapshot["handbook_import_id"] != confirmation.handbook_import_id or snapshot["status"] != "draft":
+                raise HTTPException(status_code=409, detail="This draft is no longer current. Fetch or review the latest Handbook draft.")
             payload = snapshot["payload"]
-            if not isinstance(payload, dict):
-                raise HTTPException(status_code=422, detail="Draft Handbook import is invalid")
-
-            cur.execute(
-                "UPDATE unit_offering SET handbook_url = %s, last_scraped_at = CURRENT_TIMESTAMP WHERE offering_id = %s",
-                (snapshot["source_url"], offering_id),
-            )
-            cur.execute(
-                """
-                UPDATE unit SET unit_name = %s, default_handbook_url = %s
-                WHERE unit_id = (SELECT unit_id FROM unit_offering WHERE offering_id = %s)
-                """,
-                (payload["title"], snapshot["source_url"], offering_id),
-            )
-
-            ulo_ids: dict[str, int] = {}
-            for ulo in payload["learning_outcomes"]:
-                cur.execute(
-                    """
-                    INSERT INTO offering_ulo (
-                        offering_id, ulo_code, description, source, handbook_reference, confirmed_by, confirmed_at
-                    )
-                    VALUES (%s, %s, %s, 'handbook', %s, %s, CURRENT_TIMESTAMP)
-                    ON CONFLICT (offering_id, ulo_code) DO UPDATE
-                    SET description = EXCLUDED.description,
-                        handbook_reference = EXCLUDED.handbook_reference,
-                        confirmed_by = EXCLUDED.confirmed_by,
-                        confirmed_at = EXCLUDED.confirmed_at
-                    WHERE offering_ulo.source = 'handbook'
-                    RETURNING offering_ulo_id
-                    """,
-                    (offering_id, ulo["code"], ulo["description"], ulo.get("reference"), user["user_id"]),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    cur.execute(
-                        "SELECT offering_ulo_id FROM offering_ulo WHERE offering_id = %s AND ulo_code = %s",
-                        (offering_id, ulo["code"]),
-                    )
-                    row = cur.fetchone()
-                ulo_ids[ulo["code"]] = row["offering_ulo_id"]
-
-            for assessment in payload["assessments"]:
-                cur.execute(
-                    "SELECT source FROM assessment WHERE offering_id = %s AND assessment_name = %s",
-                    (offering_id, assessment["name"]),
-                )
-                existing = cur.fetchone()
-                if existing and existing["source"] != "handbook":
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"Manual assessment '{assessment['name']}' has the same name as the Handbook import.",
-                    )
-
-            cur.execute("DELETE FROM assessment WHERE offering_id = %s AND source = 'handbook'", (offering_id,))
-            # A contribution is a share of one ULO across the assessments covering
-            # it, so every link has to be known before any share can be worked out.
-            handbook_links: list[tuple[int, int]] = []
-            for order, assessment in enumerate(payload["assessments"], start=1):
-                cur.execute(
-                    """
-                    INSERT INTO assessment (
-                        offering_id, assessment_name, weight, max_mark, assessment_order, is_hurdle,
-                        source, confirmed_by, confirmed_at
-                    )
-                    VALUES (%s, %s, %s, 100, %s, %s, 'handbook', %s, CURRENT_TIMESTAMP)
-                    RETURNING assessment_id
-                    """,
-                    (
-                        offering_id,
-                        assessment["name"],
-                        Decimal(assessment["weight"]),
-                        order,
-                        assessment["is_hurdle"],
-                        user["user_id"],
-                    ),
-                )
-                assessment_id = cur.fetchone()["assessment_id"]
-                for code in assessment["ulo_codes"]:
-                    if code in ulo_ids:
-                        handbook_links.append((assessment_id, ulo_ids[code]))
-
-
-            contributions = even_ulo_contributions(handbook_links)
-            for (assessment_id, offering_ulo_id), contribution in contributions.items():
-                cur.execute(
-                    """
-                    INSERT INTO assessment_ulo (
-                        offering_id, assessment_id, offering_ulo_id, source, is_confirmed,
-                        allocated_weight, confirmed_by, confirmed_at
-                    )
-                    VALUES (%s, %s, %s, 'handbook', TRUE, %s, %s, CURRENT_TIMESTAMP)
-                    """,
-                    (offering_id, assessment_id, offering_ulo_id, contribution, user["user_id"]),
-                )
-
-            cur.execute(
-                """
-                UPDATE handbook_import_snapshot
-                SET status = 'confirmed', confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP
-                WHERE handbook_import_id = %s
-                """,
-                (user["user_id"], confirmation.handbook_import_id),
-            )
-    return {"status": "confirmed"}
+            state = _handbook_state(cur, offering_id)
+            review = review_handbook(payload, state)
+            if confirmation.review_revision != review["revision"]:
+                raise HTTPException(status_code=409, detail="The offering changed after this review. Close and reopen the draft before applying it.")
+            blockers = review["ulo_blockers"] + (review["assessment_blockers"] if confirmation.application_mode == "full" else [])
+            if blockers:
+                raise HTTPException(status_code=409, detail=" ".join(blockers))
+            changed = False
+            ulo_ids = {}
+            existing_ulos = {u["offering_ulo_id"]: u for u in state["ulos"]}
+            for row in review["ulos"]:
+                ulo_id = row["existing_id"]
+                if ulo_id is not None:
+                    old = existing_ulos[ulo_id]
+                    if not same_description(old["description"], row["description"]):
+                        cur.execute("UPDATE ulo_plo_mapping SET is_active = FALSE, removed_by = %s, removed_at = CURRENT_TIMESTAMP WHERE offering_ulo_id = %s AND is_active", (user["user_id"], ulo_id))
+                    cur.execute("UPDATE offering_ulo SET ulo_code = %s, description = %s, handbook_reference = %s, confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP WHERE offering_ulo_id = %s", (row["code"], row["description"], row.get("reference"), user["user_id"], ulo_id))
+                else:
+                    cur.execute("INSERT INTO offering_ulo (offering_id, ulo_code, description, source, handbook_reference, confirmed_by, confirmed_at) VALUES (%s, %s, %s, 'handbook', %s, %s, CURRENT_TIMESTAMP) RETURNING offering_ulo_id", (offering_id, row["code"], row["description"], row.get("reference"), user["user_id"]))
+                    ulo_id = cur.fetchone()["offering_ulo_id"]
+                ulo_ids[row["code"]] = ulo_id
+                changed = changed or row["status"] != "unchanged"
+            if confirmation.application_mode == "full":
+                previous_links = {(r["assessment_id"], r["offering_ulo_id"]) for r in state["links"]}
+                kept = {r["existing_id"] for r in review["assessments"] if r["existing_id"] is not None}
+                remove_ids = [a["assessment_id"] for a in state["assessments"] if a["source"] == "handbook" and a["assessment_id"] not in kept]
+                if remove_ids:
+                    cur.execute("DELETE FROM assessment WHERE assessment_id = ANY(%s)", (remove_ids,))
+                    changed = True
+                for order, row in enumerate(review["assessments"], start=1):
+                    assessment_id = row["existing_id"]
+                    if assessment_id is None:
+                        cur.execute("INSERT INTO assessment (offering_id, assessment_name, weight, is_hurdle, assessment_order, source, confirmed_by, confirmed_at) VALUES (%s, %s, %s, %s, %s, 'handbook', %s, CURRENT_TIMESTAMP) RETURNING assessment_id", (offering_id, row["name"], Decimal(row["weight"]), row["is_hurdle"], order, user["user_id"]))
+                        assessment_id = cur.fetchone()["assessment_id"]
+                    else:
+                        cur.execute("UPDATE assessment SET assessment_name = %s, weight = %s, is_hurdle = %s, assessment_order = %s, confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP WHERE assessment_id = %s", (row["name"], Decimal(row["weight"]), row["is_hurdle"], order, user["user_id"], assessment_id))
+                    wanted = {ulo_ids[code] for code in row["ulo_codes"]}
+                    existing = {u for a, u in previous_links if a == assessment_id}
+                    if existing != wanted:
+                        cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
+                        for ulo_id in wanted:
+                            cur.execute("INSERT INTO assessment_ulo (offering_id, assessment_id, offering_ulo_id, source, is_confirmed, confirmed_by, confirmed_at) VALUES (%s, %s, %s, 'handbook', TRUE, %s, CURRENT_TIMESTAMP)", (offering_id, assessment_id, ulo_id, user["user_id"]))
+                    changed = changed or row["status"] != "unchanged"
+                cur.execute("SELECT assessment_id, offering_ulo_id FROM assessment_ulo WHERE offering_id = %s", (offering_id,))
+                links = {(r["assessment_id"], r["offering_ulo_id"]) for r in cur.fetchall()}
+                changed_ulos = {u for a, u in links.symmetric_difference(previous_links)}
+                for (assessment_id, ulo_id), contribution in even_ulo_contributions(sorted(links)).items():
+                    if ulo_id in changed_ulos:
+                        cur.execute("UPDATE assessment_ulo SET allocated_weight = %s WHERE assessment_id = %s AND offering_ulo_id = %s", (contribution, assessment_id, ulo_id))
+            cur.execute("UPDATE unit_offering SET handbook_url = %s, last_scraped_at = CURRENT_TIMESTAMP WHERE offering_id = %s", (snapshot["source_url"], offering_id))
+            cur.execute("UPDATE unit SET default_handbook_url = %s WHERE unit_id = (SELECT unit_id FROM unit_offering WHERE offering_id = %s)", (snapshot["source_url"], offering_id))
+            if changed:
+                _refresh_offering_results(cur, offering_id)
+            payload["application"] = {"mode": confirmation.application_mode, "review_revision": review["revision"]}
+            cur.execute("UPDATE handbook_import_snapshot SET status = 'confirmed', confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP, payload = %s::jsonb WHERE handbook_import_id = %s", (user["user_id"], json.dumps(payload), confirmation.handbook_import_id))
+    return {"status": "confirmed", "application_mode": confirmation.application_mode}
 
 
 @app.get("/api/dashboard")
@@ -1003,8 +974,9 @@ def mappings(user: Annotated[dict, Depends(require_offering_access())], offering
     )
     plos = fetch_all(
         """
-        SELECT DISTINCT p.plo_id, p.plo_code, p.description
+        SELECT DISTINCT p.plo_id, p.plo_code, p.description, pr.program_code, pr.program_name
         FROM plo p
+        JOIN program pr ON pr.program_id = p.program_id
         JOIN offering_program op ON op.program_id = p.program_id
         WHERE op.offering_id = %s
         ORDER BY p.plo_id
@@ -1020,7 +992,9 @@ def mappings(user: Annotated[dict, Depends(require_offering_access())], offering
         """,
         (offering_id,),
     )
-    return {"ulos": ulos, "plos": plos, "mappings": rows}
+    programs = fetch_all("SELECT p.program_id, p.program_code, p.program_name, COUNT(plo.plo_id) AS plo_count FROM offering_program op JOIN program p ON p.program_id = op.program_id LEFT JOIN plo ON plo.program_id = p.program_id WHERE op.offering_id = %s GROUP BY p.program_id ORDER BY p.program_code", (offering_id,))
+    confirmed = fetch_one("SELECT EXISTS(SELECT 1 FROM handbook_import_snapshot WHERE offering_id = %s AND status = 'confirmed') AS present", (offering_id,))
+    return {"ulos": ulos, "plos": plos, "mappings": rows, "programs": programs, "handbook_confirmed": confirmed["present"]}
 
 
 @app.put("/api/mappings")
@@ -1032,6 +1006,18 @@ def save_mappings(
     with get_conn() as conn:
         with conn.cursor() as cur:
             _lock_editable_offering(cur, payload.offering_id)
+            cur.execute("SELECT offering_ulo_id FROM offering_ulo WHERE offering_id = %s", (payload.offering_id,))
+            valid_ulos = {r["offering_ulo_id"] for r in cur.fetchall()}
+            cur.execute("SELECT p.plo_id, p.program_id FROM plo p JOIN offering_program op ON op.program_id = p.program_id WHERE op.offering_id = %s", (payload.offering_id,))
+            allowed_plos = {r["plo_id"]: r["program_id"] for r in cur.fetchall()}
+            pairs = {(item.get("offering_ulo_id"), item.get("plo_id")) for item in payload.mappings}
+            if len(pairs) != len(payload.mappings) or any(u not in valid_ulos or p not in allowed_plos for u, p in pairs):
+                raise HTTPException(status_code=422, detail="Select unique ULO/PLO links belonging to this offering and its programmes.")
+            for program_id in set(allowed_plos.values()):
+                if {u for u, p in pairs if allowed_plos[p] == program_id} != valid_ulos:
+                    raise HTTPException(status_code=422, detail="Every ULO needs a PLO link for each linked programme with PLO definitions.")
+            if not valid_ulos or not allowed_plos:
+                raise HTTPException(status_code=422, detail="Import ULOs and supply programme PLO definitions before saving a mapping.")
             cur.execute(
                 "UPDATE ulo_plo_mapping SET is_active = FALSE, removed_by = %s, removed_at = CURRENT_TIMESTAMP WHERE offering_id = %s",
                 (user["user_id"], payload.offering_id),
