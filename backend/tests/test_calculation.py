@@ -103,3 +103,73 @@ def test_nothing_available_is_not_a_division_error():
 )
 def test_the_pass_boundary(achieved, available, expected):
     assert attainment_percentage(achieved, available) == expected
+
+
+# --------------------------------------------------------------------------- #
+# Rebalancing after an assessment is added or removed
+# --------------------------------------------------------------------------- #
+
+
+def test_adding_an_assessment_does_not_push_an_outcome_over_one_hundred():
+    """The reported bug: a Handbook 10% vlog split into two 5% vlogs.
+
+    ULO1 was covered by three assessments at the even 33.33 default. Adding a
+    fourth used to leave the first three untouched and give only the new link the
+    recalculated 25.00, totalling 116.67.
+    """
+    previous = {
+        (10, 1): Decimal("33.33"),
+        (11, 1): Decimal("33.33"),
+        (12, 1): Decimal("33.34"),
+    }
+    links = [(10, 1), (11, 1), (12, 1), (13, 1)]
+    settled = rebalance_contributions(previous, links)
+    assert sum(settled.values()) == Decimal("100.00")
+    assert set(settled.values()) == {Decimal("25.00")}
+
+
+def test_removing_an_assessment_tops_the_outcome_back_up_to_one_hundred():
+    previous = {(10, 1): Decimal("25.00"), (11, 1): Decimal("25.00"),
+                (12, 1): Decimal("25.00"), (13, 1): Decimal("25.00")}
+    settled = rebalance_contributions(previous, [(10, 1), (11, 1), (12, 1)])
+    assert sum(settled.values()) == Decimal("100.00")
+
+
+def test_an_outcome_whose_assessments_are_unchanged_keeps_its_tuning():
+    # The coordinator's 50/30/20 must survive a save that did not touch ULO1.
+    previous = {(10, 1): Decimal("50.00"), (11, 1): Decimal("30.00"), (12, 1): Decimal("20.00")}
+    settled = rebalance_contributions(previous, [(10, 1), (11, 1), (12, 1)])
+    assert settled == previous
+
+
+def test_only_the_changed_outcome_is_reset():
+    # ULO1 gains an assessment; ULO2 does not, so ULO2's tuning survives.
+    previous = {
+        (10, 1): Decimal("60.00"), (11, 1): Decimal("40.00"),
+        (10, 2): Decimal("70.00"), (12, 2): Decimal("30.00"),
+    }
+    links = [(10, 1), (11, 1), (13, 1), (10, 2), (12, 2)]
+    settled = rebalance_contributions(previous, links)
+
+    assert settled[(10, 1)] == settled[(11, 1)] == settled[(13, 1)] == Decimal("33.33") or \
+           sum(settled[k] for k in [(10, 1), (11, 1), (13, 1)]) == Decimal("100.00")
+    assert settled[(10, 2)] == Decimal("70.00")
+    assert settled[(12, 2)] == Decimal("30.00")
+
+
+def test_swapping_one_assessment_for_another_resets_the_outcome():
+    previous = {(10, 1): Decimal("80.00"), (11, 1): Decimal("20.00")}
+    settled = rebalance_contributions(previous, [(10, 1), (12, 1)])
+    assert sum(settled.values()) == Decimal("100.00")
+    assert settled[(10, 1)] == Decimal("50.00")
+
+
+def test_an_outcome_with_no_history_gets_the_even_default():
+    settled = rebalance_contributions({}, [(10, 1), (11, 1)])
+    assert settled == {(10, 1): Decimal("50.00"), (11, 1): Decimal("50.00")}
+
+
+def test_a_three_way_reset_still_totals_exactly_one_hundred():
+    previous = {(10, 1): Decimal("50.00"), (11, 1): Decimal("50.00")}
+    settled = rebalance_contributions(previous, [(10, 1), (11, 1), (12, 1)])
+    assert sum(settled.values()) == Decimal("100.00")

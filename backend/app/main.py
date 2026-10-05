@@ -1087,6 +1087,22 @@ def save_assessments(
             )
             ulo_ids = {row["ulo_code"]: row["offering_ulo_id"] for row in cur.fetchall()}
 
+            # Snapshot the contributions before anything is deleted. Removing an
+            # assessment cascades its assessment_ulo rows away, so reading this
+            # afterwards would show the post-removal state and the rebalance could
+            # not tell that the outcome had lost an assessment.
+            cur.execute(
+                """
+                SELECT assessment_id, offering_ulo_id, allocated_weight
+                FROM assessment_ulo WHERE offering_id = %s
+                """,
+                (payload.offering_id,),
+            )
+            previous_contributions = {
+                (row["assessment_id"], row["offering_ulo_id"]): row["allocated_weight"]
+                for row in cur.fetchall()
+            }
+
             cur.execute("SELECT assessment_id FROM assessment WHERE offering_id = %s", (payload.offering_id,))
             existing_ids = {row["assessment_id"] for row in cur.fetchall()}
             cur.execute("SELECT assessment_id, offering_ulo_id FROM assessment_ulo WHERE offering_id = %s", (payload.offering_id,))
@@ -1112,9 +1128,7 @@ def save_assessments(
                     (payload.offering_id, list(remove_ids)),
                 )
 
-            # Collected across every assessment, then resolved once at the end.
             saved_links: list[tuple[int, int]] = []
-            kept_contributions: dict[tuple[int, int], Decimal] = {}
 
             for order, item in enumerate(payload.assessments, start=1):
                 name = item.assessment_name.strip()
@@ -1144,11 +1158,6 @@ def save_assessments(
                     )
                     assessment_id = cur.fetchone()["assessment_id"]
 
-                cur.execute(
-                    "SELECT offering_ulo_id, allocated_weight FROM assessment_ulo WHERE assessment_id = %s",
-                    (assessment_id,),
-                )
-                existing_links = {row["offering_ulo_id"]: row["allocated_weight"] for row in cur.fetchall()}
                 cur.execute("DELETE FROM assessment_ulo WHERE assessment_id = %s", (assessment_id,))
 
                 for code in item.ulo_codes:
