@@ -129,3 +129,24 @@ def test_temporary_password_blocks_other_routes(monkeypatch):
 
     change_request = Request({"type": "http", "method": "POST", "path": "/api/auth/change-password", "headers": []})
     assert auth.get_current_user(credentials, change_request)["user_id"] == 42
+
+
+@pytest.mark.parametrize("staff_id,email", [
+    ("123123", "etin0009@student.monash.edu"),
+    ("STAFF-A12", "lecturer@example.com"),
+])
+def test_admin_account_accepts_flexible_id_and_email(staff_id, email):
+    values = main._admin_user_values(main.AdminUserCreate(
+        staff_id=staff_id, full_name="Edwin", email=email, role_name="lecturer",
+    ))
+    assert values == (staff_id, "Edwin", email, "lecturer")
+
+
+def test_admin_account_rejects_blank_id_and_invalid_email():
+    from pydantic import ValidationError
+    with pytest.raises(HTTPException):
+        main._admin_user_values(main.AdminUserCreate(
+            staff_id="  ", full_name="Edwin", email="edwin@example.com", role_name="lecturer",
+        ))
+    with pytest.raises(ValidationError):
+        main.AdminUserCreate(staff_id="123123", full_name="Edwin", email="invalid", role_name="lecturer")

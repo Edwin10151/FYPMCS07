@@ -25,7 +25,7 @@ CREATE TABLE role (
 -- 2. APP_USER
 CREATE TABLE app_user (
     user_id       SERIAL PRIMARY KEY,
-    staff_id      VARCHAR(7) UNIQUE,
+    staff_id      VARCHAR(50) UNIQUE,
     full_name     VARCHAR(150) NOT NULL,
     email         VARCHAR(200) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE app_user (
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
     created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-    CHECK (staff_id IS NULL OR staff_id ~ '^[0-9]{7}$')
+    CONSTRAINT app_user_staff_id_format CHECK (staff_id IS NULL OR length(btrim(staff_id)) BETWEEN 1 AND 50)
 );
 
 -- 3. PROGRAM

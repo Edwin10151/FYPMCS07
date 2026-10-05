@@ -97,7 +97,7 @@ class PasswordResetRequest(BaseModel):
 
 
 class AdminUserCreate(BaseModel):
-    staff_id: str
+    staff_id: str = Field(min_length=1, max_length=50)
     full_name: str
     email: EmailStr
     role_name: str
@@ -1248,12 +1248,10 @@ def _admin_user_values(payload: AdminUserCreate) -> tuple[str, str, str, str]:
     full_name = payload.full_name.strip()
     email = str(payload.email).lower()
     role_name = payload.role_name.strip().lower()
-    if not re.fullmatch(r"\d{7}", staff_id):
-        raise HTTPException(status_code=422, detail="Staff ID must be exactly seven digits")
+    if not staff_id or len(staff_id) > 50:
+        raise HTTPException(status_code=422, detail="Staff ID must contain 1 to 50 characters")
     if len(full_name) < 3:
         raise HTTPException(status_code=422, detail="Full name is required")
-    if not email.endswith("@monash.edu"):
-        raise HTTPException(status_code=422, detail="Use a Monash staff email address")
     return staff_id, full_name, email, role_name
 
 
