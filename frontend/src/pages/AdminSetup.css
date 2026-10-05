@@ -3,6 +3,17 @@
 
 .unit-banner-right { display: flex; align-items: center; gap: 14px; }
 
+.admin-period-page .semester-switch {
+  font-family: inherit;
+  max-width: 100%;
+  min-width: 180px;
+  letter-spacing: 0;
+}
+.admin-period-page .semester-switch:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
 .current-sem-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px 26px; margin-bottom: 8px; }
 .current-sem-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .current-sem-eye { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }

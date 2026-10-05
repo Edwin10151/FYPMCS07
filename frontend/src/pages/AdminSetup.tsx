@@ -185,9 +185,9 @@ export default function AdminSetup() {
           <div className="unit-banner">
             <div><h1 style={{ fontSize: 26 }}>Semester Setup</h1></div>
             <div className="unit-banner-right">
-              <label className="adm-field"><span className="lbl">Semester</span><select className="adm-select" aria-label="Semester" value={active?.semester_id ?? ""} disabled={working || resetting} onChange={(event) => { selectPeriod(Number(event.target.value)); setResetConfirmOpen(false); setConfirmOpen(false); setEmailOpen(false); setFlash(""); setFlashError(""); }}>
+              <select className="btn semester-switch" aria-label="Semester" title="Select semester" value={active?.semester_id ?? ""} disabled={loading || working || resetting} onChange={(event) => { selectPeriod(Number(event.target.value)); setResetConfirmOpen(false); setConfirmOpen(false); setEmailOpen(false); setFlash(""); setFlashError(""); }}>
                 {data?.periods.map((period) => <option key={period.semester_id} value={period.semester_id}>{period.year} {period.period} · {period.status}</option>)}
-              </select></label>
+              </select>
               <button className="btn" onClick={() => setAllPeriodsOpen(true)}>All semesters</button>
               <button className="btn" disabled={working} onClick={openCreate}>Add semester</button>
               {session.user.role_name === "super_admin" && <button className="btn danger" disabled={!active || active.status === "archived"} onClick={() => { setResetConfirmation(""); setFlashError(""); setResetConfirmOpen(true); }}>Reset semester data</button>}
