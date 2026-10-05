@@ -39,6 +39,18 @@ def even_ulo_contributions(
     return contributions
 
 
+def rebalance_contributions(
+    previous: dict[tuple[int, int], Decimal], links: Iterable[tuple[int, int]]
+) -> dict[tuple[int, int], Decimal]:
+    """Keep custom shares only for outcomes whose assessment coverage is unchanged."""
+    defaults = even_ulo_contributions(links)
+    changed_ulos = {ulo_id for _, ulo_id in set(previous).symmetric_difference(defaults)}
+    return {
+        link: default if link[1] in changed_ulos else previous.get(link, default)
+        for link, default in defaults.items()
+    }
+
+
 def attainment_percentage(achieved_marks: Decimal, total_available_marks: Decimal) -> Decimal:
     """A ULO's attainment: marks earned toward it over marks available for it.
 

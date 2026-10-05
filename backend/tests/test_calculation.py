@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.services.calculation import attainment_percentage, even_ulo_contributions, validate_ulo_contributions
+from app.services.calculation import attainment_percentage, even_ulo_contributions, rebalance_contributions, validate_ulo_contributions
 
 
 def test_a_ulo_covered_by_four_assessments_gives_each_a_quarter():

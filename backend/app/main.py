@@ -33,7 +33,7 @@ from app.config import get_settings
 from app.db import fetch_all, fetch_one, get_conn
 from app.migrations import run_migrations
 from app.seed import ensure_super_admin, seed_demo_data
-from app.services.calculation import even_ulo_contributions, validate_ulo_contributions
+from app.services.calculation import even_ulo_contributions, rebalance_contributions, validate_ulo_contributions
 from app.services.grade_import import parse_mark, weighted_score
 from app.services.handbook import HandbookImportError, fetch_handbook
 from app.services.email_notification import send_reminders
@@ -1105,8 +1105,6 @@ def save_assessments(
 
             cur.execute("SELECT assessment_id FROM assessment WHERE offering_id = %s", (payload.offering_id,))
             existing_ids = {row["assessment_id"] for row in cur.fetchall()}
-            cur.execute("SELECT assessment_id, offering_ulo_id FROM assessment_ulo WHERE offering_id = %s", (payload.offering_id,))
-            previous_links = {(row["assessment_id"], row["offering_ulo_id"]) for row in cur.fetchall()}
             keep_ids = {item.assessment_id for item in payload.assessments if item.assessment_id is not None}
             if not keep_ids.issubset(existing_ids) or len(keep_ids) != sum(item.assessment_id is not None for item in payload.assessments):
                 raise HTTPException(status_code=422, detail="Assessment IDs must be unique and belong to this offering")
@@ -1165,15 +1163,12 @@ def save_assessments(
                     if offering_ulo_id is None:
                         continue
                     saved_links.append((assessment_id, offering_ulo_id))
-                    if offering_ulo_id in existing_links:
-                        kept_contributions[(assessment_id, offering_ulo_id)] = existing_links[offering_ulo_id]
 
             # A ULO's default share depends on how many assessments end up covering
             # it, so this can only be settled once every assessment has been saved.
             # Preserve custom percentages only when that ULO's linked assessments
             # are unchanged; adding/removing a source requires a fresh default.
-            defaults = even_ulo_contributions(saved_links)
-            changed_ulos = {ulo_id for _, ulo_id in previous_links.symmetric_difference(set(saved_links))}
+            contributions = rebalance_contributions(previous_contributions, saved_links)
             for link in saved_links:
                 assessment_id, offering_ulo_id = link
                 cur.execute(
@@ -1188,7 +1183,7 @@ def save_assessments(
                         payload.offering_id,
                         assessment_id,
                         offering_ulo_id,
-                        defaults[link] if offering_ulo_id in changed_ulos else kept_contributions.get(link, defaults[link]),
+                        contributions[link],
                         user["user_id"],
                     ),
                 )
