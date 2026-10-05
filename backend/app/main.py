@@ -2143,6 +2143,29 @@ def update_admin_offering(
     return {"status": "updated"}
 
 
+class OfferingCoordinatorUpdate(BaseModel):
+    coordinator_id: int | None = None
+
+
+@app.patch("/api/admin/offerings/{offering_id}/coordinator")
+def assign_offering_coordinator(
+    offering_id: int,
+    payload: OfferingCoordinatorUpdate,
+    user: Annotated[dict, Depends(require_permission(40))],
+):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            _lock_editable_offering(cur, offering_id)
+            _validate_offering_staff(cur, payload.coordinator_id, [])
+            cur.execute("UPDATE unit_offering SET coordinator_id = %s WHERE offering_id = %s", (payload.coordinator_id, offering_id))
+            if payload.coordinator_id is not None:
+                cur.execute(
+                    "DELETE FROM offering_lecturer WHERE offering_id = %s AND lecturer_id = %s",
+                    (offering_id, payload.coordinator_id),
+                )
+    return {"status": "updated"}
+
+
 @app.delete("/api/admin/offerings/{offering_id}")
 def delete_admin_offering(
     offering_id: int,
