@@ -142,11 +142,11 @@ def test_admin_account_accepts_flexible_id_and_email(staff_id, email):
     assert values == (staff_id, "Edwin", email, "lecturer")
 
 
-def test_admin_account_rejects_blank_id_and_invalid_email():
+def test_admin_account_allows_blank_id_and_rejects_invalid_email():
     from pydantic import ValidationError
-    with pytest.raises(HTTPException):
-        main._admin_user_values(main.AdminUserCreate(
-            staff_id="  ", full_name="Edwin", email="edwin@example.com", role_name="lecturer",
-        ))
+    values = main._admin_user_values(main.AdminUserCreate(
+        staff_id="  ", full_name="Edwin", email="edwin@example.com", role_name="lecturer",
+    ))
+    assert values == (None, "Edwin", "edwin@example.com", "lecturer")
     with pytest.raises(ValidationError):
         main.AdminUserCreate(staff_id="123123", full_name="Edwin", email="invalid", role_name="lecturer")
