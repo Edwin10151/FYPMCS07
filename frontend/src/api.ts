@@ -182,7 +182,7 @@ export type AdminUser = {
 export type AdminPeriod = {
   semester_id: number;
   year: number;
-  period: "S1" | "S2";
+  period: "FEB" | "JUL" | "OCT";
   start_date: string | null;
   end_date: string | null;
   status: "planning" | "active" | "archived";
@@ -382,7 +382,7 @@ export function getAdminContext(token: string) {
 
 export function createAdminPeriod(
   token: string,
-  payload: { year: number; period: "S1" | "S2"; start_date: string | null; end_date: string | null; status: "planning" | "active" | "archived" },
+  payload: { year: number; period: "FEB" | "JUL" | "OCT"; start_date: string | null; end_date: string | null; status: "planning" | "active" | "archived" },
 ) {
   return apiFetch<{ semester_id: number; status: string }>("/admin/periods", token, { method: "POST", body: JSON.stringify(payload) });
 }
@@ -396,7 +396,7 @@ export function updateAdminPeriod(
 }
 
 export function deactivateAdminPeriod(token: string, semesterId: number) {
-  return apiFetch<{ status: string; archived_semester_id: number; next_semester_id: number; next_year: number; next_period: "S1" | "S2" }>(
+  return apiFetch<{ status: string; archived_semester_id: number; next_semester_id: number; next_year: number; next_period: "FEB" | "JUL" | "OCT" }>(
     `/admin/periods/${semesterId}/deactivate`,
     token,
     { method: "POST" },

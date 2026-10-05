@@ -16,8 +16,11 @@ class HandbookImportError(RuntimeError):
 
 
 PERIOD_LABELS = {
-    "S1": "First semester",
-    "S2": "Second semester",
+    "FEB": "First semester",
+    "JUL": "Second semester",
+    # OCT (the October intake) is deliberately absent: Monash's public Handbook has no
+    # matching teaching period for it, so Handbook import is unavailable for those units —
+    # fetch_handbook() raises HandbookImportError, which the UI surfaces as "not available."
 }
 
 

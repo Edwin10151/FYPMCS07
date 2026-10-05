@@ -12,6 +12,15 @@ type TaskStatus = "not_started" | "working" | "done";
 const TASK_STATUS_LABEL: Record<TaskStatus, string> = { not_started: "Not started", working: "Working", done: "Done" };
 const TASK_STATUS_CLASS: Record<TaskStatus, string> = { not_started: "inactive", working: "pending", done: "committed" };
 
+type Intake = "FEB" | "JUL" | "OCT";
+const INTAKE_LABEL: Record<Intake, string> = { FEB: "February intake", JUL: "July intake", OCT: "October intake" };
+
+function nextIntake(year: number, period: Intake): { year: number; period: Intake } {
+  if (period === "FEB") return { year, period: "JUL" };
+  if (period === "JUL") return { year, period: "OCT" };
+  return { year: year + 1, period: "FEB" };
+}
+
 function TaskStatusBadge({ status }: { status: TaskStatus }) {
   return <span className={`adm-status ${TASK_STATUS_CLASS[status]}`}><span className="d" />{TASK_STATUS_LABEL[status]}</span>;
 }
@@ -33,7 +42,8 @@ export default function AdminSetup() {
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [periodForm, setPeriodForm] = useState({ year: new Date().getFullYear(), period: "S1" as "S1" | "S2", start_date: "", end_date: "" });
+  const [periodForm, setPeriodForm] = useState({ year: new Date().getFullYear(), period: "FEB" as Intake, start_date: "", end_date: "" });
+  const [allPeriodsOpen, setAllPeriodsOpen] = useState(false);
 
   const current = data?.periods.find((period) => period.status === "active") ?? null;
   const planning = data?.periods.find((period) => period.status === "planning") ?? null;
@@ -76,9 +86,8 @@ export default function AdminSetup() {
 
   const openCreate = () => {
     const latest = data?.periods[0];
-    setPeriodForm(latest
-      ? { year: latest.period === "S1" ? latest.year : latest.year + 1, period: latest.period === "S1" ? "S2" : "S1", start_date: "", end_date: "" }
-      : { year: new Date().getFullYear(), period: "S1", start_date: "", end_date: "" });
+    const upcoming = latest ? nextIntake(latest.year, latest.period) : { year: new Date().getFullYear(), period: "FEB" as Intake };
+    setPeriodForm({ ...upcoming, start_date: "", end_date: "" });
     setCreateOpen(true);
   };
 
@@ -179,6 +188,7 @@ export default function AdminSetup() {
               <label className="adm-field"><span className="lbl">Semester</span><select className="adm-select" aria-label="Semester" value={active?.semester_id ?? ""} disabled={working || resetting} onChange={(event) => { selectPeriod(Number(event.target.value)); setResetConfirmOpen(false); setConfirmOpen(false); setEmailOpen(false); setFlash(""); setFlashError(""); }}>
                 {data?.periods.map((period) => <option key={period.semester_id} value={period.semester_id}>{period.year} {period.period} · {period.status}</option>)}
               </select></label>
+              <button className="btn" onClick={() => setAllPeriodsOpen(true)}>All semesters</button>
               <button className="btn" disabled={working} onClick={openCreate}>Add semester</button>
               {session.user.role_name === "super_admin" && <button className="btn danger" disabled={!active || active.status === "archived"} onClick={() => { setResetConfirmation(""); setFlashError(""); setResetConfirmOpen(true); }}>Reset semester data</button>}
               <button
@@ -271,6 +281,35 @@ export default function AdminSetup() {
         </div>
       )}
 
+      {allPeriodsOpen && (
+        <div className="adm-modal-overlay" onClick={() => setAllPeriodsOpen(false)}>
+          <div className="adm-modal wide" onClick={(event) => event.stopPropagation()}>
+            <h3>All semesters</h3>
+            <div className="adm-modal-sub">Every teaching period on file, past, present, and upcoming.</div>
+            <div className="adm-card" style={{ marginBottom: 16 }}>
+              <table className="adm-tbl">
+                <thead><tr><th>Semester</th><th>Status</th><th>Unit offerings</th><th>Students</th><th>Staff</th></tr></thead>
+                <tbody>
+                  {(data?.periods ?? []).map((period) => (
+                    <tr key={period.semester_id}>
+                      <td><span className="nm">{period.year} {period.period}</span></td>
+                      <td><span className={`adm-status ${period.status}`}><span className="d" />{period.status === "active" ? "Active" : period.status === "planning" ? "Planning" : "Archived"}</span></td>
+                      <td>{period.offering_count}</td>
+                      <td>{period.student_count.toLocaleString()}</td>
+                      <td>{period.staff_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!data?.periods.length && <div className="adm-empty">No semesters on file yet.</div>}
+            </div>
+            <div className="adm-modal-actions">
+              <button className="btn primary" onClick={() => setAllPeriodsOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {createOpen && (
         <div className="adm-modal-overlay" onClick={() => !working && setCreateOpen(false)}>
           <div className="adm-modal" onClick={(event) => event.stopPropagation()}>
@@ -279,7 +318,7 @@ export default function AdminSetup() {
             <div className="adm-form">
               <div className="adm-form-2">
                 <label className="adm-field"><span className="lbl">Year</span><input type="number" min="2020" max="2100" value={periodForm.year} onChange={(event) => setPeriodForm({ ...periodForm, year: Number(event.target.value) })} /></label>
-                <label className="adm-field"><span className="lbl">Semester</span><select value={periodForm.period} onChange={(event) => setPeriodForm({ ...periodForm, period: event.target.value as "S1" | "S2" })}><option value="S1">Semester 1</option><option value="S2">Semester 2</option></select></label>
+                <label className="adm-field"><span className="lbl">Intake</span><select value={periodForm.period} onChange={(event) => setPeriodForm({ ...periodForm, period: event.target.value as Intake })}>{(Object.keys(INTAKE_LABEL) as Intake[]).map((code) => <option key={code} value={code}>{INTAKE_LABEL[code]}</option>)}</select></label>
               </div>
               <div className="adm-form-2">
                 <label className="adm-field"><span className="lbl">Start date</span><input type="date" value={periodForm.start_date} onChange={(event) => setPeriodForm({ ...periodForm, start_date: event.target.value })} /></label>

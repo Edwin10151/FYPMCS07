@@ -54,8 +54,9 @@ GET  /api/offerings/{offering_id}/handbook-import
 POST /api/offerings/{offering_id}/handbook-import/confirm
 ```
 
-The backend uses the saved unit code, year, `Malaysia` location, and S1/S2
-scope. It stores a reviewable source snapshot before it updates ULOs or
+The backend uses the saved unit code, year, `Malaysia` location, and FEB/JUL
+scope (First/Second semester in the Handbook). OCT has no corresponding public
+Handbook teaching period, so manual setup is required. It stores a reviewable source snapshot before it updates ULOs or
 assessments. Confirmation is blocked after grades exist.
 
 ## Administration

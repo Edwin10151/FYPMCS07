@@ -52,7 +52,7 @@ def fixture(db):
                        "VALUES (%s, %s, 'unchanged-password', (SELECT role_id FROM role WHERE role_name='coordinator'))",
                     (name, f"{name}@example.test")) for name in ["old", "new", "manual"]]
     semesters = [insert(db, "INSERT INTO semester (year, period, status) VALUES (2099, %s, 'active')", (period,))
-                 for period in ["S1", "S2"]]
+                 for period in ["FEB", "JUL"]]
     units = [insert(db, "INSERT INTO unit (unit_code, unit_name) VALUES (%s, %s)", (code, code))
              for code in ["FIT9991", "FIT9992"]]
     offerings = [insert(db, "INSERT INTO unit_offering (unit_id, semester_id, coordinator_id, coordinator_source) "
@@ -131,7 +131,7 @@ def test_manual_access_is_preserved_even_for_a_coordinator(db, fixture):
 def test_approved_reports_block_semester_reset(db, fixture):
     db.execute("INSERT INTO ai_report (offering_id, status) VALUES (%s, 'approved')", (fixture["offerings"][0],))
     with pytest.raises(HTTPException) as raised:
-        main.reset_admin_period(fixture["semesters"][0], main.SemesterResetRequest(confirmation="2099 S1"), fixture["user"])
+        main.reset_admin_period(fixture["semesters"][0], main.SemesterResetRequest(confirmation="2099 FEB"), fixture["user"])
     assert raised.value.status_code == 409
     assert db.execute("SELECT COUNT(*) AS n FROM unit_offering").fetchone()["n"] == 3
 
@@ -181,7 +181,7 @@ def test_archives_block_writes_and_reset_retains_other_semester_and_staff(db, fi
         main._lock_editable_offering(db.cursor(), first)
     assert raised.value.status_code == 409
     db.execute("UPDATE semester SET status='active' WHERE semester_id=%s", (semester,))
-    result = main.reset_admin_period(semester, main.SemesterResetRequest(confirmation="2099 S1"), fixture["user"])
+    result = main.reset_admin_period(semester, main.SemesterResetRequest(confirmation="2099 FEB"), fixture["user"])
     assert result["accounts_deleted"] == 0
     assert result["offerings_deleted"] == 2
     assert db.execute("SELECT offering_id FROM unit_offering").fetchone()["offering_id"] == other

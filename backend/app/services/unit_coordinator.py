@@ -31,8 +31,9 @@ UNIT_CODE_PATTERN = re.compile(r"^[A-Z]{3}\d{4}$")
 # Handbook phrasing for a teaching period, used to tell one campus offering from
 # another. Matches the labels published on the unit page.
 PERIOD_LABELS = {
-    "S1": "First semester",
-    "S2": "Second semester",
+    "FEB": "First semester",
+    "JUL": "Second semester",
+    # OCT intentionally omitted — see handbook.py's PERIOD_LABELS comment.
 }
 
 # Contact roles worth recording, mapped to a human label. A unit routinely lists
@@ -262,7 +263,7 @@ def fetch_unit_coordinators_for_units(
 def _main(argv: list[str] | None = None) -> int:
     """Run the scraper from a terminal, for checking a unit by hand.
 
-        python -m app.services.unit_coordinator FIT3181 --period S2
+        python -m app.services.unit_coordinator FIT3181 --period JUL
     """
     import argparse
     from datetime import date
@@ -273,7 +274,7 @@ def _main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("unit_codes", nargs="+", metavar="UNIT", help="e.g. FIT3181 FIT3161")
     parser.add_argument("--year", type=int, default=date.today().year)
-    parser.add_argument("--period", default=None, help="S1 or S2; omit for every offering")
+    parser.add_argument("--period", default=None, choices=sorted(PERIOD_LABELS), help="FEB or JUL; omit for every offering")
     parser.add_argument("--location", default="Malaysia")
     parser.add_argument("--json", action="store_true", help="print raw JSON instead of a table")
     args = parser.parse_args(argv)
