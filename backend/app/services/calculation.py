@@ -42,9 +42,9 @@ def even_ulo_contributions(
 def attainment_percentage(achieved_marks: Decimal, total_available_marks: Decimal) -> Decimal:
     """A ULO's attainment: marks earned toward it over marks available for it.
 
-    Both sides are already contribution-weighted, so this is the final ratio:
-        achieved = sum(raw_mark  x contribution%)
-        total    = sum(max_mark  x contribution%)
+    Both sides use normalized unit marks and are already contribution-weighted:
+        achieved = sum(raw_mark / max_mark x assessment_weight x contribution%)
+        total    = sum(assessment_weight x contribution%)
     """
     if total_available_marks <= 0:
         return Decimal("0.00")
@@ -54,40 +54,11 @@ def attainment_percentage(achieved_marks: Decimal, total_available_marks: Decima
     )
 
 
-def rebalance_contributions(
-    previous: dict[tuple[int, int], Decimal],
-    links: Iterable[tuple[int, int]],
-) -> dict[tuple[int, int], Decimal]:
-    """Settle every (assessment, ULO) contribution after an assessments save.
-
-    A ULO whose set of covering assessments is unchanged keeps whatever the
-    coordinator tuned. A ULO that gained or lost an assessment is reset to an
-    even split, because its old percentages were shares of a different set and
-    leaving them would push the outcome past 100%: three assessments at 33.33
-    plus a fourth at the new 25.00 default totals 116.67.
-
-    Resetting does discard tuning for that one outcome. That is the deliberate
-    trade: an outcome that always totals 100 is worth more than tuning silently
-    surviving into a split it no longer describes.
-    """
-    links = list(links)
-
-    before: dict[int, set[int]] = {}
-    for assessment_id, offering_ulo_id in previous:
-        before.setdefault(offering_ulo_id, set()).add(assessment_id)
-
-    after: dict[int, set[int]] = {}
-    for assessment_id, offering_ulo_id in links:
-        after.setdefault(offering_ulo_id, set()).add(assessment_id)
-
-    changed = {ulo for ulo, members in after.items() if before.get(ulo, set()) != members}
-
-    evened = even_ulo_contributions([l for l in links if l[1] in changed])
-
-    settled: dict[tuple[int, int], Decimal] = {}
-    for link in links:
-        if link[1] in changed:
-            settled[link] = evened[link]
-        else:
-            settled[link] = previous.get(link, Decimal("0.00"))
-    return settled
+def validate_ulo_contributions(weights: dict[tuple[int, int], Decimal]) -> None:
+    totals: dict[int, Decimal] = {}
+    for (_, ulo_id), weight in weights.items():
+        if weight is None or not weight.is_finite() or not Decimal(0) <= weight <= Decimal(100):
+            raise ValueError("Each assessment contribution must be between 0% and 100%")
+        totals[ulo_id] = totals.get(ulo_id, Decimal(0)) + weight
+    if any(total != Decimal(100) for total in totals.values()):
+        raise ValueError("Assessment contributions must total 100% for each learning outcome")

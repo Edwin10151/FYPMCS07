@@ -16,6 +16,7 @@ import AdminStaff from "./pages/AdminStaff";
 import { loadSession } from "./api";
 import Settings from "./pages/Settings";
 import ChangePassword from "./pages/ChangePassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function RequireAuth({ children, allowPasswordChange = false }: { children: React.ReactNode; allowPasswordChange?: boolean }) {
   const session = loadSession();
@@ -37,6 +38,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to={loadSession() ? "/units" : "/login"} replace />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/change-password" element={<RequireAuth allowPasswordChange><ChangePassword /></RequireAuth>} />
       <Route path="/units" element={<RequireAuth><UnitSelect /></RequireAuth>} />
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />

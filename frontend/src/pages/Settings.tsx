@@ -59,7 +59,8 @@ export default function Setting() {
     setSavingPassword(true);
     try {
       await changePassword(session.access_token, currentPassword, newPassword);
-      setPasswordSuccess("Password updated.");
+      clearSession();
+      navigate("/login", { replace: true, state: { notice: "Password changed. Sign in with your new password." } });
       setIsChangingPassword(false);
       setCurrentPassword("");
       setNewPassword("");
