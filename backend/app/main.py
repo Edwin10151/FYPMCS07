@@ -1845,8 +1845,7 @@ def _admin_context_payload() -> dict:
         """
         SELECT s.semester_id, s.year, s.period, s.start_date, s.end_date, s.status,
                (SELECT COUNT(*) FROM unit_offering o WHERE o.semester_id = s.semester_id) AS offering_count,
-               (SELECT COUNT(*) FROM enrollment e JOIN unit_offering o ON o.offering_id = e.offering_id
-                WHERE o.semester_id = s.semester_id) AS student_count,
+               (SELECT COUNT(*) FROM semester_student ss WHERE ss.semester_id = s.semester_id) AS student_count,
                (SELECT COUNT(DISTINCT staff_id) FROM (
                     SELECT o.coordinator_id AS staff_id FROM unit_offering o WHERE o.semester_id = s.semester_id
                     UNION ALL
@@ -2167,6 +2166,8 @@ def reset_admin_period(
             cur.execute("DELETE FROM unit_offering WHERE semester_id = %s", (semester_id,))
             offerings_deleted = cur.rowcount
 
+            cur.execute("DELETE FROM student_list_upload WHERE semester_id = %s", (semester_id,))
+            cur.execute("DELETE FROM semester_student WHERE semester_id = %s", (semester_id,))
             cur.execute("DELETE FROM staffing_import_snapshot WHERE semester_id = %s", (semester_id,))
             cur.execute("DELETE FROM email_notification_delivery WHERE semester_id = %s", (semester_id,))
 
@@ -2219,6 +2220,7 @@ def create_admin_offering(
                 (unit_id, payload.semester_id, payload.coordinator_id, payload.status),
             )
             offering_id = cur.fetchone()["offering_id"]
+            _enrol_semester_students(cur, payload.semester_id, offering_id)
             _save_offering_programs(cur, offering_id, program_ids)
             _save_offering_staff(cur, offering_id, payload.coordinator_id, lecturer_ids)
             staffing_rows_synced, accounts_created = _sync_staffing_from_latest_snapshot(cur, payload.semester_id, unit_code, offering_id)
@@ -2317,6 +2319,15 @@ def delete_admin_offering(
                 cur.execute("SELECT 1 FROM unit_offering WHERE offering_id = %s", (offering_id,))
                 if not cur.fetchone():
                     raise HTTPException(status_code=404, detail="Unit offering not found")
+                cur.execute(
+                    """
+                    DELETE FROM enrollment e
+                    WHERE e.offering_id = %s
+                      AND NOT EXISTS (SELECT 1 FROM student_grade g WHERE g.enrollment_id = e.enrollment_id)
+                      AND NOT EXISTS (SELECT 1 FROM student_component_grade c WHERE c.enrollment_id = e.enrollment_id)
+                    """,
+                    (offering_id,),
+                )
                 cur.execute("DELETE FROM unit_offering WHERE offering_id = %s", (offering_id,))
     except psycopg.errors.ForeignKeyViolation:
         raise HTTPException(status_code=409, detail="This offering has enrolled students or committed grades and can't be deleted")
@@ -2378,6 +2389,7 @@ def create_offerings_from_roster(
                     (unit_id, payload.semester_id, item.coordinator_id),
                 )
                 offering_id = cur.fetchone()["offering_id"]
+                _enrol_semester_students(cur, payload.semester_id, offering_id)
                 staffing_rows_synced, accounts_created = _sync_staffing_from_latest_snapshot(cur, payload.semester_id, unit_code, offering_id)
                 if item.program_ids:
                     cur.execute("SELECT program_id FROM program WHERE program_id = ANY(%s)", (list(set(item.program_ids)),))
@@ -2425,9 +2437,10 @@ def _validate_enrolment_rows(
     student_code_column: str,
     full_name_column: str,
     given_name_column: str | None = None,
-) -> tuple[list[dict], int]:
+) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Returns the issues and the accepted rows as (student_code, full_name)."""
     issues: list[dict] = []
-    accepted_count = 0
+    accepted: list[tuple[str, str]] = []
     seen_codes: set[str] = set()
     for row_number, row in rows:
         student_code = row[student_code_column].strip().replace(" ", "")
@@ -2443,9 +2456,21 @@ def _validate_enrolment_rows(
         elif len(full_name) > 150:
             issues.append({"row": row_number, "severity": "error", "message": "Student name is too long"})
         else:
-            accepted_count += 1
+            accepted.append((student_code, full_name))
         seen_codes.add(student_code)
-    return issues, accepted_count
+    return issues, accepted
+
+
+def _enrol_semester_students(cur, semester_id: int, offering_id: int) -> None:
+    """Every student on the semester's list is enrolled in each unit, including units added later."""
+    cur.execute(
+        """
+        INSERT INTO enrollment (student_id, offering_id)
+        SELECT student_id, %s FROM semester_student WHERE semester_id = %s
+        ON CONFLICT DO NOTHING
+        """,
+        (offering_id, semester_id),
+    )
 
 
 @app.post("/api/admin/enrolments/inspect")
@@ -2460,32 +2485,32 @@ async def inspect_enrolment_upload(
 @app.post("/api/admin/enrolments/preview")
 async def preview_enrolment_upload(
     user: Annotated[dict, Depends(require_permission(30))],
-    offering_id: int = Form(...),
+    semester_id: int = Form(...),
     student_code_column: str = Form(...),
     full_name_column: str = Form(...),
     given_name_column: str | None = Form(None),
     file: UploadFile = File(...),
 ):
-    if not fetch_one("SELECT 1 FROM unit_offering WHERE offering_id = %s", (offering_id,)):
-        raise HTTPException(status_code=404, detail="Unit offering not found")
+    if not fetch_one("SELECT 1 FROM semester WHERE semester_id = %s", (semester_id,)):
+        raise HTTPException(status_code=404, detail="Academic period not found")
     filename, headers, rows = await _read_csv_upload(file)
     _require_columns(headers, student_code_column, full_name_column)
     if given_name_column:
         _require_columns(headers, given_name_column)
-    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
+    issues, accepted = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
     return {
         "filename": filename,
         "row_count": len(rows),
-        "accepted_count": accepted_count,
+        "accepted_count": len(accepted),
         "issues": issues,
-        "status": "valid" if not issues else "needs_review",
+        "status": "valid" if not any(issue["severity"] == "error" for issue in issues) else "needs_review",
     }
 
 
 @app.post("/api/admin/enrolments/commit")
 async def commit_enrolment_upload(
     user: Annotated[dict, Depends(require_permission(30))],
-    offering_id: int = Form(...),
+    semester_id: int = Form(...),
     student_code_column: str = Form(...),
     full_name_column: str = Form(...),
     given_name_column: str | None = Form(None),
@@ -2495,79 +2520,83 @@ async def commit_enrolment_upload(
     _require_columns(headers, student_code_column, full_name_column)
     if given_name_column:
         _require_columns(headers, given_name_column)
-    issues, accepted_count = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
+    issues, accepted = _validate_enrolment_rows(rows, student_code_column, full_name_column, given_name_column)
     if any(issue["severity"] == "error" for issue in issues):
         raise HTTPException(status_code=422, detail="Fix all student-list errors before committing")
     with get_conn() as conn:
         with conn.cursor() as cur:
-            _lock_editable_offering(cur, offering_id)
-            cur.execute(
-                "SELECT 1 FROM unit_offering WHERE offering_id = %s FOR UPDATE",
-                (offering_id,),
-            )
-            offering = cur.fetchone()
-            if not offering:
-                raise HTTPException(status_code=404, detail="Unit offering not found")
-            cur.execute("SELECT program_id FROM offering_program WHERE offering_id = %s", (offering_id,))
-            offering_program_ids = [row["program_id"] for row in cur.fetchall()]
-            # A student's program is only unambiguous when the offering serves a single program.
-            student_program_id = offering_program_ids[0] if len(offering_program_ids) == 1 else None
-            for _, row in rows:
-                student_code = row[student_code_column].strip().replace(" ", "")
-                full_name = _combined_full_name(row, full_name_column, given_name_column)
+            _lock_editable_semester(cur, semester_id)
+            for student_code, full_name in accepted:
                 cur.execute(
                     """
-                    INSERT INTO student (student_code, full_name, program_id)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO student (student_code, full_name)
+                    VALUES (%s, %s)
                     ON CONFLICT (student_code) DO UPDATE SET full_name = EXCLUDED.full_name
                     RETURNING student_id
                     """,
-                    (student_code, full_name, student_program_id),
+                    (student_code, full_name),
                 )
                 student_id = cur.fetchone()["student_id"]
                 cur.execute(
-                    "INSERT INTO enrollment (student_id, offering_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                    (student_id, offering_id),
+                    "INSERT INTO semester_student (semester_id, student_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (semester_id, student_id),
                 )
             cur.execute(
                 """
-                INSERT INTO enrollment_upload_batch (
-                    offering_id, uploaded_by, original_filename, row_count, accepted_count, issue_count, status
-                ) VALUES (%s, %s, %s, %s, %s, %s, 'committed')
-                RETURNING enrollment_upload_batch_id
+                INSERT INTO enrollment (student_id, offering_id)
+                SELECT ss.student_id, o.offering_id
+                FROM semester_student ss
+                JOIN unit_offering o ON o.semester_id = ss.semester_id AND o.status <> 'discontinued'
+                WHERE ss.semester_id = %s
+                ON CONFLICT DO NOTHING
                 """,
-                (offering_id, user["user_id"], filename, len(rows), accepted_count, len(issues)),
+                (semester_id,),
             )
-            batch_id = cur.fetchone()["enrollment_upload_batch_id"]
-            _refresh_offering_results(cur, offering_id)
-    return {"status": "committed", "batch_id": batch_id, "accepted_count": accepted_count}
+            cur.execute(
+                """
+                INSERT INTO student_list_upload (semester_id, uploaded_by, original_filename, row_count, accepted_count)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (semester_id) DO UPDATE SET
+                    uploaded_by = EXCLUDED.uploaded_by,
+                    original_filename = EXCLUDED.original_filename,
+                    row_count = EXCLUDED.row_count,
+                    accepted_count = EXCLUDED.accepted_count,
+                    uploaded_at = CURRENT_TIMESTAMP
+                """,
+                (semester_id, user["user_id"], filename, len(rows), len(accepted)),
+            )
+            cur.execute(
+                "SELECT offering_id FROM unit_offering WHERE semester_id = %s AND status <> 'discontinued'",
+                (semester_id,),
+            )
+            offering_ids = [row["offering_id"] for row in cur.fetchall()]
+            for offering_id in offering_ids:
+                _refresh_offering_results(cur, offering_id)
+    return {"status": "committed", "accepted_count": len(accepted), "offering_count": len(offering_ids)}
 
 
-@app.get("/api/admin/offerings/{offering_id}/enrollments")
-def admin_offering_enrollments(
-    offering_id: int,
+@app.get("/api/admin/student-list")
+def admin_student_list(
+    semester_id: int,
     user: Annotated[dict, Depends(require_permission(30))],
 ):
     students = fetch_all(
         """
         SELECT s.student_id, s.student_code, s.full_name
-        FROM enrollment e JOIN student s ON s.student_id = e.student_id
-        WHERE e.offering_id = %s
+        FROM semester_student ss JOIN student s ON s.student_id = ss.student_id
+        WHERE ss.semester_id = %s
         ORDER BY s.full_name
         """,
-        (offering_id,),
+        (semester_id,),
     )
-    latest_batch = fetch_one(
+    upload = fetch_one(
         """
-        SELECT original_filename, row_count, accepted_count, issue_count, status, uploaded_at
-        FROM enrollment_upload_batch
-        WHERE offering_id = %s
-        ORDER BY uploaded_at DESC
-        LIMIT 1
+        SELECT original_filename, row_count, accepted_count, uploaded_at
+        FROM student_list_upload WHERE semester_id = %s
         """,
-        (offering_id,),
+        (semester_id,),
     )
-    return {"students": students, "latest_batch": latest_batch}
+    return {"students": students, "upload": upload}
 
 
 def _grade_column_mappings(raw_mapping: str, headers: list[str], assessment_by_id: dict[int, dict]) -> list[dict]:
@@ -3460,7 +3489,9 @@ def _create_offering_for_unit(cur, semester_id: int, unit_code: str, unit: dict,
         """,
         (unit_id, semester_id, coordinator_user_id),
     )
-    return cur.fetchone()["offering_id"]
+    offering_id = cur.fetchone()["offering_id"]
+    _enrol_semester_students(cur, semester_id, offering_id)
+    return offering_id
 
 
 @app.post("/api/admin/staffing/roster-inspect")

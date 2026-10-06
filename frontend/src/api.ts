@@ -631,25 +631,25 @@ export function inspectEnrolmentUpload(token: string, file: File) {
   return uploadForm(token, "/admin/enrolments/inspect", {}, file) as Promise<CsvInspection>;
 }
 
-export function previewEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
+export function previewEnrolmentUpload(token: string, semesterId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
   return uploadForm(token, "/admin/enrolments/preview", {
-    offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+    semester_id: String(semesterId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
     ...(givenNameColumn ? { given_name_column: givenNameColumn } : {}),
   }, file) as Promise<{ filename: string; row_count: number; accepted_count: number; issues: UploadIssue[]; status: "valid" | "needs_review" }>;
 }
 
-export function commitEnrolmentUpload(token: string, offeringId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
+export function commitEnrolmentUpload(token: string, semesterId: number, studentCodeColumn: string, fullNameColumn: string, file: File, givenNameColumn = "") {
   return uploadForm(token, "/admin/enrolments/commit", {
-    offering_id: String(offeringId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
+    semester_id: String(semesterId), student_code_column: studentCodeColumn, full_name_column: fullNameColumn,
     ...(givenNameColumn ? { given_name_column: givenNameColumn } : {}),
-  }, file) as Promise<{ status: string; batch_id: number; accepted_count: number }>;
+  }, file) as Promise<{ status: string; accepted_count: number; offering_count: number }>;
 }
 
-export type OfferingEnrollment = { student_id: number; student_code: string; full_name: string };
-export type EnrollmentBatch = { original_filename: string; row_count: number; accepted_count: number; issue_count: number; status: string; uploaded_at: string };
+export type StudentListEntry = { student_id: number; student_code: string; full_name: string };
+export type StudentListUpload = { original_filename: string; row_count: number; accepted_count: number; uploaded_at: string };
 
-export function getOfferingEnrollments(token: string, offeringId: number) {
-  return apiFetch<{ students: OfferingEnrollment[]; latest_batch: EnrollmentBatch | null }>(`/admin/offerings/${offeringId}/enrollments`, token);
+export function getStudentList(token: string, semesterId: number) {
+  return apiFetch<{ students: StudentListEntry[]; upload: StudentListUpload | null }>(`/admin/student-list?semester_id=${semesterId}`, token);
 }
 
 export function inspectGradeUpload(token: string, offeringId: number, file: File, sheetName = "") {

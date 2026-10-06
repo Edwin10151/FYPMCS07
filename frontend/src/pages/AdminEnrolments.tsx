@@ -3,12 +3,12 @@ import { Link } from "react-router-dom";
 import {
   commitEnrolmentUpload,
   errorMessage,
-  getOfferingEnrollments,
+  getStudentList,
   inspectEnrolmentUpload,
   previewEnrolmentUpload,
   type CsvInspection,
-  type EnrollmentBatch,
-  type OfferingEnrollment,
+  type StudentListEntry,
+  type StudentListUpload,
   type UploadIssue,
 } from "../api";
 import AdminSidebar from "../components/AdminSidebar";
@@ -29,7 +29,6 @@ function formatDateTime(value: string) {
 export default function AdminEnrolments() {
   const { session, data, error, loading, reload, selectedPeriod: active, selectPeriod } = useAdminContext();
   const archived = active?.status === "archived";
-  const [offeringId, setOfferingId] = useState<number | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [inspection, setInspection] = useState<CsvInspection | null>(null);
@@ -40,45 +39,41 @@ export default function AdminEnrolments() {
   const [flash, setFlash] = useState("");
   const [working, setWorking] = useState(false);
 
-  const [students, setStudents] = useState<OfferingEnrollment[] | null>(null);
-  const [latestBatch, setLatestBatch] = useState<EnrollmentBatch | null>(null);
-  const [rosterLoading, setRosterLoading] = useState(false);
+  const [students, setStudents] = useState<StudentListEntry[] | null>(null);
+  const [upload, setUpload] = useState<StudentListUpload | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
 
-  const offeringsThisSemester = data?.offerings.filter((offering) => offering.semester_id === active?.semester_id && offering.status !== "discontinued") ?? [];
+  const semesterId = active?.semester_id ?? null;
 
-  useEffect(() => {
-    if (offeringsThisSemester.some((offering) => offering.offering_id === offeringId)) return;
-    setStudents(null);
-    setLatestBatch(null);
-    setOfferingId(offeringsThisSemester[0]?.offering_id ?? null);
-    // Only auto-select once, the first time offerings become available.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.semester_id, offeringsThisSemester.length]);
-
-  const loadRoster = async (id: number) => {
+  const loadList = async (id: number) => {
     if (!session) return;
-    setRosterLoading(true);
+    setListLoading(true);
     try {
-      const response = await getOfferingEnrollments(session.access_token, id);
+      const response = await getStudentList(session.access_token, id);
       setStudents(response.students);
-      setLatestBatch(response.latest_batch);
+      setUpload(response.upload);
     } catch (err) {
       setFlash(errorMessage(err));
     } finally {
-      setRosterLoading(false);
+      setListLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!offeringId) return;
-    void loadRoster(offeringId);
+    if (!semesterId) return;
+    setSearchInput("");
+    setQuery("");
+    void loadList(semesterId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offeringId, session]);
+  }, [semesterId, session]);
 
   if (!session) return null;
-  const selectedOffering = data?.offerings.find((offering) => offering.offering_id === offeringId) ?? null;
   const errorCount = preview?.issues.filter((issue) => issue.severity === "error").length ?? 0;
   const warningCount = preview?.issues.filter((issue) => issue.severity === "warning").length ?? 0;
+  const term = query.trim().toLowerCase();
+  const visibleStudents = (students ?? []).filter((student) => !term || student.student_code.toLowerCase().includes(term) || student.full_name.toLowerCase().includes(term));
 
   const resetUploadState = () => {
     setFile(null);
@@ -101,45 +96,47 @@ export default function AdminEnrolments() {
     } catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
   };
   const previewUpload = async () => {
-    if (!file || !offeringId || !studentColumn || !nameColumn) return;
+    if (!file || !active || !studentColumn || !nameColumn) return;
     setWorking(true); setFlash("");
-    try { setPreview(await previewEnrolmentUpload(session.access_token, offeringId, studentColumn, nameColumn, file, givenNameColumn)); }
+    try { setPreview(await previewEnrolmentUpload(session.access_token, active.semester_id, studentColumn, nameColumn, file, givenNameColumn)); }
     catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
   };
   const commit = async () => {
-    if (!file || !offeringId || !studentColumn || !nameColumn) return;
+    if (!file || !active || !studentColumn || !nameColumn) return;
     setWorking(true); setFlash("");
     try {
-      const result = await commitEnrolmentUpload(session.access_token, offeringId, studentColumn, nameColumn, file, givenNameColumn);
-      setFlash(`${result.accepted_count} students registered for ${selectedOffering?.unit_code}.`);
+      const result = await commitEnrolmentUpload(session.access_token, active.semester_id, studentColumn, nameColumn, file, givenNameColumn);
+      setFlash(`${result.accepted_count} students on the semester list. Each is available to grade uploads in ${result.offering_count} unit${result.offering_count === 1 ? "" : "s"}.`);
       resetUploadState(); setReplacing(false);
-      await Promise.all([loadRoster(offeringId), reload()]);
+      await Promise.all([loadList(active.semester_id), reload()]);
     } catch (err) { setFlash(errorMessage(err)); } finally { setWorking(false); }
   };
+  const runSearch = () => setQuery(searchInput);
+  const clearSearch = () => { setSearchInput(""); setQuery(""); };
 
   return <div className="app admin-period-page"><AdminSidebar user={session.user} /><main className="main">
     <div className="topbar"><div className="crumbs"><Link to="/units">Home</Link><span className="sep">›</span><Link to="/admin/setup">Semester Setup</Link><span className="sep">›</span><strong>Student List</strong></div></div>
-    <div className="content"><div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Student List</h1><div className="sub">{active ? `${active.year} ${active.period}` : "No semester selected"}</div></div>
-      <label className="adm-field"><span className="lbl">Semester</span><select className="adm-select" aria-label="Semester" value={active?.semester_id ?? ""} disabled={loading || working || rosterLoading} onChange={(event) => { resetUploadState(); setReplacing(false); setFlash(""); selectPeriod(Number(event.target.value)); }}>
+    <div className="content"><div className="unit-banner"><div><h1 style={{ fontSize: 26 }}>Student List</h1><div className="sub">{active ? `${active.year} ${active.period}` : "No semester selected"} · every student enrolled in the school this semester</div></div>
+      <label className="adm-field"><span className="lbl">Semester</span><select className="adm-select" aria-label="Semester" value={active?.semester_id ?? ""} disabled={loading || working || listLoading} onChange={(event) => { resetUploadState(); setReplacing(false); setFlash(""); selectPeriod(Number(event.target.value)); }}>
         {data?.periods.map((period) => <option key={period.semester_id} value={period.semester_id}>{period.year} {period.period} · {period.status}</option>)}
       </select></label>
     </div>
-      {(flash || error || loading) && <div className="adm-flash">{flash || error || "Loading enrolment records..."}<span className="x" onClick={() => setFlash("")}>✕</span></div>}
+      {(flash || error || loading) && <div className="adm-flash">{flash || error || "Loading student list..."}<span className="x" onClick={() => setFlash("")}>✕</span></div>}
       {!active && !loading && <div className="banner"><div className="ico">!</div><div className="body">No semester was found.</div></div>}
-      {archived && <div className="banner"><div className="body">Archived semester. Student enrolments are read-only.</div></div>}
-      {active && !offeringsThisSemester.length && !loading && <div className="banner"><div className="ico">!</div><div className="body">{active.year} {active.period} has no unit offerings yet — add one via Unit Offerings or Tutor List before uploading a student list.</div></div>}
+      {archived && <div className="banner"><div className="body">Archived semester. The student list is read-only.</div></div>}
+
       <div className="adm-card">
-        <div className="adm-card-head"><div><h4>Upload Student List</h4><div className="h-sub">Use a UTF-8 CSV. First inspect the headers, map the student ID and name columns, then validate before committing.</div></div><select className="adm-select" disabled={!offeringsThisSemester.length} value={offeringId ?? ""} onChange={(event) => { setOfferingId(Number(event.target.value)); resetUploadState(); setReplacing(false); }}>{offeringsThisSemester.map((offering) => <option key={offering.offering_id} value={offering.offering_id}>{offering.year} {offering.period} · {offering.unit_code}</option>)}</select></div>
+        <div className="adm-card-head"><div><h4>Upload Student List</h4><div className="h-sub">One list for the whole semester. Grade uploads for every unit are checked against it, and students not on it are skipped. Re-uploading adds new students and updates names; it does not remove anyone.</div></div></div>
         {file ? (
           <div className="adm-file-card">
             <div className="icn">CSV</div>
             <div><div className="nm">{file.name}</div><div className="sub">{inspection?.row_count ?? 0} rows · {inspection?.headers.length ?? 0} columns · {formatFileSize(file.size)}</div></div>
             <button className="btn" disabled={archived} onClick={startReplacing}>Replace file</button>
           </div>
-        ) : latestBatch && !replacing ? (
+        ) : upload && !replacing ? (
           <div className="adm-file-card">
             <div className="icn">CSV</div>
-            <div><div className="nm">{latestBatch.original_filename}</div><div className="sub">Uploaded {formatDateTime(latestBatch.uploaded_at)}</div></div>
+            <div><div className="nm">{upload.original_filename}</div><div className="sub">{upload.accepted_count} students · uploaded {formatDateTime(upload.uploaded_at)}</div></div>
             <button className="btn" disabled={archived} onClick={startReplacing}>Replace file</button>
           </div>
         ) : (
@@ -147,8 +144,8 @@ export default function AdminEnrolments() {
             <label className="adm-drop">
               <div className="icn">CSV</div>
               <div className="t">Upload Student List</div>
-              <div className="s">The file is checked by the server. Required data: one student ID column and a name (either one full-name column, or separate surname / given-names columns).</div>
-              <input type="file" accept=".csv,text/csv" disabled={!offeringId || archived} onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} />
+              <div className="s">The file is checked by the server. Required data: a student ID column and a name (either one full-name column, or separate surname / given-names columns).</div>
+              <input type="file" accept=".csv,text/csv" disabled={!active || archived} onChange={(event) => event.target.files?.[0] && void chooseFile(event.target.files[0])} />
             </label>
           </div>
         )}
@@ -164,16 +161,23 @@ export default function AdminEnrolments() {
         )}
       </div>
 
-      {preview && <><div className="adm-stats"><div className="adm-stat ok"><div className="lbl"><span className="b" />Ready to register</div><div className="v">{preview.accepted_count}</div><div className="sub">Valid student records</div></div><div className="adm-stat risk"><div className="lbl"><span className="b" />Errors</div><div className="v">{errorCount}</div><div className="sub">Must be fixed before commit</div></div><div className="adm-stat warn"><div className="lbl"><span className="b" />Warnings</div><div className="v">{warningCount}</div><div className="sub">Review if present</div></div><div className="adm-stat"><div className="lbl"><span className="b" />Rows checked</div><div className="v">{preview.row_count}</div><div className="sub">Source file total</div></div></div><div className="adm-card"><div className="adm-card-head"><div><h4>Validation results</h4><div className="h-sub">The server will run the same checks again when you commit.</div></div></div>{preview.issues.length ? <table className="adm-tbl"><thead><tr><th>Row</th><th>Severity</th><th>Issue</th></tr></thead><tbody>{preview.issues.slice(0, 25).map((issue, index) => <tr key={`${issue.row}-${index}`} className={issue.severity === "error" ? "row-err" : "row-warn"}><td className="mono">{issue.row ?? "—"}</td><td><span className={`adm-row-status ${issue.severity === "error" ? "err" : "warn"}`}>{issue.severity}</span></td><td>{issue.message}</td></tr>)}</tbody></table> : <div className="adm-empty">All rows are ready to register.</div>}</div><div className="adm-commit"><div><div className="hd">Commit student enrolments</div><div className="sb">This creates or updates the student records and links them to {selectedOffering?.unit_code}.</div></div><div className="actions"><button className="btn" onClick={() => setPreview(null)}>Adjust mapping</button><button className="btn primary" disabled={working || errorCount > 0} onClick={() => void commit()}>{working ? "Committing..." : "Commit enrolments"}</button></div></div></>}
+      {preview && <><div className="adm-stats"><div className="adm-stat ok"><div className="lbl"><span className="b" />Ready to register</div><div className="v">{preview.accepted_count}</div><div className="sub">Valid student records</div></div><div className="adm-stat risk"><div className="lbl"><span className="b" />Errors</div><div className="v">{errorCount}</div><div className="sub">Must be fixed before commit</div></div><div className="adm-stat warn"><div className="lbl"><span className="b" />Warnings</div><div className="v">{warningCount}</div><div className="sub">Review if present</div></div><div className="adm-stat"><div className="lbl"><span className="b" />Rows checked</div><div className="v">{preview.row_count}</div><div className="sub">Source file total</div></div></div><div className="adm-card"><div className="adm-card-head"><div><h4>Validation results</h4><div className="h-sub">The server will run the same checks again when you commit.</div></div></div>{preview.issues.length ? <table className="adm-tbl"><thead><tr><th>Row</th><th>Severity</th><th>Issue</th></tr></thead><tbody>{preview.issues.slice(0, 25).map((issue, index) => <tr key={`${issue.row}-${index}`} className={issue.severity === "error" ? "row-err" : "row-warn"}><td className="mono">{issue.row ?? "—"}</td><td><span className={`adm-row-status ${issue.severity === "error" ? "err" : "warn"}`}>{issue.severity}</span></td><td>{issue.message}</td></tr>)}</tbody></table> : <div className="adm-empty">All rows are ready to register.</div>}</div><div className="adm-commit"><div><div className="hd">Commit student list</div><div className="sb">This adds the students to the semester list and makes them available to every unit's grade upload.</div></div><div className="actions"><button className="btn" onClick={() => setPreview(null)}>Adjust mapping</button><button className="btn primary" disabled={working || errorCount > 0} onClick={() => void commit()}>{working ? "Committing..." : "Commit student list"}</button></div></div></>}
 
       {!file && !preview && (
         <div className="adm-card">
-          <div className="adm-card-head"><div><h4>Enrolled students{selectedOffering ? ` — ${selectedOffering.unit_code}` : ""}</h4><div className="h-sub">{latestBatch ? `${latestBatch.accepted_count} of ${latestBatch.row_count} rows accepted from ${latestBatch.original_filename}, uploaded ${formatDateTime(latestBatch.uploaded_at)}.` : "The full reference list for this offering."}</div></div></div>
-          {rosterLoading ? <div className="adm-empty">Loading student list...</div> : !students || students.length === 0 ? (
-            <div className="adm-empty">No students on file yet for this offering — upload a Student List above.</div>
+          <div className="adm-card-head"><div><h4>Student list{students ? ` — ${students.length} student${students.length === 1 ? "" : "s"}` : ""}</h4><div className="h-sub">{term ? `${visibleStudents.length} match${visibleStudents.length === 1 ? "" : "es"} "${query.trim()}".` : "Search by student ID or name."}</div></div></div>
+          <div style={{ display: "flex", gap: 8, padding: "0 20px 16px" }}>
+            <input className="adm-search" placeholder="Student ID or name" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") runSearch(); }} style={{ flex: 1 }} />
+            <button className="btn" onClick={runSearch}>Search</button>
+            {(query || searchInput) && <button className="btn" onClick={clearSearch}>Clear</button>}
+          </div>
+          {listLoading ? <div className="adm-empty">Loading student list...</div> : !students || students.length === 0 ? (
+            <div className="adm-empty">No students on the list yet — upload the semester Student List above.</div>
+          ) : visibleStudents.length === 0 ? (
+            <div className="adm-empty">No student matches that search.</div>
           ) : (
             <table className="adm-tbl"><thead><tr><th>Student ID</th><th>Name</th></tr></thead><tbody>
-              {students.map((student) => <tr key={student.student_id}><td className="mono">{student.student_code}</td><td>{student.full_name}</td></tr>)}
+              {visibleStudents.map((student) => <tr key={student.student_id}><td className="mono">{student.student_code}</td><td>{student.full_name}</td></tr>)}
             </tbody></table>
           )}
         </div>
