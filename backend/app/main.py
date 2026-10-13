@@ -747,8 +747,8 @@ def generate_report_draft(
     user: Annotated[dict, Depends(require_offering_access())],
     offering_id: int = 1,
 ):
-    if user["role_name"] not in ("lecturer", "coordinator"):
-        raise HTTPException(status_code=403, detail="Only assigned teaching staff can generate a report draft")
+    if user["role_name"] not in _REPORT_AUTHOR_ROLE_NAMES:
+        raise HTTPException(status_code=403, detail="Only teaching staff and super admins can generate a report draft")
 
     existing_report = _report_row(offering_id)
     if existing_report and existing_report["status"] in ("submitted", "approved"):
