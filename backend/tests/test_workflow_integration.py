@@ -485,6 +485,7 @@ def test_super_admin_can_write_a_report_but_still_submits_before_approving(db, f
     sections = {"attainment_analysis": "Analysis", "previous_cohort_outcomes": "Previous",
                 "next_cohort_action_plan": "Next"}
 
+    main.generate_report_draft(main.ReportGenerateRequest(), admin, offering)
     main.save_report(main.ReportUpdate(offering_id=offering, **sections), admin)
     assert db.execute("SELECT status FROM ai_report").fetchone()["status"] == "draft"
 
@@ -505,7 +506,8 @@ def test_management_reviews_reports_but_cannot_write_them(db, fixture):
     reports and never author one."""
     offering = fixture["offerings"][0]
     manager = {"user_id": fixture["users"][1], "role_name": "management", "permission_level": 30}
-    for call in (lambda: main.save_report(main.ReportUpdate(offering_id=offering, attainment_analysis="a",
+    for call in (lambda: main.generate_report_draft(main.ReportGenerateRequest(), manager, offering),
+                 lambda: main.save_report(main.ReportUpdate(offering_id=offering, attainment_analysis="a",
                                                             previous_cohort_outcomes="b", next_cohort_action_plan="c"), manager),
                  lambda: main.submit_report(main.ReportAction(offering_id=offering), manager)):
         with pytest.raises(HTTPException) as exc:
