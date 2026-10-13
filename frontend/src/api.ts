@@ -113,8 +113,8 @@ export type ReportSections = {
 
 export type MappingPayload = {
   ulos: Array<{ offering_ulo_id: number; ulo_code: string; description: string }>;
-  plos: Array<{ plo_id: number; plo_code: string; description: string; program_code: string; program_name: string }>;
-  programs: Array<{ program_id: number; program_code: string; program_name: string; plo_count: number }>;
+  plos: Array<{ plo_id: number; plo_code: string; description: string }>;
+  programs: Array<{ program_id: number; program_code: string; program_name: string }>;
   handbook_confirmed: boolean;
   mappings: Array<{ mapping_id: number; offering_ulo_id: number; plo_id: number }>;
 };

@@ -972,16 +972,11 @@ def mappings(user: Annotated[dict, Depends(require_offering_access())], offering
         "SELECT offering_ulo_id, ulo_code, description FROM offering_ulo WHERE offering_id = %s ORDER BY ulo_code",
         (offering_id,),
     )
+    # The eleven programme outcomes are shared by every programme, so they are
+    # not filtered by the offering's programmes -- a unit in BCS and BCSDS maps
+    # against one set of eleven, not one set per programme.
     plos = fetch_all(
-        """
-        SELECT DISTINCT p.plo_id, p.plo_code, p.description, pr.program_code, pr.program_name
-        FROM plo p
-        JOIN program pr ON pr.program_id = p.program_id
-        JOIN offering_program op ON op.program_id = p.program_id
-        WHERE op.offering_id = %s
-        ORDER BY p.plo_id
-        """,
-        (offering_id,),
+        "SELECT plo_id, plo_code, description FROM plo WHERE program_id IS NULL ORDER BY plo_id"
     )
     rows = fetch_all(
         """
@@ -992,7 +987,10 @@ def mappings(user: Annotated[dict, Depends(require_offering_access())], offering
         """,
         (offering_id,),
     )
-    programs = fetch_all("SELECT p.program_id, p.program_code, p.program_name, COUNT(plo.plo_id) AS plo_count FROM offering_program op JOIN program p ON p.program_id = op.program_id LEFT JOIN plo ON plo.program_id = p.program_id WHERE op.offering_id = %s GROUP BY p.program_id ORDER BY p.program_code", (offering_id,))
+    # Listed for context only. A programme no longer carries its own PLOs, so
+    # there is nothing per-programme left to count here; the linked programmes
+    # matter for telling cohorts apart in later reporting.
+    programs = fetch_all("SELECT p.program_id, p.program_code, p.program_name FROM offering_program op JOIN program p ON p.program_id = op.program_id WHERE op.offering_id = %s ORDER BY p.program_code", (offering_id,))
     confirmed = fetch_one("SELECT EXISTS(SELECT 1 FROM handbook_import_snapshot WHERE offering_id = %s AND status = 'confirmed') AS present", (offering_id,))
     return {"ulos": ulos, "plos": plos, "mappings": rows, "programs": programs, "handbook_confirmed": confirmed["present"]}
 
@@ -1008,16 +1006,17 @@ def save_mappings(
             _lock_editable_offering(cur, payload.offering_id)
             cur.execute("SELECT offering_ulo_id FROM offering_ulo WHERE offering_id = %s", (payload.offering_id,))
             valid_ulos = {r["offering_ulo_id"] for r in cur.fetchall()}
-            cur.execute("SELECT p.plo_id, p.program_id FROM plo p JOIN offering_program op ON op.program_id = p.program_id WHERE op.offering_id = %s", (payload.offering_id,))
-            allowed_plos = {r["plo_id"]: r["program_id"] for r in cur.fetchall()}
+            cur.execute("SELECT plo_id FROM plo WHERE program_id IS NULL")
+            allowed_plos = {r["plo_id"] for r in cur.fetchall()}
             pairs = {(item.get("offering_ulo_id"), item.get("plo_id")) for item in payload.mappings}
             if len(pairs) != len(payload.mappings) or any(u not in valid_ulos or p not in allowed_plos for u, p in pairs):
-                raise HTTPException(status_code=422, detail="Select unique ULO/PLO links belonging to this offering and its programmes.")
-            for program_id in set(allowed_plos.values()):
-                if {u for u, p in pairs if allowed_plos[p] == program_id} != valid_ulos:
-                    raise HTTPException(status_code=422, detail="Every ULO needs a PLO link for each linked programme with PLO definitions.")
+                raise HTTPException(status_code=422, detail="Select unique ULO/PLO links belonging to this offering.")
             if not valid_ulos or not allowed_plos:
-                raise HTTPException(status_code=422, detail="Import ULOs and supply programme PLO definitions before saving a mapping.")
+                raise HTTPException(status_code=422, detail="Import ULOs before saving a mapping.")
+            # One shared PLO set means one link per ULO is enough, where the old
+            # per-programme set demanded the same decision once per programme.
+            if {u for u, _ in pairs} != valid_ulos:
+                raise HTTPException(status_code=422, detail="Every ULO needs at least one PLO link.")
             cur.execute(
                 "UPDATE ulo_plo_mapping SET is_active = FALSE, removed_by = %s, removed_at = CURRENT_TIMESTAMP WHERE offering_id = %s",
                 (user["user_id"], payload.offering_id),
@@ -2884,7 +2883,33 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
     cur.execute("DELETE FROM cohort_ulo_attainment WHERE offering_id = %s", (offering_id,))
     cur.execute(
         """
-        WITH calculated AS (
+        WITH assessed AS (
+            -- Who actually sat this unit. The Student List is a whole-cohort
+            -- roll uploaded once per semester, so every student on it is
+            -- enrolled in every offering; the coordinator's gradebook is what
+            -- says which of them took this one. An enrolment carrying no mark
+            -- at all is therefore a student who is not in this unit, and
+            -- counting them would drag the unit's attainment toward zero.
+            --
+            -- A student who did sit the unit but missed one task still appears
+            -- here, because they hold marks for the others, and that missed
+            -- task still scores zero against them below. Only students with
+            -- nothing at all are left out.
+            SELECT e.enrollment_id
+            FROM enrollment e
+            WHERE e.offering_id = %s
+              AND (EXISTS (
+                       SELECT 1 FROM student_grade sg
+                       WHERE sg.enrollment_id = e.enrollment_id AND sg.offering_id = e.offering_id
+                   )
+                   OR EXISTS (
+                       SELECT 1 FROM student_component_grade g
+                       JOIN assessment_component c ON c.component_id = g.component_id
+                       JOIN assessment a ON a.assessment_id = c.assessment_id
+                       WHERE g.enrollment_id = e.enrollment_id AND a.offering_id = e.offering_id
+                   ))
+        ),
+        calculated AS (
             SELECT
                 e.enrollment_id,
                 au.offering_ulo_id,
@@ -2900,6 +2925,7 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
                 SUM(a.weight * au.allocated_weight / 100) AS total_available_weight,
                 SUM(COALESCE(cg.performance, sg.raw_mark / sg.max_mark, 0) * a.weight * au.allocated_weight / 100) AS achieved_weight
             FROM enrollment e
+            JOIN assessed ON assessed.enrollment_id = e.enrollment_id
             JOIN assessment_ulo au ON au.offering_id = e.offering_id
             JOIN assessment a ON a.assessment_id = au.assessment_id
             LEFT JOIN student_grade sg ON sg.enrollment_id = e.enrollment_id
@@ -2927,12 +2953,15 @@ def _recalculate_attainment(cur, offering_id: int) -> int:
         FROM calculated
         WHERE total_available_weight > 0
         """,
-        (offering_id, offering_id),
+        (offering_id, offering_id, offering_id),
     )
     attainment_count = cur.rowcount
+    # The cohort is the students who were actually scored, so a pass rate reads
+    # as a share of the people who sat the unit rather than of the whole roll.
     cur.execute(
         """
-        SELECT COUNT(*) AS enrolled_count FROM enrollment WHERE offering_id = %s
+        SELECT COUNT(DISTINCT enrollment_id) AS enrolled_count
+        FROM student_ulo_attainment WHERE offering_id = %s
         """,
         (offering_id,),
     )

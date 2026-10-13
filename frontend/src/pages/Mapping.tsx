@@ -67,8 +67,10 @@ export default function Mapping() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offeringId, session]);
 
+  // The PLO set is shared by every programme, so one link per ULO is what the
+  // backend asks for -- not one per linked programme.
   const uncoveredUlos = useMemo(
-    () => mapping?.ulos.filter((ulo) => mapping.programs.filter((program) => program.plo_count > 0).some((program) => !mapping.plos.some((plo) => plo.program_code === program.program_code && cells[`${plo.plo_id},${ulo.offering_ulo_id}`] === "on"))) ?? [],
+    () => mapping?.ulos.filter((ulo) => !mapping.plos.some((plo) => cells[`${plo.plo_id},${ulo.offering_ulo_id}`] === "on")) ?? [],
     [cells, mapping],
   );
 
@@ -182,9 +184,9 @@ export default function Mapping() {
 
           {mapping && <div className="panel programme-context">
             <h4>Programmes linked to this offering</h4>
-            {mapping.programs.length ? mapping.programs.map((program) => <p key={program.program_id}><strong>{program.program_code}</strong> · {program.program_code === "DEV-BIT" ? "Development demo PLOs — not approved course outcomes" : program.plo_count ? `${program.plo_count} PLOs available` : "PLO definitions pending — supply the approved list before mapping this programme"}</p>) : <p>No programme is linked. Assign one in Unit Offerings or commit the Tutor List first.</p>}
+            {mapping.programs.length ? mapping.programs.map((program) => <p key={program.program_id}><strong>{program.program_code}</strong> · {program.program_name}</p>) : <p>No programme is linked. Assign one in Unit Offerings or commit the Tutor List first.</p>}
+            <p>All programmes share the same {mapping.plos.length} programme learning outcomes, so each ULO is mapped once below.</p>
             {!mapping.handbook_confirmed && <p>No Handbook import has been confirmed for this offering. The current setup may contain demo or manual records.</p>}
-            {hasUlos && !mapping.plos.length && <p>Handbook ULOs are available below. PLO mapping becomes available once a linked programme has PLO definitions.</p>}
           </div>}
           {loading ? <div className="panel">Loading mapping data...</div> : !mapping || !hasUlos ? (
             <div className="panel">
@@ -197,13 +199,13 @@ export default function Mapping() {
               <div className="mx-head"><div><h4>Mapping matrix</h4><div className="h-sub">{canEdit ? "Select the PLO links for each ULO, then save the reviewed mapping." : "You have read-only access to this reviewed mapping."}</div></div></div>
               <table className="mx-table"><colgroup><col className="col-plo" />{mapping.ulos.map((ulo) => <col key={ulo.offering_ulo_id} className="col-lo" />)}</colgroup>
                 <thead><tr><th className="plo-head"><div className="plo-head-title">Program learning outcomes</div></th>{mapping.ulos.map((ulo) => <th key={ulo.offering_ulo_id} className="lo-head"><span className="lo-badge">{ulo.ulo_code}</span><div className="lo-head-text">{ulo.description}</div></th>)}</tr></thead>
-                <tbody>{mapping.plos.map((plo) => <tr key={plo.plo_id} className={selected.startsWith(`${plo.plo_id},`) ? "active" : ""}><td className="plo-cell"><div className="plo-cell-head"><span className="plo-badge">{plo.plo_code}</span><span className="h-sub">{plo.program_code}</span></div><details className="plo-description"><summary>PLO definition</summary><p>{plo.description}</p></details></td>{mapping.ulos.map((ulo) => { const key = `${plo.plo_id},${ulo.offering_ulo_id}`; return <td key={ulo.offering_ulo_id}><button type="button" className={`cell${selected === key ? " selected" : ""}`} disabled={!canEdit} onClick={() => toggle(key)} aria-label={`Toggle ${plo.plo_code} for ${ulo.ulo_code}`}>{cells[key] === "on" && <span className="check">✓</span>}</button></td>; })}</tr>)}</tbody>
+                <tbody>{mapping.plos.map((plo) => <tr key={plo.plo_id} className={selected.startsWith(`${plo.plo_id},`) ? "active" : ""}><td className="plo-cell"><div className="plo-cell-head"><span className="plo-badge">{plo.plo_code}</span></div>{plo.description.trim() && <details className="plo-description"><summary>PLO definition</summary><p>{plo.description}</p></details>}</td>{mapping.ulos.map((ulo) => { const key = `${plo.plo_id},${ulo.offering_ulo_id}`; return <td key={ulo.offering_ulo_id}><button type="button" className={`cell${selected === key ? " selected" : ""}`} disabled={!canEdit} onClick={() => toggle(key)} aria-label={`Toggle ${plo.plo_code} for ${ulo.ulo_code}`}>{cells[key] === "on" && <span className="check">✓</span>}</button></td>; })}</tr>)}</tbody>
                 <tfoot><tr className="totals-row"><td>Links per ULO</td>{mapping.ulos.map((ulo) => <td key={ulo.offering_ulo_id}><span className="cov-num">{mapping.plos.filter((plo) => cells[`${plo.plo_id},${ulo.offering_ulo_id}`] === "on").length}</span></td>)}</tr></tfoot>
               </table>
             </div></div>
           )}
 
-          {hasSetupData && <div className="save-bar"><div className="stat">{uncoveredUlos.length === 0 ? <><strong>Every ULO has a PLO link for each configured programme.</strong> Ready to save.</> : <><strong>{uncoveredUlos.length} ULO{uncoveredUlos.length === 1 ? "" : "s"}</strong> still need programme PLO links.</>}</div>{canEdit && <div className="actions"><button className="btn primary" disabled={uncoveredUlos.length > 0 || saving} onClick={() => void save()}>{saving ? "Saving..." : "Save mapping"}</button></div>}</div>}
+          {hasSetupData && <div className="save-bar"><div className="stat">{uncoveredUlos.length === 0 ? <><strong>Every ULO has at least one PLO link.</strong> Ready to save.</> : <><strong>{uncoveredUlos.length} ULO{uncoveredUlos.length === 1 ? "" : "s"}</strong> still need a PLO link.</>}</div>{canEdit && <div className="actions"><button className="btn primary" disabled={uncoveredUlos.length > 0 || saving} onClick={() => void save()}>{saving ? "Saving..." : "Save mapping"}</button></div>}</div>}
         </div>
       </main>
 

@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 import pytest
 from fastapi import HTTPException
 
-from app import main, seed
+from app import main
 
 
 @pytest.fixture
@@ -212,15 +212,36 @@ def test_lo_attainment_is_independent_of_gradebook_mark_scale(db, fixture):
         assert db.execute("SELECT attainment_pct FROM student_ulo_attainment").fetchone()["attainment_pct"] == before
 
 
-def test_new_demo_results_use_the_same_calculation_as_uploads(db, monkeypatch):
-    monkeypatch.setattr(seed, "get_conn", main.get_conn)
-    seed.seed_demo_data()
+COHORT_COLUMNS = ("SELECT offering_ulo_id, enrolled_count, achieved_count, average_attainment_pct, pass_rate_pct"
+                  " FROM cohort_ulo_attainment WHERE offering_id = %s ORDER BY offering_ulo_id")
+
+
+def test_a_queued_refresh_uses_the_same_calculation_as_a_grade_upload(db, fixture):
+    """A deploy that changes the calculation queues every offering holding grades
+    (migration 013) and drains the queue at startup. Those offerings must land on
+    the numbers a grade upload commit would have produced, not on a second
+    implementation that happens to be close."""
+    ulo, _ = add_grades(db, fixture)
+    offering = fixture["offerings"][0]
+
+    main._recalculate_attainment(db.cursor(), offering)
+    direct = db.execute(COHORT_COLUMNS, (offering,)).fetchall()
+    assert direct == [{"offering_ulo_id": ulo, "enrolled_count": 1, "achieved_count": 1,
+                       "average_attainment_pct": Decimal("73.78"), "pass_rate_pct": Decimal("100.00")}]
+
+    # Cleared so the comparison below cannot pass on rows the direct call left
+    # behind -- the queued path has to recompute all of it. weighted_score goes
+    # too, because only the queued path writes it.
+    db.execute("DELETE FROM cohort_ulo_attainment WHERE offering_id = %s", (offering,))
+    db.execute("DELETE FROM student_ulo_attainment WHERE offering_id = %s", (offering,))
+    db.execute("UPDATE student_grade SET weighted_score = NULL WHERE offering_id = %s", (offering,))
+    db.execute("INSERT INTO attainment_refresh_pending (offering_id) VALUES (%s)", (offering,))
     main._refresh_pending_attainment()
-    outcomes = db.execute("SELECT average_attainment_pct, pass_rate_pct FROM cohort_ulo_attainment").fetchall()
-    assert len(outcomes) == 4
-    assert all(row["average_attainment_pct"] == Decimal("74.20") for row in outcomes)
-    assert all(row["pass_rate_pct"] == Decimal("100.00") for row in outcomes)
+
+    assert db.execute(COHORT_COLUMNS, (offering,)).fetchall() == direct
     assert db.execute("SELECT COUNT(*) AS n FROM attainment_refresh_pending").fetchone()["n"] == 0
+    assert db.execute("SELECT COUNT(*) AS n FROM student_grade WHERE offering_id = %s AND weighted_score IS NULL",
+                      (offering,)).fetchone()["n"] == 0
 
 
 @pytest.fixture
@@ -414,3 +435,40 @@ def test_http_password_recovery_round_trip(db, fixture, reset_mail, monkeypatch)
     response = client.post("/api/auth/login", json={"email": "old@monash.edu", "password": "ReplacementPassword!"})
     assert response.status_code == 200
     assert client.get("/api/me", headers={"Authorization": "Bearer " + response.json()["access_token"]}).status_code == 200
+
+
+def test_attainment_counts_only_students_who_sat_the_unit(db, fixture):
+    """The Student List is a whole-cohort roll, so every student on it is enrolled
+    in every offering of the semester. The coordinator's gradebook is what says who
+    took this unit, and an enrolment carrying no mark at all must not dilute it."""
+    ulo, assessments = add_grades(db, fixture)
+    offering = fixture["offerings"][0]
+
+    main._recalculate_attainment(db.cursor(), offering)
+    alone = db.execute(COHORT_COLUMNS, (offering,)).fetchall()
+    assert alone == [{"offering_ulo_id": ulo, "enrolled_count": 1, "achieved_count": 1,
+                      "average_attainment_pct": Decimal("73.78"), "pass_rate_pct": Decimal("100.00")}]
+
+    # Nine more students from the semester roll, enrolled but never graded here.
+    for n in range(9):
+        student = insert(db, "INSERT INTO student (student_code, full_name) VALUES (%s, %s)",
+                         (f"roll-{n}", f"On The Roll {n}"))
+        db.execute("INSERT INTO enrollment (student_id, offering_id) VALUES (%s, %s)", (student, offering))
+    main._recalculate_attainment(db.cursor(), offering)
+    assert db.execute(COHORT_COLUMNS, (offering,)).fetchall() == alone
+    assert db.execute("SELECT COUNT(*) AS n FROM student_ulo_attainment WHERE offering_id=%s",
+                      (offering,)).fetchone()["n"] == 1
+
+    # A student who did sit the unit but missed one task stays in, and the missed
+    # task still scores zero against them -- that is a non-submission, not absence.
+    partial = insert(db, "INSERT INTO student (student_code, full_name) VALUES ('sat-partly', 'Sat Partly')")
+    enrollment = insert(db, "INSERT INTO enrollment (student_id, offering_id) VALUES (%s, %s)", (partial, offering))
+    db.execute("INSERT INTO student_grade (offering_id, enrollment_id, assessment_id, raw_mark, max_mark) "
+               "VALUES (%s, %s, %s, 10, 10)", (offering, enrollment, assessments[0]))
+    main._recalculate_attainment(db.cursor(), offering)
+    row = db.execute(COHORT_COLUMNS, (offering,)).fetchone()
+    assert row["enrolled_count"] == 2
+    # A1 alone: full marks on it earns weight 10 x contribution 20 = 2 of the
+    # 22.5 available, so the four tasks they never sat still count against them.
+    assert db.execute("SELECT attainment_pct FROM student_ulo_attainment WHERE enrollment_id=%s",
+                      (enrollment,)).fetchone()["attainment_pct"] == Decimal("8.89")
