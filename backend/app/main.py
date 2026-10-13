@@ -825,8 +825,8 @@ def generate_report_draft(
 
 @app.put("/api/reports")
 def save_report(payload: ReportUpdate, user: Annotated[dict, Depends(get_current_user)]):
-    if user["role_name"] not in ("lecturer", "coordinator"):
-        raise HTTPException(status_code=403, detail="Only lecturers and coordinators can edit a unit report")
+    if user["role_name"] not in _REPORT_AUTHOR_ROLE_NAMES:
+        raise HTTPException(status_code=403, detail="Only lecturers, coordinators and super admins can edit a unit report")
     ensure_offering_access(user, payload.offering_id, min_permission_level=10)
     sections = (
         payload.attainment_analysis.strip(),
@@ -889,8 +889,8 @@ def save_report(payload: ReportUpdate, user: Annotated[dict, Depends(get_current
 
 @app.post("/api/reports/submit")
 def submit_report(payload: ReportAction, user: Annotated[dict, Depends(get_current_user)]):
-    if user["role_name"] not in ("lecturer", "coordinator"):
-        raise HTTPException(status_code=403, detail="Only lecturers and coordinators can submit a report")
+    if user["role_name"] not in _REPORT_AUTHOR_ROLE_NAMES:
+        raise HTTPException(status_code=403, detail="Only lecturers, coordinators and super admins can submit a report")
     ensure_offering_access(user, payload.offering_id, min_permission_level=10)
     report = _report_row(payload.offering_id)
     if not report:
@@ -1734,6 +1734,12 @@ def send_email_reminder(
 
 
 _ADMIN_ROLE_NAMES = {"management", "super_admin"}
+# Who may write a unit report. super_admin is included so faculty staff can
+# step in on a coordinator's behalf -- a deliberate exception to the usual
+# separation of duties, which still holds for management: a course coordinator
+# reviews reports and never writes them. The review step itself is unchanged,
+# so even a super admin must submit a report before it can be approved.
+_REPORT_AUTHOR_ROLE_NAMES = {"lecturer", "coordinator", "super_admin"}
 _INTAKE_PERIODS = {"FEB", "JUL", "OCT"}
 _SEMESTER_STATUSES = {"planning", "active", "archived"}
 _OFFERING_STATUSES = {"draft", "active", "discontinued"}

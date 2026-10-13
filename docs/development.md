@@ -66,8 +66,8 @@ time, and is limited to 6 GB RAM and six CPU cores so the dashboard and
 database remain responsive. The backend calculates the factual attainment and
 historical sections deterministically; Ollama proposes only the next-cohort
 action. Student-level data is never sent to the model. The Report page supports
-draft saving, QAG submission, change requests, approval, and browser-based PDF
-export.
+draft saving, submission for course coordinator review, change requests,
+approval, and browser-based PDF export.
 
 ## Staff Account Recovery
 
