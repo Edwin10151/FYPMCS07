@@ -117,27 +117,34 @@ def test_stale_review_and_superseded_draft_cannot_apply(db, fixture):
     assert 'no longer current' in exc.value.detail
 
 
-def test_programme_without_plos_keeps_ulo_table_and_no_demo_plo_substitution(db, fixture):
-    offering = fixture['offerings'][0]
-    program = db.execute("SELECT program_id FROM program WHERE program_code='BCS'").fetchone()['program_id']
-    db.execute('INSERT INTO offering_program VALUES (%s,%s)',(offering,program))
-    snapshot, payload = draft(db, fixture)
-    confirm(db, fixture,snapshot,payload)
-    result = main.mappings(fixture['user'],offering)
-    assert result['handbook_confirmed'] is True
-    assert result['ulos'][0]['ulo_code'] == 'ULO1'
-    assert result['plos'] == []
-    assert result['programs'][0]['plo_count'] == 0
+# DISABLED: these three guaranteed that no real programme owned any PLOs, which
+# was true while the only PLOs in the system were DEV-BIT's demo set. Migration
+# 019 replaces that with one shared set of PLO 1 .. PLO 11 belonging to no
+# programme, so all three now assert the opposite of the intended behaviour.
+# Kept commented rather than deleted: if programme-specific outcomes are ever
+# added, the per-programme rules these cover need rewriting, not reinventing.
+# def test_programme_without_plos_keeps_ulo_table_and_no_demo_plo_substitution(db, fixture):
+#     offering = fixture['offerings'][0]
+#     program = db.execute("SELECT program_id FROM program WHERE program_code='BCS'").fetchone()['program_id']
+#     db.execute('INSERT INTO offering_program VALUES (%s,%s)',(offering,program))
+#     snapshot, payload = draft(db, fixture)
+#     confirm(db, fixture,snapshot,payload)
+#     result = main.mappings(fixture['user'],offering)
+#     assert result['handbook_confirmed'] is True
+#     assert result['ulos'][0]['ulo_code'] == 'ULO1'
+#     assert result['plos'] == []
+#     assert result['programs'][0]['plo_count'] == 0
 
 
-def test_mapping_cannot_use_an_unlinked_programme(db, fixture):
-    offering = fixture['offerings'][0]
-    ulo = insert(db,"INSERT INTO offering_ulo(offering_id,ulo_code,description) VALUES (%s,'ULO1','Test')",(offering,))
-    program = insert(db,"INSERT INTO program(program_code,program_name) VALUES ('TEST','Test')")
-    plo = insert(db,"INSERT INTO plo(program_id,plo_code,description) VALUES (%s,'PLO1','Test')",(program,))
-    with pytest.raises(HTTPException) as exc:
-        main.save_mappings(main.MappingUpdate(offering_id=offering,mappings=[{'offering_ulo_id':ulo,'plo_id':plo}]),fixture['user'])
-    assert exc.value.status_code == 422
+# DISABLED alongside test_programme_without_plos... above -- see the note there.
+# def test_mapping_cannot_use_an_unlinked_programme(db, fixture):
+#     offering = fixture['offerings'][0]
+#     ulo = insert(db,"INSERT INTO offering_ulo(offering_id,ulo_code,description) VALUES (%s,'ULO1','Test')",(offering,))
+#     program = insert(db,"INSERT INTO program(program_code,program_name) VALUES ('TEST','Test')")
+#     plo = insert(db,"INSERT INTO plo(program_id,plo_code,description) VALUES (%s,'PLO1','Test')",(program,))
+#     with pytest.raises(HTTPException) as exc:
+#         main.save_mappings(main.MappingUpdate(offering_id=offering,mappings=[{'offering_ulo_id':ulo,'plo_id':plo}]),fixture['user'])
+#     assert exc.value.status_code == 422
 
 
 def test_scope_change_requires_fetching_new_draft(db, fixture):
@@ -171,16 +178,17 @@ def test_two_aliases_cannot_overwrite_one_existing_outcome(db, fixture):
     assert 'same existing ULO' in exc.value.detail
 
 
-def test_roster_links_registered_programmes_without_cloning_demo_plos(db, fixture):
-    offering = fixture['offerings'][0]
-    demo = insert(db,"INSERT INTO program(program_code,program_name) VALUES ('DEV-BIT','Demo')")
-    insert(db,"INSERT INTO plo(program_id,plo_code,description) VALUES (%s,'PLO1','Demo only')",(demo,))
-    db.execute('INSERT INTO offering_program VALUES (%s,%s)',(offering,demo))
-    unit = {'unit_code':'FIT9991','programme_codes':['BCS','BCSDS','BSE'],'staffing':[]}
-    main._apply_staffing_for_unit(db.cursor(), offering, unit, [])
-    codes = {r['program_code'] for r in db.execute('SELECT p.program_code FROM offering_program op JOIN program p USING(program_id) WHERE offering_id=%s',(offering,)).fetchall()}
-    assert codes == {'DEV-BIT','BCS','BCSDS','BSE'}
-    assert db.execute('SELECT COUNT(*) AS n FROM plo WHERE program_id<>%s',(demo,)).fetchone()['n'] == 0
+# DISABLED alongside test_programme_without_plos... above -- see the note there.
+# def test_roster_links_registered_programmes_without_cloning_demo_plos(db, fixture):
+#     offering = fixture['offerings'][0]
+#     demo = insert(db,"INSERT INTO program(program_code,program_name) VALUES ('DEV-BIT','Demo')")
+#     insert(db,"INSERT INTO plo(program_id,plo_code,description) VALUES (%s,'PLO1','Demo only')",(demo,))
+#     db.execute('INSERT INTO offering_program VALUES (%s,%s)',(offering,demo))
+#     unit = {'unit_code':'FIT9991','programme_codes':['BCS','BCSDS','BSE'],'staffing':[]}
+#     main._apply_staffing_for_unit(db.cursor(), offering, unit, [])
+#     codes = {r['program_code'] for r in db.execute('SELECT p.program_code FROM offering_program op JOIN program p USING(program_id) WHERE offering_id=%s',(offering,)).fetchall()}
+#     assert codes == {'DEV-BIT','BCS','BCSDS','BSE'}
+#     assert db.execute('SELECT COUNT(*) AS n FROM plo WHERE program_id<>%s',(demo,)).fetchone()['n'] == 0
 
 
 def test_duplicate_handbook_codes_are_rejected_before_draft_creation():
@@ -188,3 +196,32 @@ def test_duplicate_handbook_codes_are_rejected_before_draft_creation():
     with pytest.raises(HandbookImportError, match='duplicate learning'):
         normalise_page_content({'unit_code':'FIT2004','title':'Test','unit_learning_outcomes':[
             {'code':'ULO1','description':'First'}, {'code':'ULO1','description':'Different'}]})
+
+
+def test_shared_plos_appear_for_every_offering_and_need_one_link_per_ulo(db, fixture):
+    offering = fixture['offerings'][0]
+    bcs, bcsds = [db.execute('SELECT program_id FROM program WHERE program_code=%s',(code,)).fetchone()['program_id']
+                  for code in ('BCS','BCSDS')]
+    for program in (bcs, bcsds):
+        db.execute('INSERT INTO offering_program VALUES (%s,%s)',(offering,program))
+    snapshot, payload = draft(db, fixture)
+    confirm(db, fixture, snapshot, payload)
+
+    result = main.mappings(fixture['user'], offering)
+    # Eleven shared outcomes, not eleven per linked programme, and the set does
+    # not depend on which programmes the offering belongs to.
+    assert [plo['plo_code'] for plo in result['plos']] == [f'PLO {n}' for n in range(1,12)]
+    assert {program['program_code'] for program in result['programs']} == {'BCS','BCSDS'}
+
+    ulo = result['ulos'][0]['offering_ulo_id']
+    plo = result['plos'][0]['plo_id']
+    with pytest.raises(HTTPException) as exc:
+        main.save_mappings(main.MappingUpdate(offering_id=offering, mappings=[]), fixture['user'])
+    assert exc.value.status_code == 422
+
+    # One link covers the ULO for both programmes, where the per-programme set
+    # used to demand the same tick once per programme.
+    assert main.save_mappings(main.MappingUpdate(offering_id=offering,
+        mappings=[{'offering_ulo_id':ulo,'plo_id':plo}]), fixture['user'])['status'] == 'saved'
+    assert db.execute('SELECT offering_ulo_id,plo_id FROM ulo_plo_mapping WHERE is_active').fetchall() == [
+        {'offering_ulo_id':ulo,'plo_id':plo}]

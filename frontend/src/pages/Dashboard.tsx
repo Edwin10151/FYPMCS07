@@ -54,7 +54,7 @@ export default function Dashboard() {
           {loading ? <div className="panel">Loading dashboard data...</div> : !data ? <div className="panel">The selected offering could not be loaded.</div> : <>
             <div className="unit-banner"><div><h1><span className="code">{data.offering.unit_code}</span>{data.offering.unit_name}</h1><div className="sub">{data.offering.program_names.join(" / ")} · {data.offering.year} {data.offering.period} · Development database</div></div></div>
             <div className="kpi-row">
-              <div className="kpi"><div className="lbl">Enrolled</div><div className="val">{data.stats.student_count}</div><div className="delta">Recorded enrolments</div></div>
+              <div className="kpi"><div className="lbl">Assessed</div><div className="val">{data.stats.student_count}</div><div className="delta">Students with marks in this unit</div></div>
               <div className="kpi"><div className="lbl">Overall attainment</div><div className="val">{averageAttainment === null ? "--" : <>{averageAttainment.toFixed(1)}<span className="u">%</span></>}</div><div className="delta">Mean across {data.stats.lo_count} ULOs</div></div>
               <div className="kpi"><div className="lbl">ULO outcomes at risk</div><div className="val warn">{data.stats.at_risk_count}<span className="u"> / {data.stats.lo_count}</span></div><div className="delta">Below the 70% pass-rate threshold</div></div>
               <div className="kpi"><div className="lbl">Students at risk</div><div className="val">{data.stats.student_at_risk_count}</div><div className="delta">Mean ULO attainment below 50%</div></div>
