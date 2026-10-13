@@ -472,3 +472,42 @@ def test_attainment_counts_only_students_who_sat_the_unit(db, fixture):
     # 22.5 available, so the four tasks they never sat still count against them.
     assert db.execute("SELECT attainment_pct FROM student_ulo_attainment WHERE enrollment_id=%s",
                       (enrollment,)).fetchone()["attainment_pct"] == Decimal("8.89")
+
+
+def test_super_admin_can_write_a_report_but_still_submits_before_approving(db, fixture):
+    """Faculty staff can step in for a coordinator, so super_admin may write a
+    report as well as review one. The order is unchanged: a report must be
+    submitted before anyone, super admin included, can approve it."""
+    offering = fixture["offerings"][0]
+    add_grades(db, fixture)           # submitting freezes an evidence snapshot,
+    main._recalculate_attainment(db.cursor(), offering)   # so results must exist
+    admin = {"user_id": fixture["users"][2], "role_name": "super_admin", "permission_level": 40}
+    sections = {"attainment_analysis": "Analysis", "previous_cohort_outcomes": "Previous",
+                "next_cohort_action_plan": "Next"}
+
+    main.save_report(main.ReportUpdate(offering_id=offering, **sections), admin)
+    assert db.execute("SELECT status FROM ai_report").fetchone()["status"] == "draft"
+
+    # A draft cannot be approved, whoever is asking.
+    with pytest.raises(HTTPException) as exc:
+        main.review_report(main.ReportReview(offering_id=offering, decision="approved"), admin)
+    assert exc.value.status_code == 409
+
+    main.submit_report(main.ReportAction(offering_id=offering), admin)
+    assert db.execute("SELECT status FROM ai_report").fetchone()["status"] == "submitted"
+
+    main.review_report(main.ReportReview(offering_id=offering, decision="approved"), admin)
+    assert db.execute("SELECT status FROM ai_report").fetchone()["status"] == "approved"
+
+
+def test_management_reviews_reports_but_cannot_write_them(db, fixture):
+    """Separation of duties still holds for a course coordinator: they approve
+    reports and never author one."""
+    offering = fixture["offerings"][0]
+    manager = {"user_id": fixture["users"][1], "role_name": "management", "permission_level": 30}
+    for call in (lambda: main.save_report(main.ReportUpdate(offering_id=offering, attainment_analysis="a",
+                                                            previous_cohort_outcomes="b", next_cohort_action_plan="c"), manager),
+                 lambda: main.submit_report(main.ReportAction(offering_id=offering), manager)):
+        with pytest.raises(HTTPException) as exc:
+            call()
+        assert exc.value.status_code == 403

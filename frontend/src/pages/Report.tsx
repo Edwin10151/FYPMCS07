@@ -111,9 +111,14 @@ export default function Report() {
     || coordinatorContext !== (report?.coordinator_comment ?? "");
   const complete = Object.values(sections).every((value) => value.trim());
   const teachingUser = session?.user.role_name === "lecturer" || session?.user.role_name === "coordinator";
+  const superAdmin = session?.user.role_name === "super_admin";
   const archived = offering?.semester_status === "archived";
-  const canEdit = !archived && !!teachingUser && (!report || report.status === "draft" || report.status === "changes_requested");
-  const isAdminTier = session?.user.role_name === "management" || session?.user.role_name === "super_admin";
+  // A super admin can write a report as well as review one, so faculty staff can
+  // step in for a coordinator. The order is unchanged for everybody: a report is
+  // editable only while it is a draft or has come back for changes, and the
+  // review panel appears only once it has been submitted.
+  const canEdit = !archived && (!!teachingUser || superAdmin) && (!report || report.status === "draft" || report.status === "changes_requested");
+  const isAdminTier = session?.user.role_name === "management" || superAdmin;
   const canReview = !archived && isAdminTier && report?.status === "submitted";
   const evidence = report?.evidence_stale ? null : report?.evidence_snapshot;
   const frozen = report?.status === "submitted" || report?.status === "approved";
@@ -181,7 +186,7 @@ export default function Report() {
     if (dirty) await saveReport(session.access_token, offeringId, sections, coordinatorContext);
     await submitReport(session.access_token, offeringId);
     await load();
-    setNotice("Report submitted for QAG approval.");
+    setNotice("Report submitted for course coordinator approval.");
   });
 
   const review = (decision: "approved" | "changes_requested") => run("review", async () => {
@@ -219,7 +224,7 @@ export default function Report() {
             {report?.evidence_stale && <div className="review-note no-print" role="status"><strong>Report data changed</strong><p>Review the updated figures and draft text, then save or regenerate before submitting.</p></div>}
 
             {report?.status === "changes_requested" && <div className="review-note no-print"><strong>Changes requested</strong><p>{report.reviewer_comment}</p></div>}
-            {report?.status === "submitted" && teachingUser && <div className="review-note no-print"><strong>Awaiting QAG review</strong><p>The submitted report is read-only until it is approved or returned for changes.</p></div>}
+            {report?.status === "submitted" && teachingUser && <div className="review-note no-print"><strong>Awaiting course coordinator review</strong><p>The submitted report is read-only until it is approved or returned for changes.</p></div>}
 
             {canEdit && <label className="context-field no-print">
               <span>Coordinator context for the draft</span>
@@ -278,7 +283,7 @@ export default function Report() {
             </article>
 
             {canReview && <section className="review-panel no-print">
-              <div><h2>QAG review</h2><p>Approve the report or return it with a clear comment.</p></div>
+              <div><h2>Course coordinator review</h2><p>Approve the report or return it with a clear comment.</p></div>
               <textarea value={reviewComment} maxLength={4000} placeholder="Review comment" onChange={(event) => setReviewComment(event.target.value)} />
               <div className="report-actions">
                 <button className="btn" disabled={!!busy || !reviewComment.trim()} onClick={() => review("changes_requested")}>Request changes</button>
