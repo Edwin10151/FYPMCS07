@@ -76,6 +76,23 @@ def test_management_cannot_reset(monkeypatch):
     assert not calls
 
 
+@pytest.mark.parametrize("role,enabled,backup,error", [
+    ("management", True, True, 403),
+    ("coordinator", True, True, 403),
+    ("super_admin", False, True, 403),
+    ("super_admin", True, False, 422),
+])
+def test_demo_reset_requires_super_admin_enabled_server_and_backup(monkeypatch, role, enabled, backup, error):
+    calls = install_cursor(monkeypatch)
+    monkeypatch.setattr(main.settings, "enable_demo_reset", enabled)
+    with pytest.raises(HTTPException) as raised:
+        main.reset_demo_period(2, main.DemoResetRequest(
+            confirmation="RESET DEMO 2026 JUL", revision="unused", backup_confirmed=backup,
+        ), {"role_name": role, "user_id": 1})
+    assert raised.value.status_code == error
+    assert not calls
+
+
 @pytest.mark.parametrize("year,period,expected", [
     (2026, "FEB", (2026, "JUL")),
     (2026, "JUL", (2026, "OCT")),

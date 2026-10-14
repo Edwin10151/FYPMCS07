@@ -10,6 +10,7 @@ class Settings(BaseModel):
     )
     secret_key: str = os.getenv("SECRET_KEY", "mcs07-dev-secret")
     demo_password: str = os.getenv("DEMO_PASSWORD", "Password123!")
+    enable_demo_reset: bool = os.getenv("ENABLE_DEMO_RESET", "false").lower() == "true"
     cors_origins: list[str] = [
         item.strip()
         for item in os.getenv(

@@ -26,6 +26,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://mcs07:mcs07-dev-password@db:5432/mcs07}
       SECRET_KEY: ${SECRET_KEY:-mcs07-dev-secret}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-Password123!}
+      ENABLE_DEMO_RESET: ${ENABLE_DEMO_RESET:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080}
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://ollama:11434}

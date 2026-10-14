@@ -55,7 +55,7 @@ function ReportSection({ title, value, editable, onChange }: {
   return (
     <section className="cqi-section">
       <h3>{title}</h3>
-      {editable ? <textarea value={value} maxLength={2000} onChange={(event) => onChange(event.target.value)} /> : <p>{value || "Not completed."}</p>}
+      {editable ? <textarea aria-label={title} value={value} maxLength={2000} onChange={(event) => onChange(event.target.value)} /> : <p>{value || "Not completed."}</p>}
       {editable && <p className="print-only">{value || "Not completed."}</p>}
     </section>
   );
