@@ -3,6 +3,17 @@
 
 .unit-banner-right { display: flex; align-items: center; gap: 14px; }
 
+.admin-period-page .unit-banner-right { flex-wrap: wrap; justify-content: flex-end; }
+.adm-demo-reset-dialog { border: 0; margin: auto; width: calc(100% - 32px); border-radius: 8px; }
+.adm-demo-reset-dialog::backdrop { background: rgba(0, 27, 43, 0.55); }
+.adm-demo-reset-dialog h3 { letter-spacing: 0; }
+.adm-demo-reset-dialog .adm-modal-actions { flex-wrap: wrap; }
+.adm-demo-reset-dialog .btn { white-space: normal; }
+.demo-reset-counts { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; font-size: 13px; }
+.demo-reset-counts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.demo-reset-check { display: flex; align-items: flex-start; gap: 8px; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+.demo-reset-check input { flex-shrink: 0; margin-top: 3px; }
+
 .admin-period-page .semester-switch {
   font-family: inherit;
   max-width: 100%;

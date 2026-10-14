@@ -436,6 +436,28 @@ export function resetAdminPeriod(token: string, semesterId: number, confirmation
   return apiFetch<{ status: string; offerings_deleted: number; accounts_deleted: number }>(`/admin/periods/${semesterId}/reset`, token, { method: "POST", body: JSON.stringify({ confirmation }) });
 }
 
+export type DemoResetPreview = {
+  semester_id: number;
+  year: number;
+  period: string;
+  enabled: boolean;
+  confirmation: string;
+  revision: string;
+  counts: { offerings: number; students: number; enrolments: number; grade_uploads: number; assessment_grades: number; component_scores: number; assessments: number; learning_outcomes: number; handbook_imports: number; reports: number };
+  approved_reports: Array<{ report_id: number; unit_code: string }>;
+};
+
+export function previewDemoReset(token: string, semesterId: number) {
+  return apiFetch<DemoResetPreview>(`/admin/periods/${semesterId}/demo-reset`, token);
+}
+
+export function resetDemoPeriod(token: string, preview: DemoResetPreview, confirmation: string, backupConfirmed: boolean, includeApprovedReports: boolean) {
+  return apiFetch<{ status: string; offerings_retained: number; accounts_deleted: number }>(`/admin/periods/${preview.semester_id}/demo-reset`, token, {
+    method: "POST",
+    body: JSON.stringify({ confirmation, revision: preview.revision, backup_confirmed: backupConfirmed, include_approved_reports: includeApprovedReports }),
+  });
+}
+
 export type OfferingInput = {
   semester_id: number;
   program_ids: number[];

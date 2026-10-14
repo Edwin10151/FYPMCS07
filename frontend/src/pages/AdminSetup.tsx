@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { createAdminPeriod, deactivateAdminPeriod, errorMessage, getEmailReminderPreview, getStaffingStatus, resetAdminPeriod, sendEmailReminder, updateAdminPeriod, type EmailReminderPreview, type UnmatchedUnit } from "../api";
+import { createAdminPeriod, deactivateAdminPeriod, errorMessage, getEmailReminderPreview, getStaffingStatus, previewDemoReset, resetAdminPeriod, resetDemoPeriod, sendEmailReminder, updateAdminPeriod, type DemoResetPreview, type EmailReminderPreview, type UnmatchedUnit } from "../api";
 import AdminSidebar from "../components/AdminSidebar";
 import "../components/AdminNav.css";
 import { useAdminContext } from "../useAdminContext";
@@ -32,6 +32,11 @@ export default function AdminSetup() {
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetConfirmation, setResetConfirmation] = useState("");
+  const [demoPreview, setDemoPreview] = useState<DemoResetPreview | null>(null);
+  const [demoConfirmation, setDemoConfirmation] = useState("");
+  const [demoBackupConfirmed, setDemoBackupConfirmed] = useState(false);
+  const [demoApprovedConfirmed, setDemoApprovedConfirmed] = useState(false);
+  const demoDialog = useRef<HTMLDialogElement>(null);
   const [flash, setFlash] = useState("");
   const [flashError, setFlashError] = useState("");
   const [staffingSnapshot, setStaffingSnapshot] = useState<{ committed: boolean; unmatched_units: UnmatchedUnit[] } | null>(null);
@@ -63,6 +68,13 @@ export default function AdminSetup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, active?.semester_id]);
 
+  useEffect(() => {
+    if (demoPreview && demoDialog.current && !demoDialog.current.open) {
+      demoDialog.current.showModal();
+      demoDialog.current.querySelector<HTMLElement>("h3")?.focus();
+    }
+  }, [demoPreview]);
+
   if (!session) return null;
 
   const tutorListStatus: TaskStatus = !staffingLoaded || !staffingSnapshot
@@ -71,18 +83,7 @@ export default function AdminSetup() {
     ? "working"
     : "done";
 
-  const offeringsThisSemester = data?.offerings.filter((offering) => offering.semester_id === active?.semester_id && offering.status !== "discontinued") ?? [];
-  const latestBatchByOffering = new Map<number, { issue_count: number }>();
-  for (const batch of data?.enrollment_batches ?? []) {
-    if (!latestBatchByOffering.has(batch.offering_id)) latestBatchByOffering.set(batch.offering_id, batch);
-  }
-  const coveredOfferings = offeringsThisSemester.filter((offering) => latestBatchByOffering.has(offering.offering_id));
-  const studentListStatus: TaskStatus =
-    offeringsThisSemester.length === 0 || coveredOfferings.length === 0
-      ? "not_started"
-      : coveredOfferings.length < offeringsThisSemester.length || coveredOfferings.some((offering) => (latestBatchByOffering.get(offering.offering_id)?.issue_count ?? 0) > 0)
-      ? "working"
-      : "done";
+  const studentListStatus: TaskStatus = (active?.student_count ?? 0) > 0 ? "done" : "not_started";
 
   const openCreate = () => {
     const latest = data?.periods[0];
@@ -155,6 +156,26 @@ export default function AdminSetup() {
     }
   };
 
+  const openDemoReset = async () => {
+    if (!active) return;
+    setWorking(true); setFlashError(""); setFlash("");
+    setDemoConfirmation(""); setDemoBackupConfirmed(false); setDemoApprovedConfirmed(false);
+    try {
+      setDemoPreview(await previewDemoReset(session.access_token, active.semester_id));
+    } catch (err) { setFlashError(errorMessage(err)); } finally { setWorking(false); }
+  };
+
+  const resetDemoData = async () => {
+    if (!demoPreview) return;
+    setResetting(true); setFlashError("");
+    try {
+      const result = await resetDemoPeriod(session.access_token, demoPreview, demoConfirmation, demoBackupConfirmed, demoApprovedConfirmed);
+      setFlash(`${demoPreview.year} ${demoPreview.period} demo data cleared. ${result.offerings_retained} unit offerings, tutor assignments and all staff accounts were retained.`);
+      setDemoPreview(null);
+      await reload();
+    } catch (err) { setFlashError(errorMessage(err)); } finally { setResetting(false); }
+  };
+
   const openEmailReminder = async () => {
     if (!active) return;
     setEmailBusy(true); setFlashError("");
@@ -190,7 +211,10 @@ export default function AdminSetup() {
               </select>
               <button className="btn" onClick={() => setAllPeriodsOpen(true)}>All semesters</button>
               <button className="btn" disabled={working} onClick={openCreate}>Add semester</button>
-              {session.user.role_name === "super_admin" && <button className="btn danger" disabled={!active || active.status === "archived"} onClick={() => { setResetConfirmation(""); setFlashError(""); setResetConfirmOpen(true); }}>Reset semester data</button>}
+              {session.user.role_name === "super_admin" && <>
+                <button className="btn danger" disabled={working || resetting || !active || active.status === "archived"} onClick={() => void openDemoReset()}>Reset demo data</button>
+                <button className="btn danger" disabled={working || resetting || !active || active.status === "archived"} onClick={() => { setResetConfirmation(""); setFlashError(""); setResetConfirmOpen(true); }}>Reset full semester</button>
+              </>}
               <button
                 className="btn primary"
                 disabled={!active || emailBusy}
@@ -261,7 +285,7 @@ export default function AdminSetup() {
                 <TaskStatusBadge status={studentListStatus} />
               </div>
               <h3>Student List</h3>
-              <p>Upload a student list for a unit offering — ID and full name — so grade imports can match against it.</p>
+              <p>Upload the semester's student list — ID and full name — so grade imports can match against it.</p>
               <div className="admin-portal-tile-cta">Open Student List <span className="unit-arrow">→</span></div>
             </Link>
           </div>
@@ -332,6 +356,35 @@ export default function AdminSetup() {
           </div>
         </div>
       )}
+
+      {demoPreview && <dialog ref={demoDialog} className="adm-modal adm-demo-reset-dialog" aria-labelledby="demo-reset-title" onCancel={(event) => { if (resetting) event.preventDefault(); else setDemoPreview(null); }} onClose={() => setDemoPreview(null)}>
+        <h3 id="demo-reset-title" tabIndex={-1}>Reset demo data for {demoPreview.year} {demoPreview.period}?</h3>
+        <p className="adm-modal-sub">Keeps all staff accounts, passwords, {demoPreview.counts.offerings} unit offerings, tutor assignments and other semesters. Clears the selected semester's student list, Handbook setup, ULO/PLO mappings, assessments, grades, attainment and reports.</p>
+        {!demoPreview.enabled && <p className="adm-modal-note" role="status">Demo reset is disabled on this server. The server administrator must enable it on a demo instance before this action can be used.</p>}
+        <dl className="demo-reset-counts">
+          <dt>Student list entries</dt><dd>{demoPreview.counts.students.toLocaleString()}</dd>
+          <dt>Unit enrolments</dt><dd>{demoPreview.counts.enrolments.toLocaleString()}</dd>
+          <dt>Grade uploads</dt><dd>{demoPreview.counts.grade_uploads.toLocaleString()}</dd>
+          <dt>Assessment grades</dt><dd>{demoPreview.counts.assessment_grades.toLocaleString()}</dd>
+          <dt>Component scores</dt><dd>{demoPreview.counts.component_scores.toLocaleString()}</dd>
+          <dt>Assessments</dt><dd>{demoPreview.counts.assessments.toLocaleString()}</dd>
+          <dt>Learning outcomes</dt><dd>{demoPreview.counts.learning_outcomes.toLocaleString()}</dd>
+          <dt>Handbook imports</dt><dd>{demoPreview.counts.handbook_imports.toLocaleString()}</dd>
+          <dt>Reports</dt><dd>{demoPreview.counts.reports.toLocaleString()}</dd>
+        </dl>
+        {demoPreview.approved_reports.length > 0 && <div className="adm-modal-note">
+          <strong>{demoPreview.approved_reports.length} approved report(s) will also be deleted:</strong>
+          <ul>{demoPreview.approved_reports.map((report) => <li key={report.report_id}>{report.unit_code} (report {report.report_id})</li>)}</ul>
+          <label className="demo-reset-check"><input type="checkbox" checked={demoApprovedConfirmed} disabled={resetting} onChange={(event) => setDemoApprovedConfirmed(event.target.checked)} /><span>I confirm these are demo reports and may be deleted.</span></label>
+        </div>}
+        <label className="demo-reset-check"><input type="checkbox" checked={demoBackupConfirmed} disabled={resetting} onChange={(event) => setDemoBackupConfirmed(event.target.checked)} /><span>A database backup has been taken and checked for restoration. This action does not create a backup.</span></label>
+        <label className="adm-field"><span className="lbl">Type {demoPreview.confirmation} to confirm</span><input autoComplete="off" value={demoConfirmation} disabled={resetting} onChange={(event) => setDemoConfirmation(event.target.value)} /></label>
+        {flashError && <p role="alert">{flashError}</p>}
+        <div className="adm-modal-actions">
+          <button className="btn" autoFocus disabled={resetting} onClick={() => setDemoPreview(null)}>Cancel</button>
+          <button className="btn danger" disabled={resetting || !demoPreview.enabled || !demoBackupConfirmed || (demoPreview.approved_reports.length > 0 && !demoApprovedConfirmed) || demoConfirmation.trim() !== demoPreview.confirmation} onClick={() => void resetDemoData()}>{resetting ? "Resetting..." : "Clear demo data"}</button>
+        </div>
+      </dialog>}
 
       {resetConfirmOpen && active && (
         <div className="adm-modal-overlay" onClick={() => !resetting && setResetConfirmOpen(false)}>

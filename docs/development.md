@@ -69,6 +69,76 @@ action. Student-level data is never sent to the model. The Report page supports
 draft saving, submission for course coordinator review, change requests,
 approval, and browser-based PDF export.
 
+The action-plan field is readable text, not nested JSON. Older drafts containing
+the recognised action/ULO/assessment/effect-check object are formatted on read;
+this does not rewrite the stored report or change its approval or evidence.
+Coordinators must review proposed actions before submission. A correlation
+between two scores is not by itself evidence that an intervention caused an
+improvement.
+
+## Clean Demo Rehearsal
+
+Use one agreed demo semester, not a full database wipe. Keep staff accounts,
+student identities, shared programme/unit records and all other semesters.
+
+Before clearing existing semester data, the server operator must take and
+verify a restorable database backup and agree the exact year/period with the
+team. Never remove the PostgreSQL volume just to restart a demo.
+
+Two separate super-admin actions are available in **Semester setup**:
+
+- **Reset full semester** removes the offerings and imported tutor assignments
+  as well as their student lists, setup, grades and reports. Staff accounts and
+  other semesters remain. Archived semesters and approved reports block this
+  action; that protection is unchanged.
+- **Reset demo data** retains unit offerings, all tutor/coordinator assignments,
+  tutor-list snapshots, staff accounts/passwords, shared references and other
+  semesters. It clears the selected semester's student-list membership,
+  enrolments, Handbook imports, ULOs/mappings, assessments/components, grade
+  uploads/scores, calculated attainment and reports. Global student identities
+  and notification-delivery history remain.
+
+Demo reset is disabled by default. Only on a disposable demo instance, set
+`ENABLE_DEMO_RESET=true` in the server's private environment and recreate the
+backend. Disable it again after rehearsals. Do not enable it on an instance
+holding official records. Opening the button only previews counts; it does
+not delete data. The super admin must acknowledge an independently verified
+backup, explicitly confirm any listed approved **demo** reports, and type
+`RESET DEMO <year> <period>`. The app does not create or verify the backup.
+Archived semesters cannot be reset even in demo mode. Changed totals or report
+metadata invalidate the review; close and reopen it before confirming again.
+The deletion is transactional and logs its semester, actor, counts and approved
+report IDs. No database sequence or shared staff/student/reference row is reset.
+
+The GMK GitHub deployment reads the repository variable `ENABLE_DEMO_RESET`.
+Only the exact value `true` enables it; unset or any other value disables it.
+This explicit deployment setting overrides the server's Compose default and
+survives later pushes. Turn it off and redeploy before storing official records.
+
+Rehearse in this order:
+
+1. Sign in as super admin and select the agreed demo semester.
+2. Upload and review the tutor list, assign coordinators, then commit it.
+3. Upload and commit the semester student list.
+4. Open a unit created in that semester, such as FIT2004.
+5. Import its year-specific Handbook draft and review ULOs and assessments.
+6. Confirm ULO-to-PLO mapping and the assessment/ULO contributions.
+7. Upload a gradebook for that same unit; check columns, component weights,
+   score denominators and student IDs before committing.
+8. Review the dashboard figures, generate the report draft, edit the CQI text
+   and save it, then submit for approval.
+9. Approve as course coordinator/super admin, then print or save as PDF.
+
+The supplied Hashed MCS07 workbook is an FYP gradebook, not a FIT2004 gradebook.
+Use the corresponding FYP unit, or prepare a clearly synthetic FIT2004 fixture
+with matching students and assessments. Do not relabel unrelated marks as
+FIT2004 results. Agree the demo files before resetting anything. Super admin
+can demonstrate the whole flow; normal staff should still be tested with their
+own assigned-unit permissions. For repeat rehearsals that retain the tutor
+setup, use the explicitly enabled demo reset with a fresh backup and review;
+the normal full reset still blocks approved reports. An existing approved
+report cannot be silently regenerated or downgraded to bypass that protection.
+
 ## Staff Account Recovery
 
 Staff use admin-created accounts, not Google/Monash SSO. Existing passwords

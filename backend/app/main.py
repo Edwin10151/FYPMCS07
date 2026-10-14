@@ -49,6 +49,7 @@ from app.services.report_generation import (
     ReportEvidence,
     ReportGenerationError,
     attainment_grade,
+    format_action_plan,
     generate_report,
     render_plain_text,
 )
@@ -607,7 +608,7 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
 
 
 def _report_row(offering_id: int):
-    return fetch_one(
+    report = fetch_one(
         """
         SELECT r.report_id, r.offering_id, r.ai_summary, r.coordinator_comment, r.is_finalized,
                r.status, r.attainment_analysis, r.previous_cohort_outcomes, r.next_cohort_action_plan,
@@ -622,6 +623,9 @@ def _report_row(offering_id: int):
         """,
         (offering_id,),
     )
+    if report and report.get("next_cohort_action_plan"):
+        return {**report, "next_cohort_action_plan": format_action_plan(report["next_cohort_action_plan"])}
+    return report
 
 
 def _outcome_evidence(row: dict) -> LearningOutcomeEvidence:
@@ -2121,6 +2125,129 @@ def deactivate_admin_period(
 
 class SemesterResetRequest(BaseModel):
     confirmation: str
+
+
+class DemoResetRequest(BaseModel):
+    confirmation: str
+    revision: str
+    backup_confirmed: bool = False
+    include_approved_reports: bool = False
+
+
+def _demo_reset_preview(cur, semester_id: int, semester: dict) -> dict:
+    cur.execute(
+        """
+        WITH selected_offerings AS (
+            SELECT offering_id FROM unit_offering WHERE semester_id = %s
+        )
+        SELECT
+            (SELECT COUNT(*) FROM selected_offerings) AS offerings,
+            (SELECT COUNT(*) FROM semester_student WHERE semester_id = %s) AS students,
+            (SELECT COUNT(*) FROM enrollment WHERE offering_id IN (SELECT offering_id FROM selected_offerings)) AS enrolments,
+            (SELECT COUNT(*) FROM grade_upload_batch WHERE offering_id IN (SELECT offering_id FROM selected_offerings)) AS grade_uploads,
+            (SELECT COUNT(*) FROM student_grade WHERE offering_id IN (SELECT offering_id FROM selected_offerings)) AS assessment_grades,
+            (SELECT COUNT(*) FROM student_component_grade g JOIN enrollment e USING (enrollment_id)
+             WHERE e.offering_id IN (SELECT offering_id FROM selected_offerings)) AS component_scores,
+            (SELECT COUNT(*) FROM assessment WHERE offering_id IN (SELECT offering_id FROM selected_offerings)) AS assessments,
+            (SELECT COUNT(*) FROM offering_ulo WHERE offering_id IN (SELECT offering_id FROM selected_offerings)) AS learning_outcomes,
+            (SELECT COUNT(*) FROM handbook_import_snapshot WHERE offering_id IN (SELECT offering_id FROM selected_offerings)) AS handbook_imports
+        """,
+        (semester_id, semester_id),
+    )
+    counts = cur.fetchone()
+    cur.execute(
+        """
+        SELECT r.report_id, u.unit_code, r.status, r.updated_at
+        FROM ai_report r JOIN unit_offering o USING (offering_id)
+        JOIN unit u USING (unit_id)
+        WHERE o.semester_id = %s ORDER BY r.report_id
+        """,
+        (semester_id,),
+    )
+    reports = cur.fetchall()
+    counts["reports"] = len(reports)
+    revision = hashlib.sha256(json.dumps(
+        {"semester_id": semester_id, **semester, "counts": counts, "reports": reports},
+        sort_keys=True, default=str,
+    ).encode()).hexdigest()
+    return {
+        "semester_id": semester_id,
+        "year": semester["year"],
+        "period": semester["period"],
+        "enabled": settings.enable_demo_reset,
+        "confirmation": f"RESET DEMO {semester['year']} {semester['period']}",
+        "revision": revision,
+        "counts": counts,
+        "approved_reports": [
+            {"report_id": row["report_id"], "unit_code": row["unit_code"]}
+            for row in reports if row["status"] == "approved"
+        ],
+    }
+
+
+@app.get("/api/admin/periods/{semester_id}/demo-reset")
+def preview_demo_reset(semester_id: int, user: Annotated[dict, Depends(require_permission(40))]):
+    if user["role_name"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Only a super admin can reset demo data")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT year, period, status FROM semester WHERE semester_id = %s", (semester_id,))
+            semester = cur.fetchone()
+            if not semester:
+                raise HTTPException(status_code=404, detail="Academic period not found")
+            if semester["status"] == "archived":
+                raise HTTPException(status_code=409, detail="Archived semester history cannot be reset")
+            return _demo_reset_preview(cur, semester_id, semester)
+
+
+@app.post("/api/admin/periods/{semester_id}/demo-reset")
+def reset_demo_period(
+    semester_id: int,
+    payload: DemoResetRequest,
+    user: Annotated[dict, Depends(require_permission(40))],
+):
+    if user["role_name"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Only a super admin can reset demo data")
+    if not settings.enable_demo_reset:
+        raise HTTPException(status_code=403, detail="Demo reset is disabled on this server")
+    if not payload.backup_confirmed:
+        raise HTTPException(status_code=422, detail="Confirm that a restorable database backup has been checked")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT year, period, status FROM semester WHERE semester_id = %s FOR UPDATE", (semester_id,))
+            semester = cur.fetchone()
+            if not semester:
+                raise HTTPException(status_code=404, detail="Academic period not found")
+            if semester["status"] == "archived":
+                raise HTTPException(status_code=409, detail="Archived semester history cannot be reset")
+            cur.execute("SELECT offering_id FROM unit_offering WHERE semester_id = %s ORDER BY offering_id FOR UPDATE", (semester_id,))
+            offering_ids = [row["offering_id"] for row in cur.fetchall()]
+            preview = _demo_reset_preview(cur, semester_id, semester)
+            if payload.confirmation.strip() != preview["confirmation"]:
+                raise HTTPException(status_code=422, detail=f"Type {preview['confirmation']} to confirm")
+            if payload.revision != preview["revision"]:
+                raise HTTPException(status_code=409, detail="Semester totals or reports changed. Close and reopen the demo reset review")
+            if preview["approved_reports"] and not payload.include_approved_reports:
+                raise HTTPException(status_code=409, detail="Explicitly confirm deletion of the listed approved demo reports")
+
+            # Remove scores before their upload/assessment references; retain offering and staff rows.
+            cur.execute("DELETE FROM ai_report WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM enrollment WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM grade_upload_batch WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM enrollment_upload_batch WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM handbook_import_snapshot WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM attainment_refresh_pending WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM offering_ulo WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM assessment WHERE offering_id = ANY(%s)", (offering_ids,))
+            cur.execute("DELETE FROM student_list_upload WHERE semester_id = %s", (semester_id,))
+            cur.execute("DELETE FROM semester_student WHERE semester_id = %s", (semester_id,))
+            cur.execute("UPDATE unit_offering SET handbook_url = NULL, last_scraped_at = NULL WHERE semester_id = %s", (semester_id,))
+    logging.getLogger(__name__).warning(
+        "Demo reset completed: semester_id=%s user_id=%s cleared=%s approved_report_ids=%s",
+        semester_id, user["user_id"], preview["counts"],
+        [row["report_id"] for row in preview["approved_reports"]],
+    )
+    return {"status": "reset", "offerings_retained": len(offering_ids), "accounts_deleted": 0}
 
 
 @app.post("/api/admin/periods/{semester_id}/reset")

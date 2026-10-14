@@ -12,6 +12,7 @@ from app.services.report_generation import (
     ReportEvidence,
     ReportGenerationError,
     attainment_grade,
+    format_action_plan,
     generate_report,
 )
 
@@ -142,6 +143,65 @@ def test_ollama_falls_back_when_action_invents_a_percentage(monkeypatch):
 
     assert "99%" not in generated.draft.next_cohort_action_plan
     assert "LO1" in generated.draft.next_cohort_action_plan
+
+
+def test_nested_model_action_plan_becomes_readable_text(monkeypatch):
+    plan = {
+        "action": "Introduce an early LO1 proof exercise.\nReview the results with students.",
+        "target_ulo": "LO1",
+        "assessment_concerned": "Complexity proofs",
+        "effect_check_method": "Compare LO1 attainment in the next offering.",
+    }
+
+    def fake_post(url, **kwargs):
+        content = json.dumps({"next_cohort_action_plan": json.dumps(plan)})
+        return httpx.Response(
+            200, request=httpx.Request("POST", url),
+            json={"message": {"content": content}},
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    generated = generate_report(evidence(False), "ollama", "http://ollama:11434", "test-model", 30)
+    action = generated.draft.next_cohort_action_plan
+    assert action == (
+        "Action: Introduce an early LO1 proof exercise.\nReview the results with students.\n\n"
+        "Target ULO: LO1\n\nAssessment: Complexity proofs\n\n"
+        "Effect check: Compare LO1 attainment in the next offering."
+    )
+    assert action in generated.plain_text
+    assert '"action"' not in generated.plain_text
+
+
+@pytest.mark.parametrize("value", [
+    "Keep the coordinator's prose unchanged.",
+    '{"action": "Incomplete JSON',
+    '{"action": "LO1 check", "unrecognised_field": "Do not drop this detail"}',
+    '{"action": "LO1 check", "effect_check_method": {"nested": "detail"}}',
+    '{"action": ""}',
+    '["LO1 check"]',
+])
+def test_format_action_plan_preserves_prose_and_unrecognised_data(value):
+    assert format_action_plan(value) == value
+
+
+@pytest.mark.parametrize("value", [
+    '{"unexpected": "LO1 check"}',
+    '["LO1 check"]',
+])
+def test_model_rejects_unrecognised_nested_json(value):
+    with pytest.raises(ValueError, match="readable text"):
+        ActionPlanSuggestion(next_cohort_action_plan=value)
+
+
+def test_previous_approved_action_is_formatted_without_losing_its_details():
+    current = evidence()
+    previous = PreviousOfferingEvidence(
+        **current.previous_offering.model_dump(exclude={"next_cohort_action_plan"}),
+        next_cohort_action_plan=json.dumps({"action": "Add an LO1 check."}),
+    )
+    current.previous_offering = previous
+    generated = generate_report(current, "mock", "", "", 5)
+    assert "previous approved action plan proposed: Action: Add an LO1 check." in generated.draft.previous_cohort_outcomes
 
 
 def test_ollama_rejects_an_invalid_structured_response(monkeypatch):

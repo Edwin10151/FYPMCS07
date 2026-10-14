@@ -39,6 +39,7 @@
 .cqi-heading { margin: 0 -38px; padding: 9px 38px; background: #e7f5f5; color: #156e72; font-size: 12px; font-weight: 800; text-align: center; text-transform: uppercase; }
 .cqi-section { display: grid; grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.7fr); gap: 28px; padding: 20px 0; border-bottom: 1px solid #dde3e8; }
 .cqi-section h3 { margin: 0; font-size: 13px; line-height: 1.45; }
+.cqi-section p, .cqi-section textarea { min-width: 0; overflow-wrap: anywhere; }
 .cqi-section p { margin: 0; white-space: pre-wrap; font-size: 13px; line-height: 1.65; }
 .cqi-section textarea { min-height: 120px; padding: 12px 14px; font-size: 13px; }
 .cqi-none { min-height: 0; padding: 12px 0; }
@@ -76,8 +77,11 @@
   .report-content { max-width: none; padding: 0 !important; }
   .report-sheet { border: 0; border-radius: 0; padding: 0; }
   .report-title { grid-template-columns: 1fr 1.2fr 1.5fr; gap: 18px; }
-  .report-title h2 { font-size: 21px; white-space: nowrap; }
-  .approval-footer { margin-top: 8px; padding-top: 8px; }
+  .report-title h2 { order: 0; font-size: 21px; white-space: nowrap; }
+  .report-title div:last-child { text-align: right; }
+  .report-chart-canvas { width: 180mm; }
+  .cqi-section { grid-template-columns: minmax(180px, 0.72fr) minmax(0, 1.7fr); gap: 18px; }
+  .approval-footer { grid-template-columns: repeat(3, 1fr); margin-top: 8px; padding-top: 8px; }
   .cqi-section textarea { display: none; }
   .print-only { display: block; }
   .report-title, .report-table tr, .cqi-section, .approval-footer { break-inside: avoid; }

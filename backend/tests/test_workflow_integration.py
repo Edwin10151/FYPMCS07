@@ -136,6 +136,169 @@ def test_approved_reports_block_semester_reset(db, fixture):
     assert db.execute("SELECT COUNT(*) AS n FROM unit_offering").fetchone()["n"] == 3
 
 
+@pytest.fixture
+def demo_reset_data(db, fixture, monkeypatch):
+    monkeypatch.setattr(main.settings, "enable_demo_reset", True)
+    ulo, assessments = add_grades(db, fixture)
+    first, omitted, other = fixture["offerings"]
+    semester, other_semester = fixture["semesters"]
+    actor = fixture["user"]["user_id"]
+    enrollment = db.execute("SELECT enrollment_id, student_id FROM enrollment WHERE offering_id=%s", (first,)).fetchone()
+    student_id = enrollment["student_id"]
+    for period in [semester, other_semester]:
+        db.execute("INSERT INTO semester_student VALUES (%s, %s)", (period, student_id))
+        db.execute("INSERT INTO student_list_upload (semester_id, uploaded_by, original_filename, row_count, accepted_count) VALUES (%s, %s, 'list.csv', 1, 1)", (period, actor))
+        db.execute("INSERT INTO staffing_import_snapshot (semester_id, source_filename, payload, committed_at) VALUES (%s, 'tutors.xlsx', '[]', CURRENT_TIMESTAMP)", (period,))
+    for offering, status in [(first, "approved"), (omitted, "draft"), (other, "approved")]:
+        db.execute("INSERT INTO ai_report (offering_id, status, evidence_snapshot) VALUES (%s, %s, '{\"keep\": true}')", (offering, status))
+        db.execute("INSERT INTO offering_lecturer VALUES (%s, %s, 'roster_import')", (offering, actor))
+        db.execute("INSERT INTO offering_staffing (offering_id, role_type, staff_user_id) VALUES (%s, 'lecture', %s)", (offering, actor))
+        db.execute("INSERT INTO offering_program SELECT %s, program_id FROM program ORDER BY program_id LIMIT 1", (offering,))
+        db.execute("UPDATE unit_offering SET handbook_url='https://handbook.monash.edu/2099/units/FIT9991', last_scraped_at=CURRENT_TIMESTAMP WHERE offering_id=%s", (offering,))
+    db.execute("INSERT INTO ulo_plo_mapping (offering_id, offering_ulo_id, plo_id, confirmed_by) SELECT %s, %s, plo_id, %s FROM plo ORDER BY plo_id LIMIT 1", (first, ulo, actor))
+    db.execute("INSERT INTO handbook_import_snapshot (offering_id, source_url, payload) VALUES (%s, 'https://handbook.monash.edu', '{}')", (first,))
+    db.execute("INSERT INTO attainment_refresh_pending VALUES (%s)", (first,))
+    db.execute("INSERT INTO enrollment_upload_batch (offering_id, uploaded_by, original_filename, row_count, accepted_count, issue_count, status) VALUES (%s, %s, 'old-list.csv', 1, 1, 0, 'committed')", (first, actor))
+    batch = insert(db, "INSERT INTO grade_upload_batch (offering_id, uploaded_by, original_filename, status) VALUES (%s, %s, 'grades.csv', 'committed')", (first, actor))
+    row = insert(db, "INSERT INTO grade_upload_row (upload_batch_id, row_number, matched_student_id) VALUES (%s, 2, %s)", (batch, student_id))
+    component = insert(db, "INSERT INTO assessment_component (assessment_id, component_name, weight) VALUES (%s, 'Part 1', 10)", (assessments[0],))
+    db.execute("INSERT INTO grade_upload_column_mapping (upload_batch_id, csv_column_name, system_field, assessment_id, component_id) VALUES (%s, 'Part 1', 'raw_mark', %s, %s)", (batch, assessments[0], component))
+    db.execute("INSERT INTO grade_upload_cell (upload_row_id, assessment_id, component_id, raw_mark, max_mark) VALUES (%s, %s, %s, 8, 10)", (row, assessments[0], component))
+    db.execute("INSERT INTO student_component_grade (enrollment_id, component_id, upload_batch_id, source_row_id, raw_mark, max_mark) VALUES (%s, %s, %s, %s, 8, 10)", (enrollment["enrollment_id"], component, batch, row))
+    db.execute("UPDATE student_grade SET upload_batch_id=%s, source_row_id=%s WHERE offering_id=%s", (batch, row, first))
+    main._recalculate_attainment(db.cursor(), first)
+    other_enrollment = insert(db, "INSERT INTO enrollment (student_id, offering_id) VALUES (%s, %s)", (student_id, other))
+    other_assessment = insert(db, "INSERT INTO assessment (offering_id, assessment_name, weight) VALUES (%s, 'Retain', 100)", (other,))
+    db.execute("INSERT INTO student_grade (offering_id, enrollment_id, assessment_id, raw_mark, max_mark) VALUES (%s, %s, %s, 80, 100)", (other, other_enrollment, other_assessment))
+    return fixture
+
+
+def demo_reset_payload(preview, **overrides):
+    return main.DemoResetRequest(**{
+        "confirmation": preview["confirmation"], "revision": preview["revision"],
+        "backup_confirmed": True, "include_approved_reports": True, **overrides,
+    })
+
+
+def test_demo_reset_clears_academic_data_but_keeps_staffing_and_other_semester(db, demo_reset_data):
+    fixture = demo_reset_data
+    semester = fixture["semesters"][0]
+    offering_ids = fixture["offerings"][:2]
+    user = fixture["user"]
+    kept = {table: db.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall() for table in [
+        "semester", "unit", "app_user", "student", "password_reset_token", "program", "plo",
+        "staffing_import_snapshot", "offering_lecturer", "offering_staffing", "offering_program",
+    ]}
+    offerings_before = db.execute("SELECT offering_id, unit_id, semester_id, coordinator_id, coordinator_source, status FROM unit_offering ORDER BY offering_id").fetchall()
+    other = fixture["offerings"][2]
+    other_report = db.execute("SELECT * FROM ai_report WHERE offering_id=%s", (other,)).fetchall()
+    preview = main.preview_demo_reset(semester, user)
+    assert preview["counts"] == {"offerings": 2, "students": 1, "enrolments": 1,
+        "grade_uploads": 1, "assessment_grades": 5, "component_scores": 1,
+        "assessments": 5, "learning_outcomes": 1, "handbook_imports": 1, "reports": 2}
+    assert len(preview["approved_reports"]) == 1
+    assert main.reset_demo_period(semester, demo_reset_payload(preview), user) == {
+        "status": "reset", "offerings_retained": 2, "accounts_deleted": 0}
+    for table, before in kept.items():
+        assert db.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall() == before, table
+    assert db.execute("SELECT offering_id, unit_id, semester_id, coordinator_id, coordinator_source, status FROM unit_offering ORDER BY offering_id").fetchall() == offerings_before
+    for table in ["enrollment", "ai_report", "grade_upload_batch", "enrollment_upload_batch",
+                  "offering_ulo", "assessment", "handbook_import_snapshot", "attainment_refresh_pending",
+                  "student_grade", "student_ulo_attainment", "cohort_ulo_attainment", "ulo_plo_mapping"]:
+        assert db.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE offering_id=ANY(%s)", (offering_ids,)).fetchone()["n"] == 0, table
+    assert db.execute("SELECT COUNT(*) AS n FROM student_component_grade").fetchone()["n"] == 0
+    assert db.execute("SELECT COUNT(*) AS n FROM grade_upload_cell").fetchone()["n"] == 0
+    assert db.execute("SELECT COUNT(*) AS n FROM grade_upload_column_mapping").fetchone()["n"] == 0
+    assert db.execute("SELECT * FROM ai_report WHERE offering_id=%s", (other,)).fetchall() == other_report
+    assert db.execute("SELECT COUNT(*) AS n FROM student_grade WHERE offering_id=%s", (other,)).fetchone()["n"] == 1
+    assert db.execute("SELECT COUNT(*) AS n FROM semester_student WHERE semester_id=%s", (semester,)).fetchone()["n"] == 0
+    assert db.execute("SELECT COUNT(*) AS n FROM student_list_upload WHERE semester_id=%s", (semester,)).fetchone()["n"] == 0
+    assert db.execute("SELECT COUNT(*) AS n FROM semester_student WHERE semester_id=%s", (fixture["semesters"][1],)).fetchone()["n"] == 1
+    assert db.execute("SELECT COUNT(*) AS n FROM unit_offering WHERE semester_id=%s AND (handbook_url IS NOT NULL OR last_scraped_at IS NOT NULL)", (semester,)).fetchone()["n"] == 0
+
+
+@pytest.mark.parametrize("case,error", [("confirmation", 422), ("approved", 409), ("stale", 409), ("archived", 409)])
+def test_demo_reset_review_guards_do_not_delete(db, demo_reset_data, case, error):
+    fixture = demo_reset_data
+    semester = fixture["semesters"][0]
+    preview = main.preview_demo_reset(semester, fixture["user"])
+    payload = demo_reset_payload(preview)
+    if case == "confirmation":
+        payload.confirmation = "RESET DEMO 2099 JUL"
+    elif case == "approved":
+        payload.include_approved_reports = False
+    elif case == "stale":
+        db.execute("UPDATE ai_report SET status='approved' WHERE status='draft'")
+    else:
+        db.execute("UPDATE semester SET status='archived' WHERE semester_id=%s", (semester,))
+    with pytest.raises(HTTPException) as raised:
+        main.reset_demo_period(semester, payload, fixture["user"])
+    assert raised.value.status_code == error
+    assert db.execute("SELECT COUNT(*) AS n FROM student_grade").fetchone()["n"] == 6
+    assert db.execute("SELECT COUNT(*) AS n FROM ai_report").fetchone()["n"] == 3
+
+
+def test_failed_demo_reset_rolls_back_earlier_deletes(db, demo_reset_data, monkeypatch):
+    fixture = demo_reset_data
+    semester = fixture["semesters"][0]
+    preview = main.preview_demo_reset(semester, fixture["user"])
+    db.execute("CREATE FUNCTION pg_temp.reject_demo_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test reset rollback'; END $$")
+    db.execute("CREATE TRIGGER reject_demo_delete BEFORE DELETE ON assessment FOR EACH ROW EXECUTE FUNCTION pg_temp.reject_demo_delete()")
+
+    @contextmanager
+    def connection():
+        with db.transaction():
+            yield db
+
+    monkeypatch.setattr(main, "get_conn", connection)
+    with pytest.raises(psycopg.errors.RaiseException, match="test reset rollback"):
+        main.reset_demo_period(semester, demo_reset_payload(preview), fixture["user"])
+    assert db.execute("SELECT COUNT(*) AS n FROM student_grade").fetchone()["n"] == 6
+    assert db.execute("SELECT COUNT(*) AS n FROM ai_report").fetchone()["n"] == 3
+    assert db.execute("SELECT COUNT(*) AS n FROM student_component_grade").fetchone()["n"] == 1
+
+
+def test_empty_demo_semester_can_be_reset_without_removing_accounts(db, fixture, monkeypatch):
+    monkeypatch.setattr(main.settings, "enable_demo_reset", True)
+    semester = insert(db, "INSERT INTO semester (year, period, status) VALUES (2098, 'OCT', 'planning')")
+    preview = main.preview_demo_reset(semester, fixture["user"])
+    assert preview["counts"]["offerings"] == 0
+    assert not preview["approved_reports"]
+    result = main.reset_demo_period(semester, demo_reset_payload(preview, include_approved_reports=False), fixture["user"])
+    assert result["offerings_retained"] == 0
+    assert db.execute("SELECT COUNT(*) AS n FROM app_user").fetchone()["n"] == 3
+
+
+def test_demo_reset_http_permissions_and_disabled_server(db, demo_reset_data, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    fixture = demo_reset_data
+    path = f"/api/admin/periods/{fixture['semesters'][0]}/demo-reset"
+    actor = {**fixture["user"], "permission_level": 40}
+    client = TestClient(main.app)
+    assert client.get(path).status_code == 401
+    main.app.dependency_overrides[main.get_current_user] = lambda: actor
+    try:
+        actor["permission_level"] = 30
+        actor["role_name"] = "management"
+        assert client.get(path).status_code == 403
+        assert client.post(path, json={}).status_code == 403
+        actor.update(role_name="super_admin", permission_level=40)
+        monkeypatch.setattr(main.settings, "enable_demo_reset", False)
+        preview = client.get(path).json()
+        assert preview["enabled"] is False
+        assert client.post(path, json=demo_reset_payload(preview).model_dump()).status_code == 403
+        monkeypatch.setattr(main.settings, "enable_demo_reset", True)
+        assert client.post(path, json={"confirmation": preview["confirmation"]}).status_code == 422
+        assert db.execute("SELECT COUNT(*) AS n FROM ai_report").fetchone()["n"] == 3
+        response = client.post(path, json=demo_reset_payload(preview).model_dump())
+        assert response.status_code == 200
+        assert response.json()["offerings_retained"] == 2
+        assert db.execute("SELECT COUNT(*) AS n FROM ai_report").fetchone()["n"] == 1
+    finally:
+        main.app.dependency_overrides.pop(main.get_current_user, None)
+
+
 def test_contribution_edits_refresh_results_and_return_submitted_report(db, fixture):
     ulo, assessments = add_grades(db, fixture)
     offering = fixture["offerings"][0]
