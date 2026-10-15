@@ -16,6 +16,7 @@ import {
   type ReportSections,
 } from "../api";
 import Sidebar from "../components/Sidebar";
+import { COHORT_ACHIEVEMENT_TARGET, STUDENT_ACHIEVEMENT_CUTOFF } from "../attainment";
 import { useOfferingId } from "../useOfferingId";
 import { useSession } from "../useSession";
 import "./Assessments.css";
@@ -127,7 +128,12 @@ export default function Report() {
     code: outcome.ulo_code,
     average_attainment_pct: outcome.average_attainment_pct,
     attainment_grade: outcome.attainment_grade,
+    pass_rate_pct: outcome.pass_rate_pct,
+    achieved_count: outcome.achieved_count,
+    enrolled_count: outcome.enrolled_count,
   })));
+  const achievementCutoff = evidence?.attainment_target_pct ?? (frozen ? null : STUDENT_ACHIEVEMENT_CUTOFF);
+  const cohortTarget = evidence?.cohort_target_pct ?? (frozen ? null : COHORT_ACHIEVEMENT_TARGET);
   const chartData = reportOutcomes.map((outcome) => ({ code: outcome.code, attainment: Number(outcome.average_attainment_pct) }));
 
   useEffect(() => {
@@ -240,7 +246,7 @@ export default function Report() {
 
               {frozen && !evidence && <p role="status">Saved attainment evidence is unavailable for this older report. Its original figures cannot be verified.</p>}
               {chartData.length > 0 && <figure className="report-chart" aria-label="Average ULO attainment; exact figures are listed in the following table">
-                <figcaption>Average ULO attainment (%)</figcaption>
+                <figcaption>Average weighted ULO attainment (%)</figcaption>
                 <div className="report-chart-canvas">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 28, right: 16, bottom: 8, left: 0 }} accessibilityLayer>
@@ -257,12 +263,18 @@ export default function Report() {
 
               <div className="report-table-wrap">
                 <table className="report-table">
-                  <thead><tr><th>LO Code</th><th>Weightage based Attainment %</th><th>Attainment Grade</th></tr></thead>
+                  <thead><tr><th>LO Code</th><th>Average weighted attainment %</th><th>Attainment Grade</th><th>Cohort achievement</th></tr></thead>
                   <tbody>{reportOutcomes.map((outcome) => <tr key={outcome.code}>
                     <td>{outcome.code}</td><td>{Number(outcome.average_attainment_pct).toFixed(1)}</td><td>{outcome.attainment_grade}</td>
+                    <td>{outcome.pass_rate_pct != null && outcome.achieved_count != null && outcome.enrolled_count != null ? <>{outcome.achieved_count}/{outcome.enrolled_count}<br />{Number(outcome.pass_rate_pct).toFixed(2)}%</> : "Not recorded"}</td>
                   </tr>)}</tbody>
                 </table>
               </div>
+              <p className="report-metric-note">
+                {achievementCutoff != null ? `Individual ULO achievement: attainment of ${Number(achievementCutoff)}% or above. ` : "Individual achievement cutoff not recorded. "}
+                {cohortTarget != null ? `Cohort target: at least ${Number(cohortTarget)}% of assessed students achieving the ULO. ` : "Cohort target not recorded for this snapshot. "}
+                Attainment grades classify the averages, not the cohort achievement rates.
+              </p>
 
               <h2 className="report-subtitle">Unit-level CQI Plan(s)</h2>
               <div className="cqi-heading">CO CQI Plan</div>
@@ -271,9 +283,9 @@ export default function Report() {
               <ReportSection title="Action plan for next Cohort (offering)" value={sections.next_cohort_action_plan} editable={canEdit} onChange={(value) => setSections((current) => ({ ...current, next_cohort_action_plan: value }))} />
 
               <div className="cqi-heading">CP, CA CQI Plan</div>
-              <section className="cqi-section cqi-none"><h3>Analysis of CP, CA attainment levels</h3><p>None</p></section>
-              <section className="cqi-section cqi-none"><h3>Action plan / outcomes from previous Cohort</h3><p>None</p></section>
-              <section className="cqi-section cqi-none"><h3>Action plan for next Cohort (offering)</h3><p>None</p></section>
+              <section className="cqi-section cqi-none"><h3>Analysis of CP, CA attainment levels</h3><p>Not assessed in this report.</p></section>
+              <section className="cqi-section cqi-none"><h3>Action plan / outcomes from previous Cohort</h3><p>Not assessed in this report.</p></section>
+              <section className="cqi-section cqi-none"><h3>Action plan for next Cohort (offering)</h3><p>Not assessed in this report.</p></section>
 
               <footer className="approval-footer">
                 <div><span>CQI Plan Current Status</span><strong>{statusLabel(report?.status)}</strong></div>

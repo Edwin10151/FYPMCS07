@@ -108,6 +108,18 @@ def add_grades(db, fixture):
     return ulo, assessment_ids
 
 
+def test_dashboard_counts_assessed_students_and_does_not_flag_unassessed_ulos(db, fixture):
+    offering = fixture["offerings"][0]
+    add_grades(db, fixture)
+    ungraded = insert(db, "INSERT INTO student (student_code, full_name) VALUES ('ungraded-demo', 'Ungraded')")
+    db.execute("INSERT INTO enrollment (student_id, offering_id) VALUES (%s, %s)", (ungraded, offering))
+    main._recalculate_attainment(db.cursor(), offering)
+    db.execute("INSERT INTO offering_ulo (offering_id, ulo_code, description) VALUES (%s, 'LO2', 'No grades yet')", (offering,))
+    result = main.dashboard(fixture["user"], offering)
+    assert result["stats"]["student_count"] == 1
+    assert result["stats"]["at_risk_count"] == 0
+
+
 def test_a_superseded_roster_review_cannot_replace_assignments(db, fixture):
     semester = fixture["semesters"][0]
     old_snapshot = insert(db, "INSERT INTO staffing_import_snapshot (semester_id, source_filename, payload) VALUES (%s, 'old.xlsx', '[]')", (semester,))

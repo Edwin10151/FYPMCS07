@@ -588,9 +588,9 @@ def dashboard(user: Annotated[dict, Depends(require_offering_access())], offerin
         (offering_id,),
     )
     stats = {
-        "student_count": fetch_one("SELECT COUNT(*) AS count FROM enrollment WHERE offering_id = %s", (offering_id,))["count"],
+        "student_count": fetch_one("SELECT COUNT(DISTINCT enrollment_id) AS count FROM student_ulo_attainment WHERE offering_id = %s", (offering_id,))["count"],
         "lo_count": len(los),
-        "at_risk_count": sum(1 for item in los if item["pass_rate_pct"] < 70),
+        "at_risk_count": sum(1 for item in los if item["enrolled_count"] > 0 and item["pass_rate_pct"] < 70),
         "student_at_risk_count": fetch_one(
             """
             SELECT COUNT(*) AS count FROM (

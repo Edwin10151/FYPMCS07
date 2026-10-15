@@ -33,6 +33,7 @@
 .report-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .report-table th { padding: 11px 14px; background: #e7f5f5; color: #36535b; font-size: 11px; text-align: left; }
 .report-table td { padding: 11px 14px; border-bottom: 1px solid #dde3e8; font-size: 13px; }
+.report-metric-note { margin: -18px 0 28px; color: #637083; font-size: 12px; line-height: 1.5; }
 .report-table th:nth-child(n+2), .report-table td:nth-child(n+2) { text-align: center; }
 
 .report-subtitle { margin: 0 0 18px; font-family: Georgia, serif; font-size: 22px; }
@@ -79,7 +80,9 @@
   .report-title { grid-template-columns: 1fr 1.2fr 1.5fr; gap: 18px; }
   .report-title h2 { order: 0; font-size: 21px; white-space: nowrap; }
   .report-title div:last-child { text-align: right; }
-  .report-chart-canvas { width: 180mm; }
+  /* Recharts nests its fixed-size wrapper in a zero-width measurement div. */
+  .report-chart-canvas, .report-chart-canvas .recharts-wrapper { width: 180mm !important; }
+  .report-subtitle, .cqi-heading { break-after: avoid; }
   .cqi-section { grid-template-columns: minmax(180px, 0.72fr) minmax(0, 1.7fr); gap: 18px; }
   .approval-footer { grid-template-columns: repeat(3, 1fr); margin-top: 8px; padding-top: 8px; }
   .cqi-section textarea { display: none; }

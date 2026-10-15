@@ -5,6 +5,8 @@ from decimal import Decimal
 import httpx
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from app.services.handbook_review import same_description
+
 
 def format_action_plan(value: str) -> str:
     try:
@@ -69,7 +71,8 @@ class ReportEvidence(BaseModel):
     year: int
     period: str
     student_count: int
-    attainment_target_pct: Decimal = Decimal("50.00")
+    attainment_target_pct: Decimal = Field(default=Decimal("50.00"), ge=0, le=100)
+    cohort_target_pct: Decimal = Field(default=Decimal("70.00"), ge=0, le=100)
     learning_outcomes: list[LearningOutcomeEvidence]
     assessments: list[AssessmentEvidence]
     previous_offering: PreviousOfferingEvidence | None = None
@@ -119,7 +122,7 @@ class ReportGenerationError(RuntimeError):
         self.status_code = status_code
 
 
-PROMPT_VERSION = "cqi-v2"
+PROMPT_VERSION = "cqi-v3"
 
 
 SYSTEM_PROMPT = """You propose one concise next-cohort action for a university unit coordinator.
@@ -164,15 +167,22 @@ def _mock_draft(evidence: ReportEvidence) -> ReportDraft:
     lowest = min(outcomes, key=lambda item: item.average_attainment_pct)
     highest = max(outcomes, key=lambda item: item.average_attainment_pct)
     meeting_target = sum(
-        item.average_attainment_pct >= evidence.attainment_target_pct for item in outcomes
+        item.pass_rate_pct >= evidence.cohort_target_pct for item in outcomes
+    )
+    highest_codes = ", ".join(item.code for item in outcomes if item.average_attainment_pct == highest.average_attainment_pct)
+    lowest_codes = ", ".join(item.code for item in outcomes if item.average_attainment_pct == lowest.average_attainment_pct)
+    averages = (
+        f"All learning outcomes recorded the same average attainment at {_pct(highest.average_attainment_pct)} ({highest.attainment_grade})."
+        if highest.average_attainment_pct == lowest.average_attainment_pct else
+        f"Highest average attainment: {highest_codes} at {_pct(highest.average_attainment_pct)} ({highest.attainment_grade}). "
+        f"Lowest average attainment: {lowest_codes} at {_pct(lowest.average_attainment_pct)} ({lowest.attainment_grade})."
     )
     attainment_analysis = (
-        f"{meeting_target} of {len(outcomes)} learning outcomes met the current "
-        f"{_pct(evidence.attainment_target_pct)} cohort attainment target. "
-        f"{highest.code} recorded the highest average attainment at {_pct(highest.average_attainment_pct)} "
-        f"({highest.attainment_grade}), while {lowest.code} was lowest at "
-        f"{_pct(lowest.average_attainment_pct)} ({lowest.attainment_grade}) with "
-        f"{_pct(lowest.pass_rate_pct)} of enrolled students achieving the target."
+        f"{meeting_target} of {len(outcomes)} learning outcomes met the {_pct(evidence.cohort_target_pct)} "
+        f"cohort achievement target: at least that proportion of assessed students achieved the ULO "
+        f"with individual attainment of {_pct(evidence.attainment_target_pct)} or above. "
+        f"Cohort achievement rates ranged from {min(item.pass_rate_pct for item in outcomes):.2f}% "
+        f"to {max(item.pass_rate_pct for item in outcomes):.2f}%. {averages}"
     )
 
     previous = evidence.previous_offering
@@ -185,11 +195,12 @@ def _mock_draft(evidence: ReportEvidence) -> ReportDraft:
         changes = [
             (item.code, item.average_attainment_pct - previous_by_code[item.code].average_attainment_pct)
             for item in outcomes
-            if item.code in previous_by_code
+            if item.code in previous_by_code and item.description.strip()
+            and same_description(item.description, previous_by_code[item.code].description)
         ]
         if not changes:
             previous_cohort_outcomes = (
-                f"The previous offering ({previous.period} {previous.year}) used different learning-outcome codes, "
+                f"The previous offering ({previous.period} {previous.year}) has no matching learning-outcome codes and definitions, "
                 "so a direct comparison is not available."
             )
         else:
@@ -205,30 +216,36 @@ def _mock_draft(evidence: ReportEvidence) -> ReportDraft:
                     return f"{code} decreased by {points} percentage points"
                 return f"{code} was unchanged"
 
+            change_text = describe_change(strongest)
+            if weakest != strongest:
+                change_text += f". {describe_change(weakest)}"
             previous_cohort_outcomes = (
-                f"Compared with {previous.period} {previous.year}, {describe_change(strongest)}. "
-                f"{describe_change(weakest)}. These differences should be reviewed with the prior teaching team "
+                f"Compared with {previous.period} {previous.year}, {change_text}. "
+                "These differences should be reviewed with the prior teaching team "
                 "before attributing them to a specific intervention."
             )
+            if len(changes) < len(outcomes):
+                previous_cohort_outcomes += " Outcomes without matching codes and definitions were excluded from this comparison."
         if previous.next_cohort_action_plan:
             previous_cohort_outcomes += f" The previous approved action plan proposed: {previous.next_cohort_action_plan}"
 
+    priority = min(outcomes, key=lambda item: (item.pass_rate_pct, item.average_attainment_pct))
     mapped_assessments = [
-        assessment.name for assessment in evidence.assessments if lowest.code in assessment.ulo_codes
+        assessment.name for assessment in evidence.assessments if priority.code in assessment.ulo_codes
     ]
     assessment_text = (
         ", ".join(mapped_assessments[:3])
         if mapped_assessments
         else "the assessments mapped to this learning outcome"
     )
-    if lowest.average_attainment_pct < evidence.attainment_target_pct:
+    if priority.pass_rate_pct < evidence.cohort_target_pct:
         next_cohort_action_plan = (
-            f"Prioritise {lowest.code} in the next offering. Review {assessment_text}, add an early formative check, "
+            f"Prioritise {priority.code} in the next offering. Review {assessment_text}, add an early formative check, "
             "and compare the same attainment and pass-rate measures after the next grade upload."
         )
     else:
         next_cohort_action_plan = (
-            f"Maintain the current delivery approach while monitoring {lowest.code}, the lowest relative result. "
+            f"Maintain the current delivery approach while monitoring {priority.code}, the lowest relative cohort achievement result. "
             f"Review {assessment_text} and add a more challenging formative activity so improvement can be measured "
             "without changing the confirmed attainment calculation."
         )
@@ -253,7 +270,7 @@ def _ollama_draft(
         raise ReportGenerationError("LLM_MODEL must be configured when LLM_PROVIDER=ollama", 500)
 
     verified = _mock_draft(evidence)
-    weakest = min(evidence.learning_outcomes, key=lambda item: item.average_attainment_pct)
+    weakest = min(evidence.learning_outcomes, key=lambda item: (item.pass_rate_pct, item.average_attainment_pct))
     mapped_assessments = [
         assessment.name for assessment in evidence.assessments if weakest.code in assessment.ulo_codes
     ]
@@ -262,7 +279,7 @@ def _ollama_draft(
         "weakest_outcome": {
             "code": weakest.code,
             "description": weakest.description,
-            "met_target": weakest.average_attainment_pct >= evidence.attainment_target_pct,
+            "met_target": weakest.pass_rate_pct >= evidence.cohort_target_pct,
         },
         "mapped_assessments": mapped_assessments,
         "previous_approved_action": (

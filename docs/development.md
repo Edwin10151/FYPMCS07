@@ -69,6 +69,14 @@ action. Student-level data is never sent to the model. The Report page supports
 draft saving, submission for course coordinator review, change requests,
 approval, and browser-based PDF export.
 
+Individual ULO achievement currently means attainment of at least 50%. The
+cohort target is at least 70% of assessed students achieving that ULO. These are
+project defaults, not a claim of an approved faculty policy. Dashboard bars and
+their target line both use cohort achievement rates. Average weighted attainment
+and its HD/D/C/P/N classification remain separate in the CQI report, alongside
+the achievement counts and rates. New report evidence records both thresholds;
+older approved snapshots are not rewritten or assigned a missing cohort target.
+
 The action-plan field is readable text, not nested JSON. Older drafts containing
 the recognised action/ULO/assessment/effect-check object are formatted on read;
 this does not rewrite the stored report or change its approval or evidence.

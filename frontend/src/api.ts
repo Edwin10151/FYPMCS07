@@ -74,10 +74,15 @@ export type Report = {
     unit_name: string;
     year: number;
     period: string;
+    attainment_target_pct?: string;
+    cohort_target_pct?: string;
     learning_outcomes: Array<{
       code: string;
       average_attainment_pct: string;
       attainment_grade: string;
+      pass_rate_pct?: string;
+      achieved_count?: number;
+      enrolled_count?: number;
     }>;
   } | null;
   report_id: number;

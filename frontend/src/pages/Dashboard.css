@@ -80,3 +80,10 @@
 .trend-cell .v { font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 550; color: var(--ink); }
 .trend-cell.now { background: var(--navy-tint); border-color: #DBE3F0; }
 .trend-cell.now .v { color: var(--navy); }
+
+@media (max-width: 800px) {
+  .app.dashboard-page { grid-template-columns: 1fr; }
+  .dashboard-page .side { display: none; }
+  .dashboard-page .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-page .unit-banner h1 { overflow-wrap: anywhere; }
+}
